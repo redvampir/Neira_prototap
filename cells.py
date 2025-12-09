@@ -266,7 +266,7 @@ class Cell:
                 full_prompt = f"[Последние сообщения]\n{recent}\n\n{full_prompt}"
         
         # Выбор модели
-        model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_CHAT
+        model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_REASON
         
         response = requests.post(
             OLLAMA_URL,

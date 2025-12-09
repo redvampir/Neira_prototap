@@ -18,7 +18,7 @@ except ImportError:
     DDGS_AVAILABLE = False
     print("⚠️ duckduckgo-search не установлен. Выполни: pip install duckduckgo-search")
 
-from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL, TIMEOUT
+from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_REASON, TIMEOUT
 
 
 @dataclass
@@ -89,7 +89,7 @@ class WebSearchCell(Cell):
         response = requests.post(
             OLLAMA_URL,
             json={
-                "model": MODEL,
+                "model": MODEL_REASON,
                 "prompt": prompt,
                 "system": self.system_prompt,
                 "stream": False,
@@ -142,7 +142,7 @@ class WebSearchCell(Cell):
         response = requests.post(
             OLLAMA_URL,
             json={
-                "model": MODEL,
+                "model": MODEL_REASON,
                 "prompt": prompt,
                 "system": "Ты — экстрактор знаний. Извлекай точные факты.",
                 "stream": False,
