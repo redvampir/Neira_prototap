@@ -180,7 +180,31 @@ class Neira:
         elif "СУБЪЕКТ: пользователь" in analysis_text.lower():
             return "user"
         return "unknown"
-    
+
+    def _extract_complexity(self, analysis_text: str) -> int:
+        """Извлечь сложность задачи из анализа"""
+        complexity_match = re.search(r'СЛОЖНОСТЬ:\s*(\d+)', analysis_text, re.IGNORECASE)
+        if complexity_match:
+            return int(complexity_match.group(1))
+        return 3  # По умолчанию средняя сложность
+
+    def _should_use_cloud(self, task_type: str, complexity: int, retry_attempt: int) -> Optional[str]:
+        """
+        Определить, нужно ли использовать облачную модель
+
+        Returns:
+            "cloud_code" для кода, "cloud_universal" для остального, None для локальных моделей
+        """
+        # После первого retry → облако
+        if retry_attempt >= USE_CLOUD_IF["retries"]:
+            return "cloud_code" if task_type == "код" else "cloud_universal"
+
+        # Высокая сложность → облако
+        if complexity >= USE_CLOUD_IF["complexity"]:
+            return "cloud_code" if task_type == "код" else "cloud_universal"
+
+        return None
+
     def process(self, user_input: str) -> str:
         """Главный метод обработки запроса"""
         
@@ -195,14 +219,15 @@ class Neira:
         
         task_type = self._extract_task_type(analysis.content)
         subject = self._extract_subject(analysis.content)
+        complexity = self._extract_complexity(analysis.content)
         needs_search = analysis.metadata.get("needs_search", False)
         needs_code = analysis.metadata.get("needs_code", False)
 
-        # NEW v0.5: Маршрутизация модели
+        # NEW v0.5: Маршрутизация модели (начальный выбор)
         if self.model_manager and MODEL_ROUTING:
             target_model = MODEL_ROUTING.get(task_type, "reason")
             if self.verbose:
-                print(f"🎯 Тип задачи: {task_type} → модель: {target_model}")
+                print(f"🎯 Тип задачи: {task_type}, сложность: {complexity} → модель: {target_model}")
             self.model_manager.switch_to(target_model)
 
         # Получаем релевантный опыт
@@ -273,36 +298,44 @@ class Neira:
         problems = ""
         
         for attempt in range(MAX_RETRIES + 1):
+            # NEW v0.5: Проверка, нужно ли переключиться на облачную модель
+            if attempt > 0 and self.model_manager:
+                cloud_model = self._should_use_cloud(task_type, complexity, attempt)
+                if cloud_model:
+                    if self.verbose:
+                        print(f"🌩️ Переключение на облачную модель: {cloud_model}")
+                    self.model_manager.switch_to(cloud_model)
+
             self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
-            
+
             # Передаём проблемы от предыдущей попытки
             result = self.executor.process(
-                user_input, 
-                plan.content, 
+                user_input,
+                plan.content,
                 extra_context,
                 problems=problems if attempt > 0 else ""
             )
             if self.verbose:
                 print(result.content)
-            
+
             # 6. Верификация
             self.log("✅ ВЕРИФИКАЦИЯ")
             verification = self.verifier.process(user_input, result.content)
             if self.verbose:
                 print(verification.content)
-            
+
             verdict, score, problems = self._parse_verification(verification.content)
-            
+
             final_result = result
             final_verdict = verdict
             final_score = score
-            
+
             # Если оценка достаточная — выходим из цикла
             if score >= MIN_ACCEPTABLE_SCORE:
                 if attempt > 0:
                     print(f"✅ Исправлено с {attempt + 1}-й попытки!")
                 break
-            
+
             # Если оценка низкая и есть ещё попытки — продолжаем
             if attempt < MAX_RETRIES:
                 print(f"⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
@@ -454,11 +487,15 @@ class Neira:
         status = get_model_status()
 
         output = "📊 СТАТИСТИКА v0.5\n\n"
-        output += "Модели:\n"
+        output += "Локальные модели:\n"
         output += f"  Code: {MODEL_CODE} {'✅' if status['code_model_ready'] else '❌'}\n"
         output += f"  Reason: {MODEL_REASON} {'✅' if status['reason_model_ready'] else '❌'}\n"
-        output += f"  Personality: нейра {'✅' if status['personality_model_ready'] else '⏳ (не обучена)'}\n"
-        output += f"  Cloud: deepseek-v3.1 (671B) {'✅' if status['cloud_available'] else '❌'}\n\n"
+        output += f"  Personality: нейра {'✅' if status['personality_model_ready'] else '⏳ (не обучена)'}\n\n"
+
+        output += "Облачные модели:\n"
+        output += f"  Code Cloud: qwen3-coder (480B) {'✅' if status.get('cloud_code_ready') else '❌'}\n"
+        output += f"  Universal Cloud: deepseek-v3.1 (671B) {'✅' if status.get('cloud_universal_ready') else '❌'}\n"
+        output += f"  Vision Cloud: qwen3-vl (235B) {'✅' if status.get('cloud_vision_ready') else '⏳ (будущее)'}\n\n"
 
         if self.model_manager:
             manager_stats = self.model_manager.get_stats()

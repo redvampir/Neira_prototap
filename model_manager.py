@@ -23,10 +23,15 @@ class ModelInfo:
 
 # Model registry
 MODELS = {
+    # Локальные модели
     "code": ModelInfo("qwen2.5-coder:7b", 5.0, "local", "Code generation and analysis"),
     "reason": ModelInfo("mistral:7b-instruct", 4.5, "local", "Planning, reasoning, verification"),
     "personality": ModelInfo("neira-personality", 1.5, "local", "Dialogue with personality"),
-    "cloud": ModelInfo("deepseek-v3.1:671b-cloud", 0, "cloud", "Complex tasks (Ollama cloud, 671B params)")
+
+    # Облачные модели (0 VRAM, удалённые вычисления)
+    "cloud_code": ModelInfo("qwen3-coder:480b-cloud", 0, "cloud", "Complex code tasks (480B params)"),
+    "cloud_universal": ModelInfo("deepseek-v3.1:671b-cloud", 0, "cloud", "Complex universal tasks (671B params)"),
+    "cloud_vision": ModelInfo("qwen3-vl:235b-cloud", 0, "cloud", "Multimodal tasks (235B params)")
 }
 
 
@@ -38,22 +43,32 @@ class ModelManager:
         self.current_model: Optional[str] = None
         self.switch_count = 0
         self.verbose = verbose
-        self.cloud_available = self._check_cloud_model()
+        self.cloud_models_available = self._check_cloud_models()
 
     def log(self, message: str):
         if self.verbose:
             print(message)
 
-    def _check_cloud_model(self) -> bool:
-        """Check if cloud model is available in Ollama"""
+    def _check_cloud_models(self) -> Dict[str, bool]:
+        """Check which cloud models are available in Ollama"""
+        available = {
+            "cloud_code": False,
+            "cloud_universal": False,
+            "cloud_vision": False
+        }
         try:
             resp = requests.get(f"{OLLAMA_API}/tags", timeout=5)
             models = resp.json().get("models", [])
             model_names = [m.get("name", "") for m in models]
-            cloud_model = MODELS["cloud"].name
-            return cloud_model in model_names or any(cloud_model in m for m in model_names)
-        except:
-            return False
+
+            for key in ["cloud_code", "cloud_universal", "cloud_vision"]:
+                cloud_model = MODELS[key].name
+                available[key] = cloud_model in model_names or any(cloud_model in m for m in model_names)
+
+        except Exception as e:
+            self.log(f"⚠️ Failed to check cloud models: {e}")
+
+        return available
 
     def get_loaded_models(self) -> list:
         """Check which models are currently in VRAM"""
@@ -124,8 +139,8 @@ class ModelManager:
 
         # Cloud model - also managed by Ollama, but no VRAM constraints
         if model_info.type == "cloud":
-            if not self.cloud_available:
-                self.log("⚠️ Cloud model not available in Ollama")
+            if not self.cloud_models_available.get(target_key, False):
+                self.log(f"⚠️ Cloud model '{target_key}' not available in Ollama")
                 return False
             # Don't unload local models for cloud - it uses remote compute
             self.current_model = target_key
@@ -162,7 +177,7 @@ class ModelManager:
             "current_model_info": MODELS.get(self.current_model),
             "switches": self.switch_count,
             "loaded_models": self.get_loaded_models(),
-            "cloud_available": self.cloud_available,
+            "cloud_models_available": self.cloud_models_available,
             "max_vram_gb": self.max_vram
         }
 

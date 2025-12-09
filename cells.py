@@ -21,11 +21,15 @@ import numpy as np
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
-# МОДЕЛИ v0.5 — четыре модели с умной маршрутизацией
-MODEL_CODE = "qwen2.5-coder:7b"        # Код (~5 ГБ VRAM)
+# МОДЕЛИ v0.5 — локальные + облачные
+MODEL_CODE = "qwen2.5-coder:7b"        # Код локально (~5 ГБ VRAM)
 MODEL_REASON = "mistral:7b-instruct"   # Рассуждения (~4.5 ГБ VRAM)
 MODEL_PERSONALITY = "neira-personality" # Личность (~1.5 ГБ, пока fallback на reason)
-MODEL_CLOUD = "deepseek-v3.1:671b-cloud"  # Облачная Ollama для сложных задач (671B параметров)
+
+# Облачные модели (0 VRAM, удалённые вычисления)
+MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)
+MODEL_CLOUD_UNIVERSAL = "deepseek-v3.1:671b-cloud"  # Универсальная (671B параметров)
+MODEL_CLOUD_VISION = "qwen3-vl:235b-cloud"     # Мультимодальная (будущее)
 
 EMBED_MODEL = "nomic-embed-text"
 TIMEOUT = 180
@@ -36,21 +40,21 @@ MAX_RETRIES = 2
 MIN_ACCEPTABLE_SCORE = 7
 
 # Маппинг типов задач → модели
-# "code" / "reason" / "personality" / "cloud"
+# "code" / "reason" / "personality" / "cloud_code" / "cloud_universal"
 MODEL_ROUTING = {
-    "код": "code",
+    "код": "code",                      # Простой код → локально
     "задача": "reason",
     "вопрос": "reason",
-    "разговор": "personality",  # Fallback на reason если не обучена
+    "разговор": "personality",          # Fallback на reason если не обучена
     "творчество": "personality",
     "поиск": "reason",
-    "сложная_задача": "cloud",  # Для особо сложных случаев
 }
 
-# Критерии для использования облачной модели
+# Критерии для переключения на облачные модели
 USE_CLOUD_IF = {
-    "complexity": 5,  # Сложность >= 5
-    "retries": 2,     # После 2 неудачных попыток
+    "complexity": 4,      # Сложность >= 4 → облако
+    "retries": 1,         # После 1 неудачной попытки → облако
+    "code_lines": 50,     # Код > 50 строк → облачная модель для кода
 }
 
 
@@ -474,8 +478,10 @@ def get_model_status() -> Dict[str, Any]:
         models = response.json().get("models", [])
         model_names = [m.get("name", "") for m in models]
 
-        # Проверяем доступность облачной модели
-        cloud_ready = MODEL_CLOUD in model_names or any(MODEL_CLOUD in m for m in model_names)
+        # Проверяем доступность облачных моделей
+        cloud_code_ready = MODEL_CLOUD_CODE in model_names or any(MODEL_CLOUD_CODE in m for m in model_names)
+        cloud_universal_ready = MODEL_CLOUD_UNIVERSAL in model_names or any(MODEL_CLOUD_UNIVERSAL in m for m in model_names)
+        cloud_vision_ready = MODEL_CLOUD_VISION in model_names or any(MODEL_CLOUD_VISION in m for m in model_names)
 
         return {
             "ollama_running": True,
@@ -484,7 +490,9 @@ def get_model_status() -> Dict[str, Any]:
             "reason_model_ready": MODEL_REASON in model_names or f"{MODEL_REASON}:latest" in model_names,
             "personality_model_ready": MODEL_PERSONALITY in model_names or f"{MODEL_PERSONALITY}:latest" in model_names,
             "embed_model_ready": EMBED_MODEL in model_names or f"{EMBED_MODEL}:latest" in model_names,
-            "cloud_available": cloud_ready
+            "cloud_code_ready": cloud_code_ready,
+            "cloud_universal_ready": cloud_universal_ready,
+            "cloud_vision_ready": cloud_vision_ready
         }
     except:
         return {
@@ -494,7 +502,9 @@ def get_model_status() -> Dict[str, Any]:
             "reason_model_ready": False,
             "personality_model_ready": False,
             "embed_model_ready": False,
-            "cloud_available": False
+            "cloud_code_ready": False,
+            "cloud_universal_ready": False,
+            "cloud_vision_ready": False
         }
 
 
@@ -524,8 +534,18 @@ def ensure_models_installed():
     models_str = f"{MODEL_CODE}, {MODEL_REASON}"
     if status["personality_model_ready"]:
         models_str += f", {MODEL_PERSONALITY}"
-    if status["cloud_available"]:
-        models_str += ", cloud (Groq)"
+
+    # Облачные модели
+    cloud_models = []
+    if status["cloud_code_ready"]:
+        cloud_models.append("code-cloud(480B)")
+    if status["cloud_universal_ready"]:
+        cloud_models.append("universal-cloud(671B)")
+    if status["cloud_vision_ready"]:
+        cloud_models.append("vision-cloud(235B)")
+
+    if cloud_models:
+        models_str += f", облачные: {', '.join(cloud_models)}"
 
     print(f"✅ Модели готовы: {models_str}")
     return True
