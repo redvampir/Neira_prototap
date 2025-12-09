@@ -1,12 +1,14 @@
 """
-Neira v0.4 — Главный модуль (ОБНОВЛЕНО)
+Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 Оркестратор с памятью, опытом, обучением и улучшениями.
 
-ИЗМЕНЕНИЯ:
-- Две модели (chat + code)
+ИЗМЕНЕНИЯ v0.5:
+- Четыре модели (code + reason + personality + cloud)
+- Динамическое управление VRAM через ModelManager
+- Умная маршрутизация по типу задачи
+- Облачная модель для сложных задач
 - Retry-логика при низкой оценке
 - Принудительное использование инструментов
-- Улучшенная передача контекста
 
 Запуск: python main.py
 """
@@ -21,8 +23,8 @@ try:
         AnalyzerCell, PlannerCell, ExecutorCell,
         VerifierCell, FactExtractorCell,
         ensure_models_installed,
-        OLLAMA_URL, MODEL_CODE, TIMEOUT,
-        MAX_RETRIES, MIN_ACCEPTABLE_SCORE
+        OLLAMA_URL, MODEL_CODE, MODEL_REASON, MODEL_ROUTING,
+        TIMEOUT, MAX_RETRIES, MIN_ACCEPTABLE_SCORE, USE_CLOUD_IF
     )
 except ImportError:
     from cells import (
@@ -33,9 +35,20 @@ except ImportError:
         OLLAMA_URL
     )
     MODEL_CODE = "qwen2.5-coder:7b"
-    TIMEOUT = 120
-    MAX_RETRIES = 3
-    MIN_ACCEPTABLE_SCORE = 0.7
+    MODEL_REASON = "mistral:7b-instruct"
+    MODEL_ROUTING = {}
+    TIMEOUT = 180
+    MAX_RETRIES = 2
+    MIN_ACCEPTABLE_SCORE = 7
+    USE_CLOUD_IF = {"complexity": 5, "retries": 2}
+
+# Model Manager
+try:
+    from model_manager import ModelManager
+    MANAGER_AVAILABLE = True
+except ImportError as e:
+    MANAGER_AVAILABLE = False
+    print(f"⚠️ ModelManager недоступен: {e}")
 
 
 # Опциональные модули
@@ -63,19 +76,29 @@ except ImportError as e:
 
 class Neira:
     """Главный класс — связывает все клетки"""
-    
+
     def __init__(self, verbose: bool = True):
         self.verbose = verbose
-        
+
         # Память
         self.memory = MemoryCell()
-        
+
         # Система опыта
         if EXPERIENCE_AVAILABLE:
             self.experience = ExperienceSystem()
         else:
             self.experience = None
-        
+
+        # Model Manager (v0.5)
+        if MANAGER_AVAILABLE:
+            self.model_manager = ModelManager(max_vram_gb=8.0, verbose=verbose)
+            if verbose:
+                print("🔧 ModelManager инициализирован (VRAM: 8GB)")
+        else:
+            self.model_manager = None
+            if verbose:
+                print("⚠️ ModelManager недоступен, используются модели без управления VRAM")
+
         # Базовые клетки
         self.analyzer = AnalyzerCell(self.memory)
         self.planner = PlannerCell(self.memory)
@@ -157,7 +180,31 @@ class Neira:
         elif "СУБЪЕКТ: пользователь" in analysis_text.lower():
             return "user"
         return "unknown"
-    
+
+    def _extract_complexity(self, analysis_text: str) -> int:
+        """Извлечь сложность задачи из анализа"""
+        complexity_match = re.search(r'СЛОЖНОСТЬ:\s*(\d+)', analysis_text, re.IGNORECASE)
+        if complexity_match:
+            return int(complexity_match.group(1))
+        return 3  # По умолчанию средняя сложность
+
+    def _should_use_cloud(self, task_type: str, complexity: int, retry_attempt: int) -> Optional[str]:
+        """
+        Определить, нужно ли использовать облачную модель
+
+        Returns:
+            "cloud_code" для кода, "cloud_universal" для остального, None для локальных моделей
+        """
+        # После первого retry → облако
+        if retry_attempt >= USE_CLOUD_IF["retries"]:
+            return "cloud_code" if task_type == "код" else "cloud_universal"
+
+        # Высокая сложность → облако
+        if complexity >= USE_CLOUD_IF["complexity"]:
+            return "cloud_code" if task_type == "код" else "cloud_universal"
+
+        return None
+
     def process(self, user_input: str) -> str:
         """Главный метод обработки запроса"""
         
@@ -172,9 +219,17 @@ class Neira:
         
         task_type = self._extract_task_type(analysis.content)
         subject = self._extract_subject(analysis.content)
+        complexity = self._extract_complexity(analysis.content)
         needs_search = analysis.metadata.get("needs_search", False)
         needs_code = analysis.metadata.get("needs_code", False)
-        
+
+        # NEW v0.5: Маршрутизация модели (начальный выбор)
+        if self.model_manager and MODEL_ROUTING:
+            target_model = MODEL_ROUTING.get(task_type, "reason")
+            if self.verbose:
+                print(f"🎯 Тип задачи: {task_type}, сложность: {complexity} → модель: {target_model}")
+            self.model_manager.switch_to(target_model)
+
         # Получаем релевантный опыт
         experience_context = ""
         if self.experience:
@@ -243,36 +298,44 @@ class Neira:
         problems = ""
         
         for attempt in range(MAX_RETRIES + 1):
+            # NEW v0.5: Проверка, нужно ли переключиться на облачную модель
+            if attempt > 0 and self.model_manager:
+                cloud_model = self._should_use_cloud(task_type, complexity, attempt)
+                if cloud_model:
+                    if self.verbose:
+                        print(f"🌩️ Переключение на облачную модель: {cloud_model}")
+                    self.model_manager.switch_to(cloud_model)
+
             self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
-            
+
             # Передаём проблемы от предыдущей попытки
             result = self.executor.process(
-                user_input, 
-                plan.content, 
+                user_input,
+                plan.content,
                 extra_context,
                 problems=problems if attempt > 0 else ""
             )
             if self.verbose:
                 print(result.content)
-            
+
             # 6. Верификация
             self.log("✅ ВЕРИФИКАЦИЯ")
             verification = self.verifier.process(user_input, result.content)
             if self.verbose:
                 print(verification.content)
-            
+
             verdict, score, problems = self._parse_verification(verification.content)
-            
+
             final_result = result
             final_verdict = verdict
             final_score = score
-            
+
             # Если оценка достаточная — выходим из цикла
             if score >= MIN_ACCEPTABLE_SCORE:
                 if attempt > 0:
                     print(f"✅ Исправлено с {attempt + 1}-й попытки!")
                 break
-            
+
             # Если оценка низкая и есть ещё попытки — продолжаем
             if attempt < MAX_RETRIES:
                 print(f"⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
@@ -419,32 +482,47 @@ class Neira:
 """
     
     def cmd_stats(self) -> str:
-        from cells import MODEL_CHAT, MODEL_CODE, get_model_status
-        
+        from cells import MODEL_CODE, MODEL_REASON, get_model_status
+
         status = get_model_status()
-        
-        output = "📊 СТАТИСТИКА v0.4\n\n"
-        output += "Модели:\n"
-        output += f"  Chat: {MODEL_CHAT} {'✅' if status['chat_model_ready'] else '❌'}\n"
-        output += f"  Code: {MODEL_CODE} {'✅' if status['code_model_ready'] else '❌'}\n\n"
+
+        output = "📊 СТАТИСТИКА v0.5\n\n"
+        output += "Локальные модели:\n"
+        output += f"  Code: {MODEL_CODE} {'✅' if status['code_model_ready'] else '❌'}\n"
+        output += f"  Reason: {MODEL_REASON} {'✅' if status['reason_model_ready'] else '❌'}\n"
+        output += f"  Personality: нейра {'✅' if status['personality_model_ready'] else '⏳ (не обучена)'}\n\n"
+
+        output += "Облачные модели:\n"
+        output += f"  Code Cloud: qwen3-coder (480B) {'✅' if status.get('cloud_code_ready') else '❌'}\n"
+        output += f"  Universal Cloud: deepseek-v3.1 (671B) {'✅' if status.get('cloud_universal_ready') else '❌'}\n"
+        output += f"  Vision Cloud: qwen3-vl (235B) {'✅' if status.get('cloud_vision_ready') else '⏳ (будущее)'}\n\n"
+
+        if self.model_manager:
+            manager_stats = self.model_manager.get_stats()
+            output += f"Model Manager:\n"
+            output += f"  Текущая модель: {manager_stats.get('current_model', 'none')}\n"
+            output += f"  Переключений: {manager_stats.get('switches', 0)}\n"
+            output += f"  Загружено в VRAM: {', '.join(manager_stats.get('loaded_models', [])) or 'none'}\n\n"
+
         output += f"Веб-поиск: {'✅' if WEB_AVAILABLE else '❌'}\n"
         output += f"Работа с кодом: {'✅' if CODE_AVAILABLE else '❌'}\n"
         output += f"Система опыта: {'✅' if EXPERIENCE_AVAILABLE else '❌'}\n"
         output += f"Память: {self.memory.get_stats().get('total', 0)} записей\n"
         output += f"Контекст сессии: {len(self.memory.session_context)} сообщений\n"
-        
+
         if self.experience:
             exp_stats = self.experience.get_stats()
             output += f"Опыт: {exp_stats.get('total', 0)} записей\n"
             output += f"Средняя оценка: {exp_stats.get('avg_score', 0)}/10\n"
-        
+
         return output
 
 
 def main():
     print("=" * 60)
-    print("  NEIRA v0.4 — Живая программа")
-    print("  Клеточная архитектура с двумя моделями")
+    print("  NEIRA v0.5 — Живая программа")
+    print("  Клеточная архитектура с динамическими моделями")
+    print("  Code + Reason + Personality + Cloud")
     print("=" * 60)
     
     # Проверяем модели

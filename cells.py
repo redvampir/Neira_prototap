@@ -1,12 +1,12 @@
 """
-Neira Cells v0.4 — Базовые клетки (ОБНОВЛЕНО)
+Neira Cells v0.5 — Базовые клетки (ОБНОВЛЕНО)
 Ядро системы: память, анализ, планирование, исполнение, верификация.
 
-ИЗМЕНЕНИЯ:
-- Две модели: быстрая для диалогов + сильная для кода
-- Анализ субъекта действия
-- Retry-логика после низкой оценки
-- Улучшенная передача контекста
+ИЗМЕНЕНИЯ v0.5:
+- 4 модели: code, reason, personality, cloud
+- Динамическое управление VRAM через ModelManager
+- Облачная модель для сложных задач
+- Умная маршрутизация запросов по типу задачи
 """
 
 import requests
@@ -21,18 +21,41 @@ import numpy as np
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
-# ДВЕ МОДЕЛИ — ключевое изменение
-MODEL_CHAT = "qwen2.5:3b"          # Быстрая для диалогов (~2 ГБ VRAM)
-MODEL_CODE = "qwen2.5-coder:7b"     # Сильная для кода (~5 ГБ VRAM)
-MODEL = MODEL_CODE   
-EMBED_MODEL = "nomic-embed-text"
+# МОДЕЛИ v0.5 — локальные + облачные
+MODEL_CODE = "qwen2.5-coder:7b"        # Код локально (~5 ГБ VRAM)
+MODEL_REASON = "mistral:7b-instruct"   # Рассуждения (~4.5 ГБ VRAM)
+MODEL_PERSONALITY = "neira-personality" # Личность (~1.5 ГБ, пока fallback на reason)
 
-TIMEOUT = 600  # Уменьшили с 600 — qwen2.5:3b быстрее
+# Облачные модели (0 VRAM, удалённые вычисления)
+MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)
+MODEL_CLOUD_UNIVERSAL = "deepseek-v3.1:671b-cloud"  # Универсальная (671B параметров)
+MODEL_CLOUD_VISION = "qwen3-vl:235b-cloud"     # Мультимодальная (будущее)
+
+EMBED_MODEL = "nomic-embed-text"
+TIMEOUT = 180
 MEMORY_FILE = "neira_memory.json"
 
 # Retry-логика
 MAX_RETRIES = 2
 MIN_ACCEPTABLE_SCORE = 7
+
+# Маппинг типов задач → модели
+# "code" / "reason" / "personality" / "cloud_code" / "cloud_universal"
+MODEL_ROUTING = {
+    "код": "code",                      # Простой код → локально
+    "задача": "reason",
+    "вопрос": "reason",
+    "разговор": "personality",          # Fallback на reason если не обучена
+    "творчество": "personality",
+    "поиск": "reason",
+}
+
+# Критерии для переключения на облачные модели
+USE_CLOUD_IF = {
+    "complexity": 4,      # Сложность >= 4 → облако
+    "retries": 1,         # После 1 неудачной попытки → облако
+    "code_lines": 50,     # Код > 50 строк → облачная модель для кода
+}
 
 
 from dataclasses import dataclass, field
@@ -449,50 +472,80 @@ JSON формат:
 
 # === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 def get_model_status() -> Dict[str, Any]:
-    """Проверить статус моделей в Ollama"""
+    """Проверить статус моделей в Ollama (v0.5)"""
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=100)
+        response = requests.get("http://localhost:11434/api/tags", timeout=10)
         models = response.json().get("models", [])
         model_names = [m.get("name", "") for m in models]
-        
+
+        # Проверяем доступность облачных моделей
+        cloud_code_ready = MODEL_CLOUD_CODE in model_names or any(MODEL_CLOUD_CODE in m for m in model_names)
+        cloud_universal_ready = MODEL_CLOUD_UNIVERSAL in model_names or any(MODEL_CLOUD_UNIVERSAL in m for m in model_names)
+        cloud_vision_ready = MODEL_CLOUD_VISION in model_names or any(MODEL_CLOUD_VISION in m for m in model_names)
+
         return {
             "ollama_running": True,
             "models": model_names,
-            "chat_model_ready": MODEL_CHAT in model_names or f"{MODEL_CHAT}:latest" in model_names,
             "code_model_ready": MODEL_CODE in model_names or f"{MODEL_CODE}:latest" in model_names,
-            "embed_model_ready": EMBED_MODEL in model_names or f"{EMBED_MODEL}:latest" in model_names
+            "reason_model_ready": MODEL_REASON in model_names or f"{MODEL_REASON}:latest" in model_names,
+            "personality_model_ready": MODEL_PERSONALITY in model_names or f"{MODEL_PERSONALITY}:latest" in model_names,
+            "embed_model_ready": EMBED_MODEL in model_names or f"{EMBED_MODEL}:latest" in model_names,
+            "cloud_code_ready": cloud_code_ready,
+            "cloud_universal_ready": cloud_universal_ready,
+            "cloud_vision_ready": cloud_vision_ready
         }
     except:
         return {
             "ollama_running": False,
             "models": [],
-            "chat_model_ready": False,
             "code_model_ready": False,
-            "embed_model_ready": False
+            "reason_model_ready": False,
+            "personality_model_ready": False,
+            "embed_model_ready": False,
+            "cloud_code_ready": False,
+            "cloud_universal_ready": False,
+            "cloud_vision_ready": False
         }
 
 
 def ensure_models_installed():
-    """Проверить и предложить установить модели"""
+    """Проверить и предложить установить модели (v0.5)"""
     status = get_model_status()
-    
+
     if not status["ollama_running"]:
         print("❌ Ollama не запущена! Запусти: ollama serve")
         return False
-    
+
     missing = []
-    if not status["chat_model_ready"]:
-        missing.append(f"ollama pull {MODEL_CHAT}")
     if not status["code_model_ready"]:
         missing.append(f"ollama pull {MODEL_CODE}")
+    if not status["reason_model_ready"]:
+        missing.append(f"ollama pull {MODEL_REASON}")
     if not status["embed_model_ready"]:
         missing.append(f"ollama pull {EMBED_MODEL}")
-    
+
     if missing:
         print("⚠️ Не хватает моделей. Выполни:")
         for cmd in missing:
             print(f"   {cmd}")
+        print("\n💡 Облачная модель (опционально): export GROQ_API_KEY=your_key")
         return False
-    
-    print(f"✅ Модели готовы: {MODEL_CHAT}, {MODEL_CODE}, {EMBED_MODEL}")
+
+    models_str = f"{MODEL_CODE}, {MODEL_REASON}"
+    if status["personality_model_ready"]:
+        models_str += f", {MODEL_PERSONALITY}"
+
+    # Облачные модели
+    cloud_models = []
+    if status["cloud_code_ready"]:
+        cloud_models.append("code-cloud(480B)")
+    if status["cloud_universal_ready"]:
+        cloud_models.append("universal-cloud(671B)")
+    if status["cloud_vision_ready"]:
+        cloud_models.append("vision-cloud(235B)")
+
+    if cloud_models:
+        models_str += f", облачные: {', '.join(cloud_models)}"
+
+    print(f"✅ Модели готовы: {models_str}")
     return True
