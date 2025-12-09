@@ -217,6 +217,20 @@ class EvolutionManager:
 
         return f"❌ Неизвестная система: {system}"
 
+    def cmd_evolution_diff(self, system: str, entry_index: int) -> str:
+        """Показать diff для записи эволюции"""
+        if system == "cls" and self.continuous_learning:
+            return self.continuous_learning.show_code_diff(entry_index)
+        else:
+            return f"❌ Diff доступен только для cls (continuous learning)"
+
+    def cmd_evolution_list(self, system: str) -> str:
+        """Показать список записей эволюции"""
+        if system == "cls" and self.continuous_learning:
+            return self.continuous_learning.list_evolution_entries()
+        else:
+            return f"❌ Список доступен только для cls (continuous learning)"
+
     def cmd_evolve_prompt(self, cell_name: str) -> str:
         """Эволюционировать промпт клетки"""
         if not self.prompt_evolution:
@@ -228,6 +242,46 @@ class EvolutionManager:
             return f"✅ Создана новая версия: {version.version_id}\nТребуется {5} тестов для оценки"
         else:
             return f"❌ Не удалось эволюционировать промпт для {cell_name}"
+
+    def cmd_vote_start(self, cell_name: str, version_id_1: str,
+                       version_id_2: str, task: str) -> str:
+        """Начать голосование между двумя версиями промпта"""
+        if not self.prompt_evolution:
+            return "❌ PromptEvolutionSystem недоступен"
+
+        session = self.prompt_evolution.start_voting_session(
+            cell_name, version_id_1, version_id_2
+        )
+
+        if not session:
+            return f"❌ Не удалось создать сессию голосования"
+
+        return self.prompt_evolution.format_voting_prompt(session, task)
+
+    def cmd_vote_record(self, cell_name: str, version_id: str,
+                       score: int, feedback: str = "") -> str:
+        """Записать результат голосования"""
+        if not self.prompt_evolution:
+            return "❌ PromptEvolutionSystem недоступен"
+
+        success = self.prompt_evolution.record_voting_result(
+            cell_name, version_id, score, feedback
+        )
+
+        if success:
+            return f"✅ Голос записан: {version_id} получил оценку {score}/10"
+        else:
+            return f"❌ Не удалось записать результат"
+
+    def cmd_vote_results(self, cell_name: str, version_id_1: str,
+                        version_id_2: str) -> str:
+        """Показать результаты сравнения версий"""
+        if not self.prompt_evolution:
+            return "❌ PromptEvolutionSystem недоступен"
+
+        return self.prompt_evolution.show_voting_results(
+            cell_name, version_id_1, version_id_2
+        )
 
     def cmd_create_cell(self, description: str) -> str:
         """Создать новую клетку вручную"""
@@ -290,8 +344,15 @@ class EvolutionManager:
   /evolution log [system] — лог эволюции (cls/cells/models/all)
   /evolution cycle       — запустить автоэволюцию
 
+Просмотр изменений кода:
+  /evolution list cls    — список записей эволюции кода
+  /evolution diff cls <индекс> — показать diff изменений
+
 Промпты:
   /evolve-prompt <cell>  — эволюционировать промпт клетки
+  /vote-start <cell> <v1> <v2> <задача> — начать сессию голосования
+  /vote-record <cell> <version> <оценка> <комментарий> — записать голос
+  /vote-results <cell> <v1> <v2> — результаты сравнения
 
 Клетки:
   /create-cell <описание> — создать новую клетку

@@ -430,6 +430,136 @@ class PromptEvolutionSystem:
 
         return output
 
+    def start_voting_session(self, cell_name: str, version_id_1: str,
+                            version_id_2: str) -> Optional[Dict]:
+        """Начать сессию интерактивного голосования между двумя версиями"""
+
+        if cell_name not in self.versions:
+            return None
+
+        # Находим версии
+        version_1 = next((v for v in self.versions[cell_name] if v.version_id == version_id_1), None)
+        version_2 = next((v for v in self.versions[cell_name] if v.version_id == version_id_2), None)
+
+        if not version_1 or not version_2:
+            return None
+
+        return {
+            "cell_name": cell_name,
+            "version_1": version_1,
+            "version_2": version_2,
+            "prompts": {
+                version_id_1: version_1.prompt_text,
+                version_id_2: version_2.prompt_text
+            }
+        }
+
+    def record_voting_result(self, cell_name: str, version_id: str,
+                            score: int, user_feedback: str = "") -> bool:
+        """Записать результат голосования пользователя"""
+
+        if cell_name not in self.versions:
+            return False
+
+        version = next((v for v in self.versions[cell_name] if v.version_id == version_id), None)
+
+        if not version:
+            return False
+
+        # Записываем как тест
+        test = PromptTest(
+            test_id=f"vote_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            cell_name=cell_name,
+            version_id=version_id,
+            task_description=f"Пользовательское голосование: {user_feedback[:100]}",
+            score=float(score),
+            confidence=0.9,  # Высокая уверенность для ручных оценок
+            success=score >= 7,
+            timestamp=datetime.now().isoformat(),
+            metadata={"source": "manual_voting", "feedback": user_feedback}
+        )
+
+        self.tests.append(test)
+
+        # Обновляем метрики версии
+        version_tests = [t for t in self.tests if t.version_id == version_id]
+        if version_tests:
+            version.tests_count = len(version_tests)
+            version.avg_score = sum(t.score for t in version_tests) / len(version_tests)
+            version.success_rate = sum(1 for t in version_tests if t.success) / len(version_tests)
+            version.avg_confidence = sum(t.confidence for t in version_tests) / len(version_tests)
+
+        self.save_versions()
+        self.save_tests()
+
+        return True
+
+    def format_voting_prompt(self, session: Dict, task_description: str) -> str:
+        """Форматировать промпт для интерактивного голосования"""
+
+        output = "🗳️ ИНТЕРАКТИВНОЕ ГОЛОСОВАНИЕ ПРОМПТОВ\n\n"
+        output += f"Клетка: {session['cell_name']}\n"
+        output += f"Задача для тестирования: {task_description}\n\n"
+        output += "="*60 + "\n"
+        output += f"ВАРИАНТ A: {session['version_1'].version_id}\n"
+        output += "="*60 + "\n"
+        output += session['prompts'][session['version_1'].version_id] + "\n\n"
+        output += "="*60 + "\n"
+        output += f"ВАРИАНТ B: {session['version_2'].version_id}\n"
+        output += "="*60 + "\n"
+        output += session['prompts'][session['version_2'].version_id] + "\n\n"
+        output += "="*60 + "\n\n"
+        output += "💡 ИНСТРУКЦИИ:\n"
+        output += "1. Протестируй оба варианта на задаче выше\n"
+        output += "2. Оцени каждый вариант от 1 до 10\n"
+        output += "3. Используй команды:\n"
+        output += f"   /vote-record {session['cell_name']} {session['version_1'].version_id} <оценка> <комментарий>\n"
+        output += f"   /vote-record {session['cell_name']} {session['version_2'].version_id} <оценка> <комментарий>\n"
+
+        return output
+
+    def show_voting_results(self, cell_name: str, version_id_1: str, version_id_2: str) -> str:
+        """Показать результаты сравнения двух версий"""
+
+        if cell_name not in self.versions:
+            return f"⚠️ Нет версий для {cell_name}"
+
+        version_1 = next((v for v in self.versions[cell_name] if v.version_id == version_id_1), None)
+        version_2 = next((v for v in self.versions[cell_name] if v.version_id == version_id_2), None)
+
+        if not version_1 or not version_2:
+            return "⚠️ Одна из версий не найдена"
+
+        output = "🗳️ РЕЗУЛЬТАТЫ СРАВНЕНИЯ\n\n"
+
+        output += f"ВАРИАНТ A: {version_1.version_id}\n"
+        output += f"  Score: {version_1.avg_score:.1f}/10\n"
+        output += f"  Success rate: {version_1.success_rate*100:.0f}%\n"
+        output += f"  Тестов: {version_1.tests_count}\n\n"
+
+        output += f"ВАРИАНТ B: {version_2.version_id}\n"
+        output += f"  Score: {version_2.avg_score:.1f}/10\n"
+        output += f"  Success rate: {version_2.success_rate*100:.0f}%\n"
+        output += f"  Тестов: {version_2.tests_count}\n\n"
+
+        if version_1.avg_score > version_2.avg_score:
+            winner = "A"
+            diff = version_1.avg_score - version_2.avg_score
+        elif version_2.avg_score > version_1.avg_score:
+            winner = "B"
+            diff = version_2.avg_score - version_1.avg_score
+        else:
+            winner = "Ничья"
+            diff = 0.0
+
+        output += f"🏆 ПОБЕДИТЕЛЬ: Вариант {winner}"
+        if diff > 0:
+            output += f" (+{diff:.1f} очков)\n"
+        else:
+            output += "\n"
+
+        return output
+
 
 # === ТЕСТ ===
 if __name__ == "__main__":

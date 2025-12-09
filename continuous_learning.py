@@ -443,6 +443,93 @@ class ContinuousLearningSystem:
 
         return output
 
+    def show_code_diff(self, entry_index: int) -> str:
+        """Показать diff для записи эволюции"""
+        import difflib
+
+        if entry_index < 0 or entry_index >= len(self.evolution_history):
+            return f"❌ Запись не найдена: индекс {entry_index} (всего записей: {len(self.evolution_history)})"
+
+        entry = self.evolution_history[entry_index]
+
+        # Формируем путь к бэкапу
+        backup_files = []
+        for filename in os.listdir(CODE_BACKUP_DIR):
+            if entry.before_hash[:8] in filename or os.path.basename(entry.file_modified) in filename:
+                backup_files.append(os.path.join(CODE_BACKUP_DIR, filename))
+
+        # Сортируем по времени и берём ближайший к entry.timestamp
+        if backup_files:
+            backup_files.sort(key=lambda x: os.path.getmtime(x))
+            # Берём бэкап ближайший по времени к записи
+            entry_time = datetime.fromisoformat(entry.timestamp).timestamp()
+            backup_file = min(backup_files, key=lambda x: abs(os.path.getmtime(x) - entry_time))
+        else:
+            return f"⚠️ Бэкап не найден для записи {entry_index}"
+
+        # Читаем файлы
+        try:
+            with open(backup_file, "r", encoding="utf-8") as f:
+                before_lines = f.readlines()
+        except Exception as e:
+            return f"❌ Ошибка чтения бэкапа: {e}"
+
+        # Читаем текущий файл или используем бэкап с after_hash если был откат
+        current_file = entry.file_modified
+        try:
+            with open(current_file, "r", encoding="utf-8") as f:
+                after_lines = f.readlines()
+        except Exception as e:
+            return f"❌ Ошибка чтения файла: {e}"
+
+        # Генерируем diff
+        diff = difflib.unified_diff(
+            before_lines,
+            after_lines,
+            fromfile=f"{os.path.basename(entry.file_modified)} (до)",
+            tofile=f"{os.path.basename(entry.file_modified)} (после)",
+            lineterm=""
+        )
+
+        diff_text = "\n".join(diff)
+
+        if not diff_text.strip():
+            return f"ℹ️ Нет различий для записи {entry_index}"
+
+        # Форматируем вывод
+        output = f"📝 CODE DIFF: Запись #{entry_index}\n\n"
+        output += f"Время: {entry.timestamp[:19]}\n"
+        output += f"Файл: {entry.file_modified}\n"
+        output += f"Проблема: {entry.problem_description}\n"
+        output += f"Решение: {entry.patch_description}\n"
+        output += f"Статус: {'✅ Успешно' if entry.success else '❌ Провал'}"
+        output += f"{' [ОТКАЧЕНО]' if entry.rollback else ''}\n"
+        output += f"\n{'='*60}\n"
+        output += f"DIFF:\n"
+        output += f"{'='*60}\n\n"
+        output += diff_text
+        output += f"\n\n{'='*60}\n"
+
+        return output
+
+    def list_evolution_entries(self) -> str:
+        """Показать список записей эволюции для выбора"""
+        if not self.evolution_history:
+            return "🧬 История эволюции пуста"
+
+        output = "🧬 ЗАПИСИ ЭВОЛЮЦИИ:\n\n"
+
+        for i, entry in enumerate(self.evolution_history):
+            status = "✅" if entry.success else "❌"
+            rollback = " [ОТКАЧЕНО]" if entry.rollback else ""
+
+            output += f"[{i}] {status} {entry.timestamp[:19]}{rollback}\n"
+            output += f"    {entry.file_modified}: {entry.problem_description[:60]}...\n\n"
+
+        output += f"\n💡 Используй /evolution diff cls <индекс> чтобы увидеть изменения\n"
+
+        return output
+
 
 # === ТЕСТ ===
 if __name__ == "__main__":

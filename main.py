@@ -490,6 +490,11 @@ class Neira:
   /evolution stats     — статистика эволюции
   /evolution log       — лог эволюции
   /evolution cycle     — запустить автоэволюцию
+  /evolution list cls  — список изменений кода
+  /evolution diff cls <индекс> — показать diff
+  /vote-start <cell> <v1> <v2> <задача> — начать голосование
+  /vote-record <cell> <v> <оценка> <ком.> — записать голос
+  /vote-results <cell> <v1> <v2> — результаты
   /evolution help      — полная справка по эволюции
 
 Прочее:
@@ -593,6 +598,19 @@ def main():
                         print(neira.evolution.cmd_evolution_log(system))
                     elif args[0] == "cycle":
                         neira.evolution.auto_evolution_cycle()
+                    elif args[0] == "list":
+                        system = args[1] if len(args) > 1 else "cls"
+                        print(neira.evolution.cmd_evolution_list(system))
+                    elif args[0] == "diff":
+                        if len(args) < 3:
+                            print("❌ Использование: /evolution diff cls <индекс>")
+                        else:
+                            system = args[1]
+                            try:
+                                entry_index = int(args[2])
+                                print(neira.evolution.cmd_evolution_diff(system, entry_index))
+                            except ValueError:
+                                print("❌ Индекс должен быть числом")
                     elif args[0] == "help":
                         print(neira.evolution.cmd_help_evolution())
                     else:
@@ -614,6 +632,35 @@ def main():
                 status = get_model_status()
                 print(f"Ollama: {'✅ запущена' if status['ollama_running'] else '❌ не запущена'}")
                 print(f"Модели: {', '.join(status['models'][:5])}")
+            elif cmd == "vote-start":
+                if neira.evolution and len(args) >= 4:
+                    cell_name = args[0]
+                    version_1 = args[1]
+                    version_2 = args[2]
+                    task = " ".join(args[3:])
+                    print(neira.evolution.cmd_vote_start(cell_name, version_1, version_2, task))
+                else:
+                    print("❌ Использование: /vote-start <cell> <version1> <version2> <задача>")
+            elif cmd == "vote-record":
+                if neira.evolution and len(args) >= 3:
+                    cell_name = args[0]
+                    version_id = args[1]
+                    try:
+                        score = int(args[2])
+                        feedback = " ".join(args[3:]) if len(args) > 3 else ""
+                        print(neira.evolution.cmd_vote_record(cell_name, version_id, score, feedback))
+                    except ValueError:
+                        print("❌ Оценка должна быть числом от 1 до 10")
+                else:
+                    print("❌ Использование: /vote-record <cell> <version> <оценка> [комментарий]")
+            elif cmd == "vote-results":
+                if neira.evolution and len(args) >= 3:
+                    cell_name = args[0]
+                    version_1 = args[1]
+                    version_2 = args[2]
+                    print(neira.evolution.cmd_vote_results(cell_name, version_1, version_2))
+                else:
+                    print("❌ Использование: /vote-results <cell> <version1> <version2>")
             else:
                 print(f"❓ Неизвестная команда: {cmd}")
             continue
