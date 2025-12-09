@@ -25,7 +25,7 @@ OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 MODEL_CODE = "qwen2.5-coder:7b"        # Код (~5 ГБ VRAM)
 MODEL_REASON = "mistral:7b-instruct"   # Рассуждения (~4.5 ГБ VRAM)
 MODEL_PERSONALITY = "neira-personality" # Личность (~1.5 ГБ, пока fallback на reason)
-MODEL_CLOUD = "groq-llama3.3-70b"      # Облачная для сложных задач
+MODEL_CLOUD = "deepseek-v3.1:671b-cloud"  # Облачная Ollama для сложных задач (671B параметров)
 
 EMBED_MODEL = "nomic-embed-text"
 TIMEOUT = 180
@@ -474,6 +474,9 @@ def get_model_status() -> Dict[str, Any]:
         models = response.json().get("models", [])
         model_names = [m.get("name", "") for m in models]
 
+        # Проверяем доступность облачной модели
+        cloud_ready = MODEL_CLOUD in model_names or any(MODEL_CLOUD in m for m in model_names)
+
         return {
             "ollama_running": True,
             "models": model_names,
@@ -481,7 +484,7 @@ def get_model_status() -> Dict[str, Any]:
             "reason_model_ready": MODEL_REASON in model_names or f"{MODEL_REASON}:latest" in model_names,
             "personality_model_ready": MODEL_PERSONALITY in model_names or f"{MODEL_PERSONALITY}:latest" in model_names,
             "embed_model_ready": EMBED_MODEL in model_names or f"{EMBED_MODEL}:latest" in model_names,
-            "cloud_available": bool(os.getenv("GROQ_API_KEY"))
+            "cloud_available": cloud_ready
         }
     except:
         return {

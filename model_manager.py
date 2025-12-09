@@ -1,6 +1,6 @@
 """
 Model Manager v0.5 — VRAM management and model switching
-Manages 3 local models + 1 cloud fallback for complex tasks
+Manages 3 local models + 1 Ollama cloud model for complex tasks
 """
 
 import requests
@@ -10,11 +10,6 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
 OLLAMA_API = "http://localhost:11434/api"
-
-# Cloud API configuration
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
 @dataclass
@@ -31,7 +26,7 @@ MODELS = {
     "code": ModelInfo("qwen2.5-coder:7b", 5.0, "local", "Code generation and analysis"),
     "reason": ModelInfo("mistral:7b-instruct", 4.5, "local", "Planning, reasoning, verification"),
     "personality": ModelInfo("neira-personality", 1.5, "local", "Dialogue with personality"),
-    "cloud": ModelInfo(GROQ_MODEL, 0, "cloud", "Complex tasks requiring high capability")
+    "cloud": ModelInfo("deepseek-v3.1:671b-cloud", 0, "cloud", "Complex tasks (Ollama cloud, 671B params)")
 }
 
 
@@ -43,11 +38,22 @@ class ModelManager:
         self.current_model: Optional[str] = None
         self.switch_count = 0
         self.verbose = verbose
-        self.cloud_available = bool(GROQ_API_KEY)
+        self.cloud_available = self._check_cloud_model()
 
     def log(self, message: str):
         if self.verbose:
             print(message)
+
+    def _check_cloud_model(self) -> bool:
+        """Check if cloud model is available in Ollama"""
+        try:
+            resp = requests.get(f"{OLLAMA_API}/tags", timeout=5)
+            models = resp.json().get("models", [])
+            model_names = [m.get("name", "") for m in models]
+            cloud_model = MODELS["cloud"].name
+            return cloud_model in model_names or any(cloud_model in m for m in model_names)
+        except:
+            return False
 
     def get_loaded_models(self) -> list:
         """Check which models are currently in VRAM"""
@@ -116,12 +122,14 @@ class ModelManager:
 
         model_info = MODELS[target_key]
 
-        # Cloud model - no VRAM management needed
+        # Cloud model - also managed by Ollama, but no VRAM constraints
         if model_info.type == "cloud":
             if not self.cloud_available:
-                self.log("⚠️ Cloud model not available (GROQ_API_KEY not set)")
+                self.log("⚠️ Cloud model not available in Ollama")
                 return False
+            # Don't unload local models for cloud - it uses remote compute
             self.current_model = target_key
+            self.log(f"🌩️ Using cloud model: {model_info.name}")
             return True
 
         # Local model - check if already loaded
@@ -146,41 +154,6 @@ class ModelManager:
         self.current_model = target_key
         self.switch_count += 1
         return True
-
-    def call_cloud_model(self, prompt: str, system_prompt: str = "",
-                         temperature: float = 0.7) -> str:
-        """Call cloud model (Groq API)"""
-        if not self.cloud_available:
-            return "ERROR: Cloud model not available"
-
-        try:
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-
-            resp = requests.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": GROQ_MODEL,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": 2048
-                },
-                timeout=30
-            )
-
-            if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
-            else:
-                return f"ERROR: Cloud API returned {resp.status_code}"
-
-        except Exception as e:
-            return f"ERROR: Cloud call failed - {e}"
 
     def get_stats(self) -> Dict[str, Any]:
         """Get manager statistics"""

@@ -458,7 +458,7 @@ class Neira:
         output += f"  Code: {MODEL_CODE} {'✅' if status['code_model_ready'] else '❌'}\n"
         output += f"  Reason: {MODEL_REASON} {'✅' if status['reason_model_ready'] else '❌'}\n"
         output += f"  Personality: нейра {'✅' if status['personality_model_ready'] else '⏳ (не обучена)'}\n"
-        output += f"  Cloud: Groq {'✅' if status['cloud_available'] else '❌'}\n\n"
+        output += f"  Cloud: deepseek-v3.1 (671B) {'✅' if status['cloud_available'] else '❌'}\n\n"
 
         if self.model_manager:
             manager_stats = self.model_manager.get_stats()
