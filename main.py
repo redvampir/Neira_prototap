@@ -73,6 +73,13 @@ except ImportError as e:
     EXPERIENCE_AVAILABLE = False
     print(f"⚠️ Система опыта недоступна: {e}")
 
+try:
+    from evolution_manager import EvolutionManager
+    EVOLUTION_AVAILABLE = True
+except ImportError as e:
+    EVOLUTION_AVAILABLE = False
+    print(f"⚠️ Система эволюции недоступна: {e}")
+
 
 class Neira:
     """Главный класс — связывает все клетки"""
@@ -134,7 +141,14 @@ class Neira:
         else:
             self.code = None
             self.self_modify = None
-    
+
+        # Система эволюции (v0.6)
+        if EVOLUTION_AVAILABLE and self.experience:
+            self.evolution = EvolutionManager(self.experience, self.memory, verbose=verbose)
+            self.evolution.initialize()
+        else:
+            self.evolution = None
+
     def log(self, message: str):
         if self.verbose:
             print(f"\n{'='*50}\n{message}\n{'='*50}")
@@ -455,7 +469,7 @@ class Neira:
     
     def cmd_help(self) -> str:
         return """
-📚 КОМАНДЫ НЕЙРЫ v0.4
+📚 КОМАНДЫ НЕЙРЫ v0.6
 
 Память и опыт:
   /memory              — показать память
@@ -471,6 +485,12 @@ class Neira:
   /code read <файл>    — прочитать файл
   /code analyze <файл> — анализ кода
   /code self           — самоанализ
+
+Эволюция и самосовершенствование:
+  /evolution stats     — статистика эволюции
+  /evolution log       — лог эволюции
+  /evolution cycle     — запустить автоэволюцию
+  /evolution help      — полная справка по эволюции
 
 Прочее:
   /stats               — статистика
@@ -562,6 +582,23 @@ def main():
                 print(neira.cmd_experience())
             elif cmd == "personality":
                 print(neira.cmd_personality())
+            elif cmd == "evolution":
+                if neira.evolution:
+                    if not args:
+                        print(neira.evolution.cmd_help_evolution())
+                    elif args[0] == "stats":
+                        print(neira.evolution.cmd_evolution_stats())
+                    elif args[0] == "log":
+                        system = args[1] if len(args) > 1 else "all"
+                        print(neira.evolution.cmd_evolution_log(system))
+                    elif args[0] == "cycle":
+                        neira.evolution.auto_evolution_cycle()
+                    elif args[0] == "help":
+                        print(neira.evolution.cmd_help_evolution())
+                    else:
+                        print(f"❌ Неизвестная подкоманда: {args[0]}")
+                else:
+                    print("❌ Система эволюции недоступна")
             elif cmd == "clear":
                 neira.memory.memories = []
                 neira.memory.save()
