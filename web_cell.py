@@ -3,7 +3,7 @@ Neira Web Cell v0.3 — Поиск в интернете
 Позволяет искать информацию и учиться из сети.
 
 Использует DuckDuckGo (бесплатно, без API ключей).
-pip install duckduckgo-search
+pip install ddgs
 """
 
 import requests
@@ -12,11 +12,11 @@ from dataclasses import dataclass
 
 # Попробуем импортировать duckduckgo
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     DDGS_AVAILABLE = True
 except ImportError:
     DDGS_AVAILABLE = False
-    print("⚠️ duckduckgo-search не установлен. Выполни: pip install duckduckgo-search")
+    print("⚠️ ddgs не установлен. Выполни: pip install ddgs")
 
 from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_REASON, TIMEOUT
 
