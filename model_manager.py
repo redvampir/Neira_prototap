@@ -26,7 +26,7 @@ MODELS = {
     # Локальные модели
     "code": ModelInfo("qwen2.5-coder:7b", 5.0, "local", "Code generation and analysis"),
     "reason": ModelInfo("mistral:7b-instruct", 4.5, "local", "Planning, reasoning, verification"),
-    "personality": ModelInfo("neira-personality", 1.5, "local", "Dialogue with personality"),
+    "personality": ModelInfo("mistral:7b-instruct", 4.5, "local", "Dialogue with personality (using mistral until custom model trained)"),
 
     # Облачные модели (0 VRAM, удалённые вычисления)
     "cloud_code": ModelInfo("qwen3-coder:480b-cloud", 0, "cloud", "Complex code tasks (480B params)"),
