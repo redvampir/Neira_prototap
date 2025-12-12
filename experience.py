@@ -211,6 +211,13 @@ class ExperienceSystem:
         if strengths:
             prompt += f"Ты хорошо справляешься с: {', '.join(strengths[:3])}.\n"
         
+        # Предпочтения (стиль ответов)
+        preferences = p.get("preferences", [])
+        if preferences:
+            prompt += "Стиль ответов:\n"
+            for pref in preferences[:3]:
+                prompt += f"- {pref}\n"
+        
         # Инсайты
         insights = p.get("insights", [])
         if insights:

@@ -45,7 +45,7 @@ class ModelVersion:
     base_model: str
     created_at: str
     training_samples: int
-    performance_metrics: Dict = None
+    performance_metrics: Optional[Dict] = None
     active: bool = False
 
     def to_dict(self) -> dict:
@@ -202,7 +202,7 @@ PARAMETER num_ctx 4096
             print(f"❌ Ошибка: {e}")
             return False
 
-    def train_new_version(self, base_model: str = "mistral:7b-instruct") -> Optional[ModelVersion]:
+    def train_new_version(self, base_model: str = "ministral-3:3b") -> Optional[ModelVersion]:
         """Обучить новую версию модели"""
 
         print("\n" + "="*60)
@@ -262,7 +262,9 @@ PARAMETER num_ctx 4096
 
         self.save_model_versions()
         print(f"✅ Активирована версия: {version_id}")
-        print(f"   Модель: {self.get_active_version().model_name}")
+        active = self.get_active_version()
+        if active:
+            print(f"   Модель: {active.model_name}")
         print(f"\n⚠️  Для использования новой модели обнови MODEL_PERSONALITY в cells.py")
 
     def get_active_version(self) -> Optional[ModelVersion]:
@@ -325,9 +327,10 @@ PARAMETER num_ctx 4096
 
     def get_stats(self) -> Dict:
         """Статистика"""
+        active = self.get_active_version()
         return {
             "total_versions": len(self.model_versions),
-            "active_version": self.get_active_version().version_id if self.get_active_version() else None,
+            "active_version": active.version_id if active else None,
             "available_training_samples": len([
                 exp for exp in self.experience.experiences
                 if exp.score >= 8 and exp.verdict == "ПРИНЯТ"

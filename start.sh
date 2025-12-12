@@ -111,14 +111,14 @@ else
     check "qwen2.5-coder:7b загружена"
 fi
 
-# Проверка mistral:7b-instruct
-if ollama list | grep -q "mistral:7b-instruct"; then
-    check "mistral:7b-instruct загружена"
+# Проверка ministral-3:3b
+if ollama list | grep -q "ministral-3:3b"; then
+    check "ministral-3:3b загружена"
 else
-    echo -e "${YELLOW}⚠️  mistral:7b-instruct не найдена${NC}"
-    echo -e "${BLUE}📥 Скачиваю mistral:7b-instruct (~4.5 GB)...${NC}"
-    ollama pull mistral:7b-instruct
-    check "mistral:7b-instruct загружена"
+    echo -e "${YELLOW}⚠️  ministral-3:3b не найдена${NC}"
+    echo -e "${BLUE}📥 Скачиваю ministral-3:3b (~4.5 GB)...${NC}"
+    ollama pull ministral-3:3b
+    check "ministral-3:3b загружена"
 fi
 
 # 6. Создание необходимых директорий

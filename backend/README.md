@@ -98,7 +98,7 @@ Response:
   "model_manager": {
     "current_model": "reason",
     "switches": 15,
-    "loaded_models": ["mistral:7b-instruct"],
+    "loaded_models": ["ministral-3:3b"],
     "max_vram_gb": 8.0
   },
   "memory": {

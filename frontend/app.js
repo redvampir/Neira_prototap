@@ -27,6 +27,8 @@ const elements = {
     statusIndicator: document.getElementById('statusIndicator'),
     statusText: document.getElementById('statusText'),
     refreshStats: document.getElementById('refreshStats'),
+    statsToggle: document.getElementById('statsToggle'),
+    statsSidebar: document.querySelector('.stats-sidebar'),
 
     // Stats
     currentModel: document.getElementById('currentModel'),
@@ -50,6 +52,7 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     setupEventListeners();
+    setupMobileUI();
     fetchStats();
 
     // Auto-refresh stats
@@ -126,6 +129,61 @@ function setupEventListeners() {
 
     // Refresh stats button
     elements.refreshStats.addEventListener('click', fetchStats);
+
+    // Stats toggle for mobile
+    if (elements.statsToggle) {
+        elements.statsToggle.addEventListener('click', toggleStats);
+    }
+}
+
+// Mobile UI Setup
+function setupMobileUI() {
+    // Auto-resize textarea on mobile
+    elements.userInput.addEventListener('input', autoResizeTextarea);
+
+    // Handle virtual keyboard appearance
+    if ('visualViewport' in window) {
+        window.visualViewport.addEventListener('resize', handleViewportResize);
+    }
+
+    // Prevent zoom on input focus (iOS)
+    elements.userInput.addEventListener('focus', () => {
+        document.body.classList.add('input-focused');
+    });
+
+    elements.userInput.addEventListener('blur', () => {
+        document.body.classList.remove('input-focused');
+    });
+}
+
+// Auto-resize textarea
+function autoResizeTextarea() {
+    const textarea = elements.userInput;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+}
+
+// Handle viewport resize (keyboard appearance)
+function handleViewportResize() {
+    const viewport = window.visualViewport;
+    const inputContainer = document.querySelector('.input-container');
+
+    if (viewport.height < window.innerHeight * 0.8) {
+        // Keyboard is visible
+        inputContainer.style.paddingBottom = (window.innerHeight - viewport.height) + 'px';
+        elements.messages.scrollTop = elements.messages.scrollHeight;
+    } else {
+        // Keyboard hidden
+        inputContainer.style.paddingBottom = '';
+    }
+}
+
+// Toggle stats sidebar (mobile)
+function toggleStats() {
+    if (elements.statsSidebar) {
+        elements.statsSidebar.classList.toggle('visible');
+        elements.statsToggle.textContent = elements.statsSidebar.classList.contains('visible') ? '✕' : '📊';
+    }
 }
 
 // Send message

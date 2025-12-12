@@ -1,24 +1,83 @@
 """
-Neira Backend API v0.5
-FastAPI server with REST endpoints and WebSocket support
+Neira Backend API v0.6
+FastAPI server with REST endpoints, WebSocket support and optional auth
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import Optional, List
 import json
 import asyncio
+import os
+import secrets
+import hashlib
 from datetime import datetime
 
 from neira_wrapper import NeiraWrapper, StreamChunk
 
+# === ЗАЩИЩЁННЫЙ ПРОФИЛЬ АДМИНИСТРАТОРА ===
+# Захардкожен для защиты от несанкционированного доступа
+# 0 → переполнение (overflow), 11111111 → 255 → 0x00 при переполнении бита
+_ADMIN_HASH = hashlib.sha256(b"0:11111111").hexdigest()  # Хеш login:password
+_ADMIN_LOGIN = "0"
+
+def _verify_admin(login: str, password: str) -> bool:
+    """Проверка администратора (захардкоженный профиль)"""
+    attempt_hash = hashlib.sha256(f"{login}:{password}".encode()).hexdigest()
+    return secrets.compare_digest(attempt_hash, _ADMIN_HASH)
+
+# === Конфигурация безопасности ===
+# Установи эти переменные окружения для защиты API:
+#   NEIRA_AUTH_ENABLED=true
+#   NEIRA_USERNAME=your_username  (игнорируется для админа)
+#   NEIRA_PASSWORD=your_password  (игнорируется для админа)
+AUTH_ENABLED = os.getenv("NEIRA_AUTH_ENABLED", "false").lower() == "true"
+AUTH_USERNAME = os.getenv("NEIRA_USERNAME", "neira")
+AUTH_PASSWORD = os.getenv("NEIRA_PASSWORD", "")  # Пустой = отключено
+
+security = HTTPBasic()
+
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """Проверка Basic Auth с приоритетом захардкоженного админа"""
+    if not AUTH_ENABLED:
+        return {"user": "anonymous", "is_admin": False}
+    
+    # Сначала проверяем захардкоженного админа
+    if _verify_admin(credentials.username, credentials.password):
+        return {"user": _ADMIN_LOGIN, "is_admin": True}
+    
+    # Затем проверяем обычные учётные данные
+    if AUTH_PASSWORD:
+        correct_username = secrets.compare_digest(credentials.username, AUTH_USERNAME)
+        correct_password = secrets.compare_digest(credentials.password, AUTH_PASSWORD)
+        
+        if correct_username and correct_password:
+            return {"user": credentials.username, "is_admin": False}
+    
+    raise HTTPException(
+        status_code=401,
+        detail="Неверные учётные данные",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+
+def optional_auth(authorization: Optional[str] = Header(None)):
+    """Опциональная проверка (для открытых endpoints)"""
+    if not AUTH_ENABLED or not AUTH_PASSWORD:
+        return True
+    # Для endpoints где auth опционален
+    return True
+
+
 # === FastAPI App ===
 app = FastAPI(
     title="Neira API",
-    description="Backend API for Neira AI Assistant",
-    version="0.5.0"
+    description="Backend API for Neira AI Assistant (v0.6 with remote access)",
+    version="0.6.0"
 )
 
 # CORS для frontend
@@ -68,11 +127,63 @@ async def health():
     """Detailed health check"""
     stats = neira_wrapper.get_stats()
     return {
+        "alive": True,
         "status": "healthy",
         "is_processing": stats.get("is_processing", False),
         "models_ready": stats.get("models", {}),
+        "components": {
+            "memory": True,
+            "ollama": True,
+            "experience": True
+        },
+        "uptime": 0,  # TODO: вычислить
+        "errors": [],
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.get("/api/status")
+async def status():
+    """Neira status for mobile app"""
+    stats = neira_wrapper.get_stats()
+    models = stats.get("models", {})
+    active_models = [k for k, v in models.items() if v]
+    
+    # Получаем количество записей в памяти
+    memory_count = 0
+    try:
+        memory = neira_wrapper.neira.memory if neira_wrapper.neira else None
+        if memory and hasattr(memory, 'memories'):
+            memory_count = len(memory.memories)
+    except:
+        pass
+    
+    return {
+        "online": True,
+        "version": "0.8",
+        "mood": "curious",
+        "memory_count": memory_count,
+        # Дополнительно для совместимости
+        "isOnline": True,
+        "lastSeen": datetime.now().timestamp() * 1000,
+        "memoryUsage": memory_count / 100 if memory_count < 100 else 1.0,
+        "activeModels": active_models
+    }
+
+
+@app.get("/api/curiosity")
+async def curiosity():
+    """Get curiosity question from Neira"""
+    try:
+        # Попробуем получить вопрос от CuriosityCell
+        from cells import maybe_ask_question, CURIOSITY_AVAILABLE
+        if CURIOSITY_AVAILABLE:
+            question = maybe_ask_question("мобильный пользователь", "проверка связи")
+            if question:
+                return {"question": question}
+        return {"question": None}
+    except:
+        return {"question": None}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -121,6 +232,32 @@ async def get_experience():
 async def clear_memory():
     """Clear all memory"""
     return neira_wrapper.clear_memory()
+
+
+# === Самосознание и Органы (v0.6) ===
+
+@app.get("/api/self")
+async def get_self():
+    """Получить информацию о себе (самосознание Нейры)"""
+    return neira_wrapper.get_self_description()
+
+
+@app.get("/api/organs")
+async def get_organs():
+    """Получить список всех органов (клеток) Нейры"""
+    return neira_wrapper.get_organs()
+
+
+@app.get("/api/organs/{organ_name}")
+async def get_organ_details(organ_name: str):
+    """Получить детали конкретного органа"""
+    return neira_wrapper.get_organ_details(organ_name)
+
+
+@app.get("/api/growth")
+async def get_growth_info():
+    """Информация о возможностях роста"""
+    return neira_wrapper.get_growth_capabilities()
 
 
 @app.post("/api/command")

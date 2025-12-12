@@ -94,7 +94,7 @@ ollama serve
 ```bash
 # Скачайте модели
 ollama pull qwen2.5-coder:7b
-ollama pull mistral:7b-instruct
+ollama pull ministral-3:3b
 ```
 
 ### Python ошибки

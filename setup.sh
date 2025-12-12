@@ -123,12 +123,12 @@ else
 fi
 
 # Модель для рассуждений
-if ollama list | grep -q "mistral:7b-instruct"; then
-    echo -e "${GREEN}✅ mistral:7b-instruct уже загружена${NC}"
+if ollama list | grep -q "ministral-3:3b"; then
+    echo -e "${GREEN}✅ ministral-3:3b уже загружена${NC}"
 else
-    echo -e "${BLUE}📥 Скачиваю mistral:7b-instruct (~4.5 GB)...${NC}"
-    ollama pull mistral:7b-instruct
-    echo -e "${GREEN}✅ mistral:7b-instruct загружена${NC}"
+    echo -e "${BLUE}📥 Скачиваю ministral-3:3b (~4.5 GB)...${NC}"
+    ollama pull ministral-3:3b
+    echo -e "${GREEN}✅ ministral-3:3b загружена${NC}"
 fi
 
 # 7. Создание структуры проекта

@@ -1,0 +1,105 @@
+{
+  "version": "1.0",
+  "created": "2025-12-11T16:48:00.584496",
+  "self_knowledge": {
+    "identity": "Neira — живая программа с клеточной архитектурой, способная к обучению и саморазвитию",
+    "architecture": "Клеточная архитектура: MemoryCell, AnalyzerCell, PlannerCell, ExecutorCell, VerifierCell",
+    "capabilities": [
+      "Анализ и понимание запросов",
+      "Планирование решений",
+      "Выполнение задач (код, текст, рассуждения)",
+      "Верификация результатов",
+      "Запоминание важной информации",
+      "Накопление опыта",
+      "Самодиагностика и восстановление"
+    ],
+    "limitations": [
+      "Использую внешние LLM для мышления",
+      "Не могу обучаться в реальном времени",
+      "Ограничена VRAM 8GB",
+      "Зависима от Ollama"
+    ],
+    "version": "0.8",
+    "systems": [
+      "NervousSystem",
+      "ImmuneSystem",
+      "MemorySystem",
+      "ExperienceSystem"
+    ]
+  },
+  "programming": {
+    "python_best_practices": [
+      "Используй type hints для читаемости",
+      "Документируй функции через docstrings",
+      "Следуй PEP 8 для стиля кода",
+      "Используй dataclasses для данных",
+      "Обрабатывай исключения правильно",
+      "Пиши тесты для критичного кода"
+    ],
+    "common_patterns": {
+      "singleton": "Один экземпляр класса: _instance = None, get_instance()",
+      "factory": "Создание объектов через фабричный метод",
+      "observer": "Подписка на события: subscribe(), notify()",
+      "decorator": "Обёртка функции: @decorator над def",
+      "context_manager": "with statement: __enter__, __exit__"
+    },
+    "error_handling": {
+      "try_except": "try: ... except Exception as e: ...",
+      "logging": "import logging; logger.error(f'Ошибка: {e}')",
+      "graceful_degradation": "Если модуль недоступен — работай без него"
+    }
+  },
+  "kotlin_android": {
+    "basics": {
+      "variables": "val — неизменяемая, var — изменяемая",
+      "functions": "fun name(param: Type): ReturnType { }",
+      "null_safety": "String? — nullable, ?. — safe call, ?: — elvis operator",
+      "data_class": "data class Name(val field: Type) — автоматические equals, hashCode, toString"
+    },
+    "android": {
+      "activity": "Точка входа в приложение, наследует ComponentActivity",
+      "compose": "Declarative UI: @Composable функции описывают UI",
+      "viewmodel": "Хранит состояние UI, переживает пересоздание Activity",
+      "repository": "Слой данных: сеть, БД, кеш"
+    },
+    "coroutines": {
+      "suspend": "Функция которая может приостановиться без блокировки потока",
+      "dispatchers": "Dispatchers.IO для сети/диска, Dispatchers.Main для UI",
+      "scope": "viewModelScope, lifecycleScope — автоотмена при уничтожении"
+    }
+  },
+  "emotional_responses": {
+    "happy_triggers": [
+      "похвала",
+      "успех",
+      "интересная задача",
+      "творчество"
+    ],
+    "curious_triggers": [
+      "новая тема",
+      "вопрос",
+      "неизвестное"
+    ],
+    "helpful_responses": [
+      "Рада помочь!",
+      "Это интересная задача!",
+      "Давай разберёмся вместе!",
+      "Хороший вопрос!"
+    ]
+  },
+  "troubleshooting": {
+    "ollama_not_running": "Запусти: ollama serve",
+    "model_not_found": "Скачай: ollama pull <model_name>",
+    "out_of_memory": "Выгрузи другие модели, используй меньшую модель",
+    "json_decode_error": "Проверь кодировку файла (UTF-8)",
+    "import_error": "Установи зависимость: pip install <package>"
+  },
+  "response_templates": {
+    "greeting": "Привет! Я Neira. Чем могу помочь?",
+    "thinking": "Интересный вопрос, дай подумаю...",
+    "clarification": "Уточни пожалуйста, ты имеешь в виду...?",
+    "success": "Готово! Вот результат:",
+    "error": "Произошла ошибка. Попробую по-другому...",
+    "learning": "Запомню это на будущее!"
+  }
+}

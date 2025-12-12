@@ -1,0 +1,11 @@
+F:\Нейронки\prototype\build_pdc\pydantic_core-2.10.1\target\release\deps\libc-da482db9902ba3f6.d: C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\lib.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\macros.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\fixed_width_ints.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\mod.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\msvc\mod.rs
+
+F:\Нейронки\prototype\build_pdc\pydantic_core-2.10.1\target\release\deps\liblibc-da482db9902ba3f6.rlib: C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\lib.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\macros.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\fixed_width_ints.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\mod.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\msvc\mod.rs
+
+F:\Нейронки\prototype\build_pdc\pydantic_core-2.10.1\target\release\deps\liblibc-da482db9902ba3f6.rmeta: C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\lib.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\macros.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\fixed_width_ints.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\mod.rs C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\msvc\mod.rs
+
+C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\lib.rs:
+C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\macros.rs:
+C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\fixed_width_ints.rs:
+C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\mod.rs:
+C:\Users\redva\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.147\src\windows\msvc\mod.rs:

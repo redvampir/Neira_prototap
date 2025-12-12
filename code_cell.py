@@ -29,16 +29,18 @@ except ImportError:
         LOCAL_MODEL = "qwen2.5-coder:7b"
     TIMEOUT = 120
 
-# === НАСТРОЙКИ ОБЛАКА (Ollama Cloud) ===
-CLOUD_ENABLED = True
+# === НАСТРОЙКИ ОБЛАКА ===
+# ВНИМАНИЕ: Ollama работает ТОЛЬКО локально (localhost:11434)
+# Нет публичного облака api.ollama.ai — это был баг
+CLOUD_ENABLED = False  # Отключено — используем только локальную модель
 
-# URL для Ollama Cloud (OpenAI-compatible endpoint)
-CLOUD_API_URL = "https://api.ollama.ai/v1/chat/completions"
+# Для облачных моделей можно интегрировать OpenRouter, Together.ai, Groq и т.д.
+# Пока используем только локальный Ollama
+CLOUD_API_URL = ""  # Заглушка — облако отключено
+CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "")  # Пусто по умолчанию
 
-CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "e630650f605748a4a3b9b7288babc441.hOiyzpmocy52kPJfrlTy8VmL")
-
-# Используй самую мощную модель из облака Ollama (эквивалент GPT-4 уровня)
-CLOUD_MODEL = "qwen3-coder:480b-cloud"   # Альтернатива: "codellama:70b" или "mistral-nemo:12b"
+# Локальная модель для кода
+CLOUD_MODEL = LOCAL_MODEL  # Используем локальную модель
 
 # === ЛОКАЛЬНЫЕ НАСТРОЙКИ ===
 ALLOWED_EXTENSIONS = [".py", ".json", ".txt", ".md", ".yaml", ".yml", ".toml"]
@@ -99,25 +101,10 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
 
     def _hybrid_generate(self, prompt: str, system: str = None) -> Tuple[str, str]: # pyright: ignore[reportArgumentType]
         """
-        Пытается использовать облако, при сбое падает в локальную Ollama.
+        Пытается использовать локальную Ollama с graceful degradation.
         Возвращает: (content, source_model_name)
         """
-        messages = [
-            {"role": "system", "content": system or self.system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-
-        # 1. Попытка Облака
-        try:
-            if CLOUD_ENABLED:
-                print(f"☁️ Посылаю запрос в облако ({CLOUD_MODEL})...")
-                content = self._call_cloud_api(messages)
-                return content, "CLOUD:" + CLOUD_MODEL
-        except Exception as e:
-            print(f"⚠️ Ошибка облака: {e}")
-            print(f"🔄 Переключаюсь на локальную модель ({LOCAL_MODEL})...")
-
-        # 2. Fallback на локальную модель
+        # Облако отключено — используем только локальную модель
         try:
             ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
             payload = {
@@ -131,8 +118,23 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
                 raise Exception(f"Ошибка локальной модели: {response.text}")
             content = response.json().get("response", "")
             return content, "LOCAL:" + LOCAL_MODEL
+            
+        except requests.exceptions.Timeout:
+            return self._offline_response(prompt, "timeout"), "OFFLINE"
+            
+        except requests.exceptions.ConnectionError:
+            return self._offline_response(prompt, "offline"), "OFFLINE"
+            
         except Exception as e:
-            raise Exception(f"Ошибка локальной генерации: {e}")
+            return self._offline_response(prompt, f"error: {e}"), "OFFLINE"
+    
+    def _offline_response(self, prompt: str, reason: str) -> str:
+        """Ответ когда Ollama недоступна"""
+        return (
+            f"*[Автономный режим — {reason}]*\n\n"
+            f"Не могу выполнить операцию с кодом — Ollama недоступна.\n"
+            f"Запусти `ollama serve` и повтори команду."
+        )
 
     def _safe_path(self, path: str) -> str:
         full_path = os.path.abspath(os.path.join(self.work_dir, path))

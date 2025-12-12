@@ -45,7 +45,7 @@ Neira использует несколько моделей для разных
 ```bash
 # Основные локальные модели
 ollama pull qwen2.5-coder:7b          # Для работы с кодом (~5 GB)
-ollama pull mistral:7b-instruct       # Для рассуждений (~4.5 GB)
+ollama pull ministral-3:3b       # Для рассуждений (~4.5 GB)
 
 # Проверьте установленные модели
 ollama list
@@ -55,7 +55,7 @@ ollama list
 ```
 NAME                     ID           SIZE    MODIFIED
 qwen2.5-coder:7b        abc123...    4.7 GB  2 minutes ago
-mistral:7b-instruct     def456...    4.1 GB  5 minutes ago
+ministral-3:3b     def456...    4.1 GB  5 minutes ago
 ```
 
 ## ▶️ Шаг 4: Запуск проекта
@@ -202,7 +202,7 @@ ollama list
 
 # Если нет, загрузите снова
 ollama pull qwen2.5-coder:7b
-ollama pull mistral:7b-instruct
+ollama pull ministral-3:3b
 ```
 
 ### Ошибки импорта Python
@@ -278,7 +278,7 @@ python3 main.py
 - [ ] Виртуальное окружение создано (опционально)
 - [ ] `requests` установлен
 - [ ] Ollama установлен и запущен
-- [ ] Модели `qwen2.5-coder:7b` и `mistral:7b-instruct` загружены
+- [ ] Модели `qwen2.5-coder:7b` и `ministral-3:3b` загружены
 - [ ] `main.py` запускается без ошибок
 - [ ] Базовые команды работают
 - [ ] Система отвечает на запросы

@@ -103,6 +103,14 @@ class NeiraWrapper:
                 content="Проверяю результат..."
             )
             await asyncio.sleep(0.2)
+            
+            # Защита от пустого ответа
+            if not response or not response.strip():
+                yield StreamChunk(
+                    type="error",
+                    content="Не удалось сгенерировать ответ. Попробуйте переформулировать вопрос."
+                )
+                return
 
             # Финальный результат
             yield StreamChunk(
@@ -252,6 +260,89 @@ class NeiraWrapper:
             return {"status": "success", "message": "Memory cleared"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # === Самосознание и Органы (v0.6) ===
+
+    def get_self_description(self) -> Dict[str, Any]:
+        """Получить описание себя (самосознание)"""
+        try:
+            if self.neira.introspection:
+                description = self.neira.introspection.get_self_description()
+                organs_count = len(self.neira.introspection.organs)
+                active_count = len([o for o in self.neira.introspection.organs.values() if o.status == "active"])
+                
+                return {
+                    "description": description,
+                    "summary": {
+                        "total_organs": organs_count,
+                        "active_organs": active_count,
+                        "growing_organs": organs_count - active_count,
+                        "has_evolution": self.neira.evolution is not None,
+                        "has_experience": self.neira.experience is not None
+                    }
+                }
+            return {"error": "Introspection cell not available"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_organs(self) -> Dict[str, Any]:
+        """Получить список всех органов"""
+        try:
+            if self.neira.introspection:
+                organs = {}
+                for key, organ in self.neira.introspection.organs.items():
+                    organs[key] = {
+                        "name": organ.name,
+                        "file": organ.file,
+                        "description": organ.description,
+                        "capabilities": organ.capabilities,
+                        "status": organ.status,
+                        "uses_count": organ.uses_count
+                    }
+                return {
+                    "organs": organs,
+                    "total": len(organs),
+                    "by_status": {
+                        "active": len([o for o in organs.values() if o["status"] == "active"]),
+                        "growing": len([o for o in organs.values() if o["status"] == "growing"]),
+                        "dormant": len([o for o in organs.values() if o["status"] == "dormant"])
+                    }
+                }
+            return {"error": "Introspection cell not available"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_organ_details(self, organ_name: str) -> Dict[str, Any]:
+        """Получить детали конкретного органа"""
+        try:
+            if self.neira.introspection:
+                organ = self.neira.introspection.organs.get(organ_name)
+                if organ:
+                    return {
+                        "name": organ.name,
+                        "file": organ.file,
+                        "description": organ.description,
+                        "capabilities": organ.capabilities,
+                        "status": organ.status,
+                        "uses_count": organ.uses_count
+                    }
+                return {"error": f"Organ '{organ_name}' not found"}
+            return {"error": "Introspection cell not available"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_growth_capabilities(self) -> Dict[str, Any]:
+        """Информация о возможностях роста"""
+        try:
+            if self.neira.introspection:
+                return {
+                    "capabilities": self.neira.introspection.get_growth_capabilities(),
+                    "cell_factory_available": self.neira.evolution.cell_factory is not None if self.neira.evolution else False,
+                    "can_grow": True
+                }
+            return {"error": "Introspection cell not available"}
+        except Exception as e:
+            return {"error": str(e)}
 
 
 # === ТЕСТ ===

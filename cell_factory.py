@@ -1,13 +1,14 @@
 """
-Neira Cell Factory v0.6
+Neira Cell Factory v0.7
 Фабрика автоматического создания специализированных клеток.
 
 ВОЗМОЖНОСТИ:
 1. Обнаружение повторяющихся паттернов задач
 2. Генерация кода новой клетки по шаблону
-3. Автоматическое тестирование клетки
-4. Сохранение в generated/ для динамической загрузки
-5. Версионирование и управление жизненным циклом
+3. ✨ НОВОЕ: Проверка безопасности через OrganGuardian
+4. Автоматическое тестирование клетки
+5. Сохранение в generated/ для динамической загрузки
+6. Версионирование и управление жизненным циклом
 """
 
 import os
@@ -20,6 +21,7 @@ import requests
 
 from cells import OLLAMA_URL, MODEL_CODE, MODEL_REASON, TIMEOUT
 from experience import ExperienceSystem
+from organ_guardian import OrganGuardian, ThreatLevel  # ✨ НОВОЕ
 
 
 # Конфигурация
@@ -67,13 +69,16 @@ class GeneratedCell:
 
 
 class CellFactory:
-    """Фабрика клеток"""
+    """Фабрика клеток с проверкой безопасности"""
 
     def __init__(self, experience: ExperienceSystem):
         self.experience = experience
         self.registry: List[GeneratedCell] = []
         os.makedirs(GENERATED_CELLS_DIR, exist_ok=True)
         self.load_registry()
+        
+        # ✨ НОВОЕ: Система защиты органов
+        self.guardian = OrganGuardian()
 
         # Шаблон клетки
         self.cell_template = '''"""
@@ -185,7 +190,7 @@ __all__ = ["{class_name}"]
 
         # Анализируем задачи
         task_examples = "\n".join([
-            f"- {t.user_input[:100]}"
+            f"- {t.get('description', str(t))[:100]}" if isinstance(t, dict) else f"- {str(t)[:100]}"
             for t in tasks[:5]
         ])
 
@@ -297,8 +302,20 @@ __all__ = ["{class_name}"]
         except Exception as e:
             return False, f"Ошибка импорта: {e}"
 
-    def create_cell(self, pattern: str, tasks: List) -> Optional[GeneratedCell]:
-        """Создать новую клетку"""
+    def create_cell(self, pattern: str, tasks: List, author_id: int = 0) -> Dict[str, Any]:
+        """
+        Создать новую клетку с проверкой безопасности
+        
+        Returns:
+            {
+                "success": bool,
+                "cell": GeneratedCell | None,
+                "threat_level": str,
+                "report": str,
+                "quarantined": bool,
+                "organ_id": str | None
+            }
+        """
 
         print("\n" + "="*60)
         print("🏭 СОЗДАНИЕ НОВОЙ КЛЕТКИ")
@@ -309,18 +326,132 @@ __all__ = ["{class_name}"]
 
         if not spec:
             print("❌ Не удалось создать спецификацию")
-            return None
+            return {
+                "success": False,
+                "error": "Не удалось создать спецификацию органа",
+                "threat_level": "unknown"
+            }
 
         print(f"\n📋 СПЕЦИФИКАЦИЯ:")
         print(f"   Имя: {spec.cell_name}")
         print(f"   Описание: {spec.description}")
         print(f"   Паттерн: {spec.task_pattern}")
 
-        # Создаем файл
-        filepath = self.create_cell_file(spec)
+        # ✨ НОВОЕ: Генерируем код
+        code = self.cell_template.format(
+            description=spec.description,
+            version=1,
+            created_at=datetime.now().isoformat(),
+            class_name=spec.cell_name.title().replace("_", ""),
+            cell_name=spec.cell_name,
+            purpose=spec.purpose,
+            system_prompt=spec.system_prompt
+        )
+        
+        # ✨ НОВОЕ: ПРОВЕРКА БЕЗОПАСНОСТИ
+        print(f"\n🔍 ПРОВЕРКА БЕЗОПАСНОСТИ...")
+        scan_result = self.guardian.scan_organ_code(code, spec.cell_name)
+        safety_report = self.guardian.generate_safety_report(scan_result, spec.cell_name)
+        
+        print(safety_report)
+        
+        # Обработка по уровню угрозы
+        if scan_result.threat_level == ThreatLevel.CRITICAL:
+            print("\n🚨 ОРГАН ЗАБЛОКИРОВАН - критическая угроза!")
+            return {
+                "success": False,
+                "threat_level": "critical",
+                "report": safety_report,
+                "error": "Орган содержит критически опасный код и был заблокирован"
+            }
+        
+        elif scan_result.threat_level == ThreatLevel.DANGEROUS:
+            print("\n⚠️ ОРГАН ТРЕБУЕТ ОДОБРЕНИЯ АДМИНИСТРАТОРА")
+            quarantined_organ = self.guardian.quarantine_organ(
+                name=spec.cell_name,
+                description=spec.description,
+                code=code,
+                author_id=author_id,
+                scan_result=scan_result
+            )
+            return {
+                "success": False,
+                "threat_level": "dangerous",
+                "report": safety_report,
+                "quarantined": True,
+                "organ_id": quarantined_organ.organ_id,
+                "message": "Орган помещён в карантин. Ожидайте одобрения администратора."
+            }
+        
+        elif scan_result.threat_level == ThreatLevel.SUSPICIOUS:
+            print("\n🔍 ОРГАН ПОМЕЩЁН В 24-ЧАСОВОЙ КАРАНТИН")
+            quarantined_organ = self.guardian.quarantine_organ(
+                name=spec.cell_name,
+                description=spec.description,
+                code=code,
+                author_id=author_id,
+                scan_result=scan_result,
+                quarantine_hours=24
+            )
+            return {
+                "success": False,
+                "threat_level": "suspicious",
+                "report": safety_report,
+                "quarantined": True,
+                "organ_id": quarantined_organ.organ_id,
+                "message": "Орган помещён в 24-часовой карантин для мониторинга."
+            }
+        
+        # ✅ БЕЗОПАСЕН - создаём файл
+        print(f"\n✅ ОРГАН БЕЗОПАСЕН - создаём файл")
+        filepath = os.path.join(GENERATED_CELLS_DIR, f"{spec.cell_name}.py")
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(code)
+
+        print(f"📝 Создан файл: {filepath}")
 
         # Валидация
         valid, validation_msg = self.validate_cell(filepath)
+
+        if not valid:
+            print(f"❌ Валидация провалена: {validation_msg}")
+            os.remove(filepath)
+            return {
+                "success": False,
+                "threat_level": "safe",
+                "error": f"Синтаксическая ошибка: {validation_msg}"
+            }
+
+        print(f"✅ Валидация пройдена")
+
+        # Регистрируем
+        cell_id = f"{spec.cell_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        generated_cell = GeneratedCell(
+            cell_id=cell_id,
+            cell_name=spec.cell_name,
+            file_path=filepath,
+            created_at=datetime.now().isoformat(),
+            task_pattern=pattern,
+            description=spec.description,
+            active=True  # ✨ Безопасный орган активен сразу
+        )
+
+        self.registry.append(generated_cell)
+        self.save_registry()
+
+        print(f"\n🎉 КЛЕТКА СОЗДАНА: {cell_id}")
+        print(f"   Файл: {filepath}")
+        print(f"   Статус: Активна и готова к использованию")
+        
+        return {
+            "success": True,
+            "cell": generated_cell,
+            "threat_level": "safe",
+            "report": safety_report,
+            "message": "✅ Орган создан и готов к использованию!"
+        }
 
         if not valid:
             print(f"❌ Валидация провалена: {validation_msg}")

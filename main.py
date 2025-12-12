@@ -35,7 +35,7 @@ except ImportError:
         OLLAMA_URL
     )
     MODEL_CODE = "qwen2.5-coder:7b"
-    MODEL_REASON = "mistral:7b-instruct"
+    MODEL_REASON = "ministral-3:3b"
     MODEL_ROUTING = {}
     TIMEOUT = 180
     MAX_RETRIES = 2
@@ -80,6 +80,21 @@ except ImportError as e:
     EVOLUTION_AVAILABLE = False
     print(f"⚠️ Система эволюции недоступна: {e}")
 
+try:
+    from introspection_cell import IntrospectionCell
+    INTROSPECTION_AVAILABLE = True
+except ImportError as e:
+    INTROSPECTION_AVAILABLE = False
+    print(f"⚠️ Орган самосознания недоступен: {e}")
+
+# Автономный загрузчик клеток (v0.8)
+try:
+    from cell_watcher import CellWatcher, get_cell_watcher, start_cell_watcher
+    CELL_WATCHER_AVAILABLE = True
+except ImportError as e:
+    CELL_WATCHER_AVAILABLE = False
+    print(f"⚠️ CellWatcher недоступен: {e}")
+
 
 class Neira:
     """Главный класс — связывает все клетки"""
@@ -121,6 +136,12 @@ class Neira:
 Если тебя спрашивают — отвечай о себе, от первого лица.
 Используй контекст из памяти и свой опыт.
 
+АДАПТИВНАЯ ДЛИНА ОТВЕТА:
+- Простые вопросы → краткий ответ (1-3 предложения)
+- "Объясни", "расскажи", "как" → подробный ответ
+- Код → полный рабочий код
+- Не добавляй воду, но и не обрезай важное
+
 ВАЖНО:
 - Если СУБЪЕКТ: Нейра — значит ТЫ должна действовать
 - Не перекладывай работу на пользователя
@@ -148,6 +169,22 @@ class Neira:
             self.evolution.initialize()
         else:
             self.evolution = None
+        
+        # Орган самосознания (v0.6)
+        if INTROSPECTION_AVAILABLE:
+            self.introspection = IntrospectionCell(self.memory)
+            if verbose:
+                print("🧬 Орган самосознания активирован")
+        else:
+            self.introspection = None
+        
+        # Автономный наблюдатель за клетками (v0.8)
+        if CELL_WATCHER_AVAILABLE:
+            self.cell_watcher = start_cell_watcher()
+            if verbose:
+                print("👁️ CellWatcher запущен — новые органы загружаются автоматически")
+        else:
+            self.cell_watcher = None
 
     def log(self, message: str):
         if self.verbose:
@@ -234,8 +271,30 @@ class Neira:
         task_type = self._extract_task_type(analysis.content)
         subject = self._extract_subject(analysis.content)
         complexity = self._extract_complexity(analysis.content)
-        needs_search = analysis.metadata.get("needs_search", False)
-        needs_code = analysis.metadata.get("needs_code", False)
+        metadata = analysis.metadata or {}
+        needs_search = metadata.get("needs_search", False)
+        needs_code = metadata.get("needs_code", False)
+        needs_cell = metadata.get("needs_cell", False)
+
+        # NEW v0.6: Если нужно создать клетку — делаем это
+        if needs_cell and self.evolution:
+            self.log("🌱 СОЗДАНИЕ НОВОГО ОРГАНА")
+            # Извлекаем описание клетки из запроса
+            cell_description = user_input
+            for prefix in ["научись", "добавь", "создай", "отрасти"]:
+                if prefix in user_input.lower():
+                    idx = user_input.lower().find(prefix)
+                    cell_description = user_input[idx + len(prefix):].strip()
+                    break
+            
+            result = self.evolution.cmd_create_cell(cell_description)
+            print(f"🌱 {result}")
+            
+            # Если клетка создана успешно — активируем её
+            if "Клетка создана" in result:
+                cell_name = result.split(":")[1].split("\n")[0].strip()
+                self.evolution.cmd_activate_cell(cell_name)
+                return f"Готово! Я создала новый орган: {cell_name}. Теперь я могу {cell_description}."
 
         # NEW v0.5: Маршрутизация модели (начальный выбор)
         if self.model_manager and MODEL_ROUTING:
@@ -331,6 +390,16 @@ class Neira:
             )
             if self.verbose:
                 print(result.content)
+            
+            # Защита от пустого результата ExecutorCell
+            if not result.content or not result.content.strip():
+                print(f"⚠️ ExecutorCell вернул пустой результат на попытке {attempt + 1}")
+                if attempt < MAX_RETRIES:
+                    problems = "Предыдущая попытка не дала ответа. Сформулируй четкий и полный ответ."
+                    continue
+                else:
+                    # Если все попытки исчерпаны — возвращаем дефолтный ответ
+                    return "Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос."
 
             # 6. Верификация
             self.log("✅ ВЕРИФИКАЦИЯ")
@@ -369,7 +438,13 @@ class Neira:
         
         # 8. Извлечение фактов для памяти
         self.log("💾 ПАМЯТЬ")
-        facts = self.fact_extractor.process(user_input, final_result.content)
+        
+        # Защита от None (хотя цикл всегда выполняется хотя бы раз)
+        if final_result is None:
+            return "Ошибка: не удалось сгенерировать ответ"
+        
+        result_content = final_result.content
+        facts = self.fact_extractor.process(user_input, result_content)
         for fact in facts:
             if fact.get("importance", 0) >= 0.5:
                 self.memory.remember(
@@ -383,9 +458,9 @@ class Neira:
             print("Новых фактов не найдено")
         
         # Сохраняем ответ в контекст
-        self.memory.add_to_session(f"Нейра: {final_result.content}")
+        self.memory.add_to_session(f"Нейра: {result_content}")
         
-        return final_result.content
+        return result_content
     
     # === КОМАНДЫ ===
     
@@ -467,9 +542,35 @@ class Neira:
         
         return f"❌ Неизвестная команда: {action}"
     
+    def cmd_self(self, args: Optional[list] = None) -> str:
+        """Команда самосознания"""
+        if not self.introspection:
+            return "❌ Орган самосознания недоступен"
+        
+        if not args:
+            # Полная интроспекция
+            return self.introspection.process("Кто я такая?").content
+        
+        subcommand = args[0].lower()
+        
+        if subcommand == "organs":
+            return self.introspection.process("Покажи мои органы").content
+        elif subcommand == "grow":
+            return self.introspection.process("Как мне отрастить новые способности?").content
+        elif subcommand == "status":
+            return self.introspection.get_self_description()
+        
+        return self.introspection.process(" ".join(args)).content
+    
     def cmd_help(self) -> str:
         return """
-📚 КОМАНДЫ НЕЙРЫ v0.6
+📚 КОМАНДЫ НЕЙРЫ v0.8
+
+Самосознание:
+  /self                — кто я? (полная интроспекция)
+  /self organs         — показать мои органы
+  /self grow           — как мне расти?
+  /self status         — мой текущий статус
 
 Память и опыт:
   /memory              — показать память
@@ -484,18 +585,24 @@ class Neira:
   /code list           — список файлов
   /code read <файл>    — прочитать файл
   /code analyze <файл> — анализ кода
-  /code self           — самоанализ
+  /code self           — самоанализ кода
 
-Эволюция и самосовершенствование:
+Эволюция и рост:
   /evolution stats     — статистика эволюции
-  /evolution log       — лог эволюции
   /evolution cycle     — запустить автоэволюцию
-  /evolution list cls  — список изменений кода
-  /evolution diff cls <индекс> — показать diff
-  /vote-start <cell> <v1> <v2> <задача> — начать голосование
-  /vote-record <cell> <v> <оценка> <ком.> — записать голос
-  /vote-results <cell> <v1> <v2> — результаты
-  /evolution help      — полная справка по эволюции
+  /grow <описание>     — отрастить новый орган (клетку)
+  /activate <имя>      — активировать клетку
+  /cells               — список созданных клеток
+
+Здоровье и защита:
+  /health              — статус всех систем
+  /diagnose            — диагностика компонентов
+  /threats             — отчёт об угрозах
+  /pulse               — проверить пульс клеток
+  /recover             — авто-восстановление
+  /git <cmd>           — Git: status/log/restore/rollback
+  /watcher <cmd>       — статус автозагрузчика клеток
+  /sos <проблема>      — запросить помощь
 
 Прочее:
   /stats               — статистика
@@ -541,12 +648,355 @@ class Neira:
             output += f"Средняя оценка: {exp_stats.get('avg_score', 0)}/10\n"
 
         return output
+    
+    def cmd_health(self) -> str:
+        """Показать здоровье всех систем"""
+        from cells import get_health_status, NERVOUS_SYSTEM_AVAILABLE, IMMUNE_SYSTEM_AVAILABLE
+        
+        output = "🏥 ЗДОРОВЬЕ СИСТЕМ v0.7\n\n"
+        
+        health = get_health_status()
+        
+        # Основные системы
+        status_emoji = {"healthy": "✅", "warning": "⚠️", "critical": "🔴", "dead": "💀", "unknown": "❓"}
+        
+        output += "Основные компоненты:\n"
+        for component in ["cells", "memory", "models"]:
+            status = health.get(component, "unknown")
+            emoji = status_emoji.get(status, "❓")
+            output += f"  {emoji} {component}: {status}\n"
+        
+        # Нервная система
+        output += f"\nНервная система: "
+        if NERVOUS_SYSTEM_AVAILABLE:
+            ns_status = health.get("nervous", "unknown")
+            output += f"{status_emoji.get(ns_status, '❓')} {ns_status}\n"
+            
+            if "metrics" in health:
+                output += "  Метрики:\n"
+                for name, data in health["metrics"].items():
+                    metric_emoji = status_emoji.get(data.get("status", "unknown"), "❓")
+                    output += f"    {metric_emoji} {name}: {data['value']}{data.get('unit', '')}\n"
+            
+            if "errors" in health:
+                err = health["errors"]
+                output += f"  Ошибки: {err['total']} всего, {err['last_hour']} за час\n"
+        else:
+            output += "❌ недоступна\n"
+        
+        # Иммунная система
+        output += f"\nИммунная система: "
+        if IMMUNE_SYSTEM_AVAILABLE:
+            output += "✅ активна\n"
+            if "threats_blocked" in health:
+                output += f"  Заблокировано угроз: {health['threats_blocked']}\n"
+        else:
+            output += "❌ недоступна\n"
+        
+        return output
+    
+    def cmd_diagnose(self) -> str:
+        """Запустить диагностику"""
+        from cells import run_diagnostics, IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна для диагностики"
+        
+        output = "🔍 ДИАГНОСТИКА КОМПОНЕНТОВ\n\n"
+        
+        results = run_diagnostics()
+        
+        if "immune_diagnostic" in results:
+            diag = results["immune_diagnostic"]
+            if "error" in diag:
+                output += f"❌ Ошибка диагностики: {diag['error']}\n"
+            else:
+                status_emoji = {"healthy": "✅", "degraded": "⚠️", "failing": "🔴", "dead": "💀"}
+                
+                for name, data in diag.items():
+                    emoji = status_emoji.get(data["status"], "❓")
+                    output += f"{emoji} {name}: {data['status']}\n"
+                    
+                    if data["issues"]:
+                        for issue in data["issues"][:3]:
+                            output += f"   ⚠️ {issue}\n"
+                    
+                    if data["auto_fixable"]:
+                        output += f"   🔧 Можно починить автоматически\n"
+                    
+                    output += "\n"
+        
+        return output
+    
+    def cmd_threats(self) -> str:
+        """Показать отчёт об угрозах"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        from immune_system import get_immune_system
+        immune = get_immune_system()
+        
+        output = "🛡️ ОТЧЁТ ОБ УГРОЗАХ\n\n"
+        
+        status = immune.get_status()
+        output += f"Заблокировано угроз: {status['threats_blocked']}\n"
+        output += f"Авто-исправлений: {status['auto_fixes_applied']}\n"
+        output += f"SOS отправлено: {status['sos_sent']}\n"
+        output += f"В карантине: {status['quarantine_items']} объектов\n\n"
+        
+        threats = immune.get_threat_report()
+        if threats:
+            output += "Последние угрозы:\n"
+            for t in threats[-5:]:
+                level_emoji = {"safe": "✅", "suspicious": "⚠️", "dangerous": "🔴", "critical": "💀"}
+                emoji = level_emoji.get(t["level"], "❓")
+                output += f"  {emoji} [{t['level']}] {t['source']}: {t['description'][:50]}...\n"
+        else:
+            output += "✅ Угроз не обнаружено\n"
+        
+        return output
+    
+    def cmd_sos(self, problem: str) -> str:
+        """Отправить SOS"""
+        from cells import send_sos, IMMUNE_SYSTEM_AVAILABLE
+        
+        if not problem:
+            return "Использование: /sos <описание проблемы>"
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return f"❌ Иммунная система недоступна\n🆘 Проблема записана: {problem}"
+        
+        success = send_sos(problem, severity="medium")
+        
+        if success:
+            return f"🆘 SOS отправлен!\nПроблема: {problem}\n\nЖди помощи от администратора."
+        else:
+            return f"❌ Не удалось отправить SOS\nПроблема: {problem}"
+    
+    def cmd_recover(self) -> str:
+        """Запустить авто-восстановление"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            
+            output = "🔧 АВТО-ВОССТАНОВЛЕНИЕ\n"
+            output += "=" * 40 + "\n\n"
+            
+            # Запускаем полное восстановление
+            results = immune.doctor.run_full_recovery()
+            
+            if not results:
+                output += "✅ Все компоненты в норме — восстановление не требуется\n"
+            else:
+                successful = [r for r in results if r.get("success")]
+                failed = [r for r in results if not r.get("success")]
+                
+                if successful:
+                    output += f"✅ Успешно исправлено: {len(successful)}\n"
+                    for r in successful:
+                        output += f"  • {r['component']}: {r['action']}\n"
+                        if r.get("details"):
+                            output += f"    {r['details']}\n"
+                
+                if failed:
+                    output += f"\n⚠️ Не удалось исправить: {len(failed)}\n"
+                    for r in failed:
+                        output += f"  • {r['component']}: {r.get('details', 'неизвестная ошибка')}\n"
+                
+                output += f"\n📊 Всего применено автофиксов: {immune.doctor.fixes_applied}"
+            
+            return output
+            
+        except Exception as e:
+            return f"❌ Ошибка авто-восстановления: {e}"
+    
+    def cmd_pulse(self) -> str:
+        """Проверить пульс всех клеток"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            
+            # Проверяем пульс
+            pulses = immune.pulse_monitor.check_all_pulses()
+            
+            output = "💓 ПУЛЬС КЛЕТОК\n"
+            output += "=" * 40 + "\n\n"
+            
+            alive_count = 0
+            dead_count = 0
+            
+            for name, pulse in pulses.items():
+                if pulse.alive:
+                    alive_count += 1
+                    status = f"✅ живa ({pulse.response_time:.2f}s)"
+                else:
+                    dead_count += 1
+                    status = f"💀 мертва: {pulse.error or 'unknown'}"
+                
+                output += f"  {name}: {status}\n"
+            
+            output += f"\n📊 Живых: {alive_count}, Мертвых: {dead_count}"
+            
+            if dead_count > 0:
+                output += "\n\n💡 Используй /recover для попытки восстановления"
+            
+            return output
+            
+        except Exception as e:
+            return f"❌ Ошибка проверки пульса: {e}"
+    
+    def cmd_git(self, subcmd: str = "status", *args) -> str:
+        """Git команды"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            git = immune.git
+            
+            if not git.git_available:
+                return "❌ Git не установлен"
+            
+            if not git.is_repo():
+                return "❌ Это не Git репозиторий"
+            
+            if subcmd == "status":
+                return git.get_status_report()
+            
+            elif subcmd == "log":
+                commits = git.get_recent_commits(int(args[0]) if args else 10)
+                if not commits:
+                    return "❌ Не удалось получить историю"
+                
+                output = "📜 ИСТОРИЯ КОММИТОВ\n" + "=" * 40 + "\n\n"
+                for c in commits:
+                    output += f"• {c['hash']} - {c['message'][:50]}\n"
+                    output += f"  {c['date']} by {c['author']}\n\n"
+                return output
+            
+            elif subcmd == "history" and args:
+                filepath = args[0]
+                history = git.get_file_history(filepath)
+                if not history:
+                    return f"❌ История для {filepath} не найдена"
+                
+                output = f"📜 ИСТОРИЯ {filepath}\n" + "=" * 40 + "\n\n"
+                for h in history:
+                    output += f"• {h['hash']} - {h['message'][:40]}\n"
+                return output
+            
+            elif subcmd == "restore":
+                message = " ".join(args) if args else "Manual restore point"
+                commit = git.create_restore_point(message)
+                if commit:
+                    return f"✅ Точка восстановления создана: {commit[:8]}"
+                return "❌ Не удалось создать точку восстановления"
+            
+            elif subcmd == "rollback" and args:
+                filepath = args[0]
+                commit = args[1] if len(args) > 1 else "HEAD~1"
+                if git.rollback_file(filepath, commit):
+                    return f"✅ Файл {filepath} откачен к {commit}"
+                return f"❌ Не удалось откатить {filepath}"
+            
+            elif subcmd == "diff" and args:
+                filepath = args[0]
+                commit = args[1] if len(args) > 1 else "HEAD~1"
+                diff = git.diff_with_commit(filepath, commit)
+                if diff:
+                    return f"📝 DIFF {filepath}\n" + "=" * 40 + f"\n\n```\n{diff[:2000]}\n```"
+                return "Нет изменений или файл не найден"
+            
+            elif subcmd == "stash":
+                if git.stash_changes(" ".join(args) if args else "Auto stash"):
+                    return "✅ Изменения спрятаны"
+                return "❌ Не удалось спрятать изменения"
+            
+            elif subcmd == "unstash":
+                if git.pop_stash():
+                    return "✅ Изменения восстановлены из stash"
+                return "❌ Не удалось восстановить из stash"
+            
+            else:
+                return """📦 GIT КОМАНДЫ
+                
+/git status          - статус репозитория
+/git log [n]         - последние n коммитов
+/git history <file>  - история файла
+/git restore [msg]   - создать точку восстановления
+/git rollback <file> [commit] - откатить файл
+/git diff <file> [commit]     - показать изменения
+/git stash [msg]     - спрятать изменения
+/git unstash         - вернуть спрятанное"""
+            
+        except Exception as e:
+            return f"❌ Ошибка Git: {e}"
+
+    def cmd_watcher(self, subcmd: str = "status", *args) -> str:
+        """Управление CellWatcher — автономным загрузчиком клеток"""
+        if not self.cell_watcher:
+            return "❌ CellWatcher недоступен"
+        
+        if subcmd == "status":
+            return self.cell_watcher.get_status()
+        
+        elif subcmd == "cells":
+            cells = self.cell_watcher.get_loaded_cells()
+            if not cells:
+                return "📭 Нет загруженных динамических клеток"
+            
+            output = "🧬 ЗАГРУЖЕННЫЕ КЛЕТКИ:\n"
+            for name in cells:
+                output += f"  • {name}\n"
+            return output
+        
+        elif subcmd == "reload" and args:
+            name = args[0]
+            if self.cell_watcher.force_reload(name):
+                return f"✅ Клетка {name} перезагружена"
+            return f"❌ Не удалось перезагрузить {name}"
+        
+        elif subcmd == "stop":
+            self.cell_watcher.stop()
+            return "🛑 CellWatcher остановлен"
+        
+        elif subcmd == "start":
+            self.cell_watcher.start()
+            return "👁️ CellWatcher запущен"
+        
+        else:
+            return """👁️ CELL WATCHER КОМАНДЫ
+
+/watcher status      - статус наблюдателя
+/watcher cells       - список загруженных клеток
+/watcher reload <name> - перезагрузить клетку
+/watcher stop        - остановить наблюдатель
+/watcher start       - запустить наблюдатель
+
+CellWatcher автоматически обнаруживает новые *_cell.py файлы
+и загружает их без перезапуска Neira!"""
 
 
 def main():
     print("=" * 60)
-    print("  NEIRA v0.5 — Живая программа")
-    print("  Клеточная архитектура с динамическими моделями")
+    print("  NEIRA v0.8 — Живая программа")
+    print("  Клеточная архитектура + Нервная и Иммунная системы")
+    print("  Авто-восстановление + Пульс клеток")
     print("  Code + Reason + Personality + Cloud")
     print("=" * 60)
     
@@ -625,6 +1075,8 @@ def main():
                 print(neira.cmd_learn(" ".join(args)))
             elif cmd == "code":
                 print(neira.cmd_code(args[0] if args else "list", *args[1:]))
+            elif cmd == "self":
+                print(neira.cmd_self(args if args else None))
             elif cmd == "stats":
                 print(neira.cmd_stats())
             elif cmd == "models":
@@ -661,6 +1113,50 @@ def main():
                     print(neira.evolution.cmd_vote_results(cell_name, version_1, version_2))
                 else:
                     print("❌ Использование: /vote-results <cell> <version1> <version2>")
+            elif cmd == "grow":
+                # Команда для создания нового органа (клетки)
+                if neira.evolution and args:
+                    description = " ".join(args)
+                    print(f"🌱 Создаю новый орган: {description}")
+                    result = neira.evolution.cmd_create_cell(description)
+                    print(result)
+                else:
+                    print("❌ Использование: /grow <описание клетки>")
+                    print("   Пример: /grow генератор картинок через FLUX API")
+            elif cmd == "activate":
+                # Активация клетки
+                if neira.evolution and args:
+                    cell_name = args[0]
+                    result = neira.evolution.cmd_activate_cell(cell_name)
+                    print(result)
+                else:
+                    print("❌ Использование: /activate <имя_клетки>")
+            elif cmd == "cells":
+                # Список клеток
+                if neira.evolution:
+                    print(neira.evolution.cmd_evolution_log("cells"))
+                else:
+                    print("❌ Система эволюции недоступна")
+            # Команды здоровья и защиты
+            elif cmd == "health":
+                print(neira.cmd_health())
+            elif cmd == "diagnose":
+                print(neira.cmd_diagnose())
+            elif cmd == "threats":
+                print(neira.cmd_threats())
+            elif cmd == "sos":
+                problem = " ".join(args) if args else ""
+                print(neira.cmd_sos(problem))
+            elif cmd == "recover":
+                print(neira.cmd_recover())
+            elif cmd == "pulse":
+                print(neira.cmd_pulse())
+            elif cmd == "git":
+                subcmd = args[0] if args else "status"
+                print(neira.cmd_git(subcmd, *args[1:]))
+            elif cmd == "watcher":
+                subcmd = args[0] if args else "status"
+                print(neira.cmd_watcher(subcmd, *args[1:]))
             else:
                 print(f"❓ Неизвестная команда: {cmd}")
             continue
@@ -670,6 +1166,13 @@ def main():
             response = neira.process(user_input)
             print(f"\n{'='*50}")
             print(f"НЕЙРА: {response}")
+            
+            # Любопытство — Neira может задать вопрос
+            from cells import maybe_ask_question, CURIOSITY_AVAILABLE
+            if CURIOSITY_AVAILABLE:
+                question = maybe_ask_question(user_input, response)
+                if question:
+                    print(f"\n💭 {question}")
         except Exception as e:
             print(f"\n❌ Ошибка: {e}")
             print("Проверь что Ollama запущена: ollama serve")

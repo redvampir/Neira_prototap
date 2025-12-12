@@ -55,6 +55,12 @@ body {
     font-size: 0.9rem;
 }
 
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .status-indicator {
     width: 10px;
     height: 10px;
@@ -385,6 +391,7 @@ body {
     }
 }
 
+/* Tablet */
 @media (max-width: 768px) {
     .main-layout {
         flex-direction: column;
@@ -392,9 +399,16 @@ body {
 
     .stats-sidebar {
         width: 100%;
-        max-height: 40vh;
+        max-height: 35vh;
         border-left: none;
         border-top: 1px solid var(--border-color);
+        order: -1; /* Статистика сверху */
+    }
+
+    .stats-sidebar.collapsed {
+        max-height: 0;
+        padding: 0;
+        overflow: hidden;
     }
 
     .message-content {
@@ -402,10 +416,217 @@ body {
     }
 
     .header {
-        padding: 1rem;
+        padding: 0.75rem 1rem;
     }
 
     .header h1 {
         font-size: 1.25rem;
+    }
+
+    .chat-container {
+        padding: 1rem;
+    }
+}
+
+/* Mobile (Phone) */
+@media (max-width: 480px) {
+    body {
+        overflow: auto;
+    }
+
+    .container {
+        height: 100%;
+        min-height: 100vh;
+        min-height: 100dvh; /* Dynamic viewport height для мобильных */
+    }
+
+    .header {
+        padding: 0.5rem 0.75rem;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .header h1 {
+        font-size: 1.1rem;
+    }
+
+    .connection-status {
+        font-size: 0.75rem;
+    }
+
+    .main-layout {
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .chat-section {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .stats-sidebar {
+        display: none; /* По умолчанию скрыт на телефоне */
+        max-height: 50vh;
+        padding: 0.75rem;
+    }
+
+    .stats-sidebar.visible {
+        display: block;
+    }
+
+    .stats-section {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .stats-section h3 {
+        font-size: 0.9rem;
+    }
+
+    .chat-container {
+        padding: 0.5rem;
+        gap: 0.5rem;
+    }
+
+    .messages {
+        gap: 0.75rem;
+        padding-right: 0.25rem;
+    }
+
+    .message-content {
+        max-width: 85%;
+        padding: 0.75rem 1rem;
+        font-size: 0.95rem;
+        border-radius: 16px;
+    }
+
+    .message.user .message-content {
+        border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant .message-content {
+        border-bottom-left-radius: 4px;
+    }
+
+    .input-container {
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        position: sticky;
+        bottom: 0;
+    }
+
+    #userInput {
+        padding: 0.65rem 0.75rem;
+        font-size: 16px; /* Предотвращает zoom на iOS */
+        border-radius: 20px;
+        min-height: 44px;
+        max-height: 120px;
+    }
+
+    .send-button {
+        padding: 0.65rem 1rem;
+        border-radius: 20px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .send-button span:first-child {
+        display: none; /* Скрываем текст "Отправить" */
+    }
+
+    .send-button .shortcut {
+        opacity: 1;
+        font-size: 1.2rem;
+    }
+
+    .stage-indicator {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .stage-icon {
+        font-size: 1rem;
+    }
+
+    /* Toggle кнопка для статистики */
+    .stats-toggle {
+        display: flex !important;
+    }
+}
+
+/* Большие телефоны (landscape) */
+@media (max-width: 480px) and (orientation: landscape) {
+    .stats-sidebar {
+        max-height: 40vh;
+    }
+
+    .messages {
+        max-height: 50vh;
+    }
+}
+
+/* Safe area для iPhone с notch */
+@supports (padding: max(0px)) {
+    .header {
+        padding-top: max(0.5rem, env(safe-area-inset-top));
+        padding-left: max(0.75rem, env(safe-area-inset-left));
+        padding-right: max(0.75rem, env(safe-area-inset-right));
+    }
+
+    .input-container {
+        padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+        padding-left: max(0.5rem, env(safe-area-inset-left));
+        padding-right: max(0.5rem, env(safe-area-inset-right));
+    }
+}
+
+/* Toggle button для статистики (по умолчанию скрыта) */
+.stats-toggle {
+    display: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.2rem;
+}
+
+/* Состояние с фокусом на input (клавиатура открыта) */
+body.input-focused .stats-sidebar {
+    display: none !important;
+}
+
+body.input-focused .header {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+}
+
+/* Touch-friendly improvements */
+@media (pointer: coarse) {
+    .send-button,
+    .refresh-button,
+    .stats-toggle {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .stat-item {
+        padding: 0.75rem 0;
+    }
+
+    .message-content {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+}
+
+/* Темная тема для системного UI (address bar и т.д.) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
     }
 }
