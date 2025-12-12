@@ -100,11 +100,11 @@ class Neira:
                 print("⚠️ ModelManager недоступен, используются модели без управления VRAM")
 
         # Базовые клетки
-        self.analyzer = AnalyzerCell(self.memory)
-        self.planner = PlannerCell(self.memory)
-        self.executor = ExecutorCell(self.memory)
-        self.verifier = VerifierCell(self.memory)
-        self.fact_extractor = FactExtractorCell(self.memory)
+        self.analyzer = AnalyzerCell(self.memory, self.model_manager)
+        self.planner = PlannerCell(self.memory, self.model_manager)
+        self.executor = ExecutorCell(self.memory, self.model_manager)
+        self.verifier = VerifierCell(self.memory, self.model_manager)
+        self.fact_extractor = FactExtractorCell(self.memory, self.model_manager)
         
         # Обновляем системный промпт исполнителя с учётом личности
         if self.experience:
@@ -121,16 +121,16 @@ class Neira:
         
         # Веб-клетки
         if WEB_AVAILABLE:
-            self.web_search = WebSearchCell(self.memory)
-            self.web_learner = WebLearnerCell(self.memory)
+            self.web_search = WebSearchCell(self.memory, self.model_manager)
+            self.web_learner = WebLearnerCell(self.memory, self.model_manager)
         else:
             self.web_search = None
             self.web_learner = None
         
         # Код-клетки
         if CODE_AVAILABLE:
-            self.code = CodeCell(self.memory, work_dir=".")
-            self.self_modify = SelfModifyCell(self.memory)
+            self.code = CodeCell(self.memory, self.model_manager, work_dir=".")
+            self.self_modify = SelfModifyCell(self.memory, self.model_manager)
         else:
             self.code = None
             self.self_modify = None

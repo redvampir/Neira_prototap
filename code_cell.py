@@ -64,8 +64,9 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
 Твоя задача — писать работающий, чистый и безопасный код.
 Всегда следуй стандартам PEP8. Комментируй неочевидные решения."""
     
-    def __init__(self, memory: Optional[MemoryCell] = None, work_dir: str = "."):
-        super().__init__(memory)
+    def __init__(self, memory: Optional[MemoryCell] = None,
+                 model_manager=None, work_dir: str = "."):
+        super().__init__(memory, model_manager)
         self.work_dir = os.path.abspath(work_dir)
         os.makedirs(BACKUP_DIR, exist_ok=True)
     

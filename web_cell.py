@@ -36,8 +36,8 @@ class WebSearchCell(Cell):
     system_prompt = """Ты — исследователь. Анализируй результаты поиска и извлекай полезную информацию.
 Будь точной, указывай источники."""
     
-    def __init__(self, memory: Optional[MemoryCell] = None):
-        super().__init__(memory)
+    def __init__(self, memory: Optional[MemoryCell] = None, model_manager=None):
+        super().__init__(memory, model_manager)
         self.ddgs = DDGS() if DDGS_AVAILABLE else None
     
     def search(self, query: str, max_results: int = 5) -> List[SearchResult]:
