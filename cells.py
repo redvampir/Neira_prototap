@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 import numpy as np
+from model_manager import ModelManager
 
 # === КОНФИГ ===
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -34,6 +35,7 @@ MODEL_CLOUD_VISION = "qwen3-vl:235b-cloud"     # Мультимодальная 
 EMBED_MODEL = "nomic-embed-text"
 TIMEOUT = 180
 MEMORY_FILE = "neira_memory.json"
+MODEL_CHAT = MODEL_REASON
 
 # Retry-логика
 MAX_RETRIES = 2
@@ -244,12 +246,15 @@ class Cell:
     system_prompt: str = "Ты — полезный ассистент."
     use_code_model: bool = False  # Флаг для использования code-модели
     
-    def __init__(self, memory: Optional[MemoryCell] = None):
+    def __init__(self, memory: Optional[MemoryCell] = None,
+                 model_manager: Optional[ModelManager] = None):
         self.memory = memory
-    
-    def call_llm(self, prompt: str, with_memory: bool = True, 
+        self.model_manager = model_manager
+
+    def call_llm(self, prompt: str, with_memory: bool = True,
                  temperature: float = 0.7,
-                 force_code_model: bool = False) -> str:
+                 force_code_model: bool = False,
+                 model_key: Optional[str] = None) -> str:
         """Вызов LLM с опциональным контекстом памяти"""
         
         full_prompt = prompt
@@ -266,7 +271,20 @@ class Cell:
                 full_prompt = f"[Последние сообщения]\n{recent}\n\n{full_prompt}"
         
         # Выбор модели
-        model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_CHAT
+        target_key = model_key
+        if self.use_code_model or force_code_model:
+            target_key = "code"
+        elif target_key is None and self.model_manager and self.model_manager.current_model:
+            target_key = self.model_manager.current_model
+        elif target_key is None:
+            target_key = "reason"
+
+        model = MODEL_CHAT
+        if self.model_manager:
+            manager_model = self.model_manager.get_model_name(target_key)
+            model = manager_model or (MODEL_CODE if target_key == "code" else MODEL_CHAT)
+        else:
+            model = MODEL_CODE if target_key == "code" else MODEL_CHAT
         
         response = requests.post(
             OLLAMA_URL,
