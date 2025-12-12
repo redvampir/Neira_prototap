@@ -24,6 +24,7 @@ import aiohttp
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ChatAction, ParseMode
+from telegram.error import TimedOut, NetworkError
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -1600,8 +1601,12 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Инициализируем систему при первом использовании
     if autonomous_learning_system is None:
+        memory_ref = getattr(neira_wrapper.neira, "memory", None)
+        if memory_ref is None:
+            await update.message.reply_text("⚠️ Память Neira недоступна, автономное обучение не запущено.")
+            return
         autonomous_learning_system = AutonomousLearningSystem(
-            memory_system=neira_wrapper.memory,
+            memory_system=memory_ref,
             idle_threshold_minutes=30,
             admin_telegram_id=_ADMIN_ID
         )
@@ -2063,6 +2068,10 @@ def build_application() -> Application:
     app = (
         Application.builder()
         .token(BOT_TOKEN)
+        # устойчивость к сетевым лагам/разрывам
+        .connect_timeout(15)
+        .read_timeout(30)
+        .write_timeout(30)
         .build()
     )
 
@@ -2099,6 +2108,15 @@ def build_application() -> Application:
     
     # Обработчик сообщений (с авторизацией)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
+
+    # Глобальный обработчик ошибок: не падаем на сетевых таймаутах
+    async def on_error(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE) -> None:
+        err = context.error
+        if isinstance(err, NetworkError):
+            logging.warning("Network error, continue polling: %s", err)
+            return
+        logging.error("Unhandled error: %s", err, exc_info=True)
+    app.add_error_handler(on_error)
 
     return app
 

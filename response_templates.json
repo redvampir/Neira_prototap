@@ -1,5 +1,45 @@
 {
   "version": "1.0",
-  "saved_at": "2025-12-12T10:27:05.189901",
-  "templates": {}
+  "saved_at": "2025-12-12T19:07:16.250514",
+  "templates": {
+    "greeting_full": {
+      "id": "greeting_full",
+      "name": "Полное приветствие",
+      "structure": [
+        "greeting_casual",
+        "emotion_excited"
+      ],
+      "mode": "template",
+      "category": "greeting",
+      "description": "Дружелюбное приветствие с эмоцией",
+      "allow_random_order": false,
+      "require_all_fragments": true
+    },
+    "thanks_full": {
+      "id": "thanks_full",
+      "name": "Благодарность с предложением помощи",
+      "structure": [
+        "thanks_casual",
+        "thanks_helpful"
+      ],
+      "mode": "template",
+      "category": "gratitude",
+      "description": "Благодарность + готовность помочь",
+      "allow_random_order": false,
+      "require_all_fragments": true
+    },
+    "code_explanation_full": {
+      "id": "code_explanation_full",
+      "name": "Объяснение кода",
+      "structure": [
+        "code_intro",
+        "code_explanation"
+      ],
+      "mode": "template",
+      "category": "code",
+      "description": "Представление кода с объяснением",
+      "allow_random_order": false,
+      "require_all_fragments": true
+    }
+  }
 }

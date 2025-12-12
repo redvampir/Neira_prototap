@@ -79,8 +79,8 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
 # МОДЕЛИ v0.5 — локальные + облачные
-MODEL_CODE = "qwen2.5-coder:7b"        # Код локально (~5 ГБ VRAM)
-MODEL_REASON = "ministral-3:3b"   # Рассуждения (~3 ГБ VRAM)
+MODEL_CODE = "qwen2.5:3b"        # Самая лёгкая локальная модель для кода/ответов
+MODEL_REASON = "qwen2.5:3b"      # Самая лёгкая модель рассуждений
 MODEL_PERSONALITY = "ministral-3:3b" # Используем ministral-3:3b до появления кастомной личности
 
 # Облачные модели (0 VRAM, удалённые вычисления)

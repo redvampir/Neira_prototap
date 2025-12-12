@@ -509,30 +509,38 @@ class AutonomousLearningSystem:
             logging.warning(f"❌ Факт отклонён: {fact[:60]}... | {contradictions}")
     
     async def _extract_wikipedia_summary(self, keyword: str, url: str) -> Optional[str]:
-        """Извлекает краткое описание из Wikipedia"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status != 200:
+        """Извлекает краткое описание из Wikipedia через API с fallback на en."""
+        async def fetch_summary(session, api_url: str) -> Optional[str]:
+            try:
+                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
                         return None
-                    
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'lxml')
-                    
-                    # Ищем первый параграф
-                    paragraphs = soup.find_all('p')
-                    for p in paragraphs:
-                        text = p.get_text().strip()
-                        # Берём первый параграф длиннее 100 символов
-                        if len(text) > 100:
-                            # Ограничиваем до 500 символов
-                            summary = text[:500]
-                            return f"{keyword}: {summary}"
-                    
-                    return None
-        except Exception as e:
-            logging.error(f"Ошибка парсинга Wikipedia: {e}")
+                    data = await resp.json()
+                    summary = data.get("extract")
+                    if summary:
+                        summary = summary.strip()
+                        if len(summary) > 500:
+                            summary = summary[:500]
+                        return f"{keyword}: {summary}"
+            except Exception as e:  # pragma: no cover - сеть непредсказуема
+                logging.warning(f"Wiki API error for {api_url}: {e}")
             return None
+
+        title = keyword.replace(" ", "_")
+        api_ru = f"https://ru.wikipedia.org/api/rest_v1/page/summary/{title}"
+        api_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+
+        async with aiohttp.ClientSession() as session:
+            # Сначала пробуем ru
+            summary = await fetch_summary(session, api_ru)
+            if summary:
+                return summary
+            # Fallback на en
+            summary = await fetch_summary(session, api_en)
+            if summary:
+                return summary
+
+        return None
     
     async def _review_quarantine(self):
         """Проверить карантин и переместить одобренные записи в память"""

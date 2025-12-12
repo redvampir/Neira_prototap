@@ -293,11 +293,11 @@ class ResponseSynthesizer:
                 for fid, fdata in data.get("fragments", {}).items():
                     self.fragments[fid] = ResponseFragment(**fdata)
                 
-                print(f"✅ Загружено {len(self.fragments)} фрагментов")
+                print(f"[synth] Загружено {len(self.fragments)} фрагментов")
             except Exception as e:
-                print(f"⚠️ Ошибка загрузки фрагментов: {e}")
+                print(f"[synth] Ошибка загрузки фрагментов: {e}")
         else:
-            print("ℹ️ Файл фрагментов не найден, создаю базовые")
+            print("[synth] Файл фрагментов не найден, создаю базовые")
             self._create_default_fragments()
         
         # Загружаем шаблоны
@@ -310,11 +310,19 @@ class ResponseSynthesizer:
                     tdata['mode'] = ResponseMode(tdata['mode'])
                     self.templates[tid] = ResponseTemplate(**tdata)
                 
-                print(f"✅ Загружено {len(self.templates)} шаблонов")
+                print(f"[synth] Загружено {len(self.templates)} шаблонов")
             except Exception as e:
-                print(f"⚠️ Ошибка загрузки шаблонов: {e}")
+                print(f"[synth] Ошибка загрузки шаблонов: {e}")
         else:
-            print("ℹ️ Файл шаблонов не найден, создаю базовые")
+            print("[synth] Файл шаблонов не найден, создаю базовые")
+            self._create_default_templates()
+
+        # Страховка: если после загрузки пусто, создаем базовые
+        if not self.fragments:
+            print("[synth] Фрагменты отсутствуют, создаю базовые (safety)")
+            self._create_default_fragments()
+        if not self.templates:
+            print("[synth] Шаблоны отсутствуют, создаю базовые (safety)")
             self._create_default_templates()
     
     def _create_default_fragments(self):
@@ -411,7 +419,7 @@ class ResponseSynthesizer:
             self.add_fragment(fragment)
         
         self.save()
-        print(f"✅ Создано {len(defaults)} базовых фрагментов")
+        print(f"[synth] Создано {len(defaults)} базовых фрагментов")
     
     def _create_default_templates(self):
         """Создать базовые шаблоны"""
@@ -446,7 +454,7 @@ class ResponseSynthesizer:
             self.add_template(template)
         
         self.save()
-        print(f"✅ Создано {len(defaults)} базовых шаблонов")
+        print(f"[synth] Создано {len(defaults)} базовых шаблонов")
 
 
 # === Convenience функции ===
