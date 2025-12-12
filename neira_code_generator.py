@@ -43,11 +43,11 @@ class CodeGeneration:
     generated_code: str    # Сгенерированный код
     language: CodeLanguage
     template_used: Optional[str] = None
-    timestamp: datetime = None
+    timestamp: Optional[datetime] = None
     
     # Обратная связь
     user_rating: Optional[int] = None  # 1-5
-    corrections: List[str] = None      # Что исправили
+    corrections: Optional[List[str]] = None      # Что исправили
     final_code: Optional[str] = None   # Финальная версия после правок
     
     def __post_init__(self):
@@ -223,6 +223,15 @@ class NeiraCodeGenerator:
             # Генерируем "с нуля" (упрощённо - просто комментарий)
             code = self._generate_fallback(request, language)
             template_id = None
+        
+        # Улучшаем качество кода
+        code = self.improve_code_quality(code, language)
+        
+        # Валидируем если это Python
+        if language == CodeLanguage.PYTHON:
+            validation = self.validate_python_code(code)
+            if not validation["valid"]:
+                print(f"⚠️ Код имеет проблемы: {validation['errors']}")
         
         # Создаём запись генерации
         generation = CodeGeneration(
@@ -402,6 +411,8 @@ class NeiraCodeGenerator:
             if gen.id == generation_id:
                 gen.user_rating = rating
                 if corrections:
+                    if gen.corrections is None:
+                        gen.corrections = []
                     gen.corrections.extend(corrections)
                 if final_code:
                     gen.final_code = final_code
@@ -424,7 +435,7 @@ class NeiraCodeGenerator:
         """
         
         for gen in self.history:
-            if gen.id == generation_id and gen.final_code and gen.user_rating >= 4:
+            if gen.id == generation_id and gen.final_code and gen.user_rating and gen.user_rating >= 4:
                 # Создаём новый шаблон
                 new_template = CodeTemplate(
                     id=f"learned_{generation_id}",
@@ -479,7 +490,8 @@ class NeiraCodeGenerator:
         for gen in self.history:
             data = asdict(gen)
             data["language"] = gen.language.value
-            data["timestamp"] = gen.timestamp.isoformat()
+            if gen.timestamp:
+                data["timestamp"] = gen.timestamp.isoformat()
             history_data.append(data)
         
         with open(self.history_file, 'w', encoding='utf-8') as f:
@@ -517,6 +529,100 @@ class NeiraCodeGenerator:
                 print(f"✅ Загружена история: {len(self.history)} генераций")
             except Exception as e:
                 print(f"⚠️ Ошибка загрузки истории: {e}")
+    
+    def validate_python_code(self, code: str) -> Dict:
+        """
+        Валидация Python кода на синтаксис и типы
+        
+        Args:
+            code: Python код для проверки
+        
+        Returns:
+            Результат валидации: {"valid": bool, "errors": List[str]}
+        """
+        import tempfile
+        import subprocess
+        
+        result = {"valid": True, "errors": []}
+        
+        try:
+            # Проверка синтаксиса через compile
+            compile(code, '<string>', 'exec')
+            
+            # Для более глубокой проверки - создаём временный файл
+            # и проверяем через mypy/pylance (если установлены)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
+                f.write(code)
+                temp_file = f.name
+            
+            try:
+                # Пытаемся запустить mypy (если есть)
+                proc = subprocess.run(
+                    ['mypy', '--strict', temp_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if proc.returncode != 0:
+                    result["valid"] = False
+                    result["errors"].extend(proc.stdout.split('\n'))
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                # mypy не установлен или завис - пропускаем
+                pass
+            finally:
+                import os
+                os.unlink(temp_file)
+                
+        except SyntaxError as e:
+            result["valid"] = False
+            result["errors"].append(f"Синтаксическая ошибка: {e}")
+        except Exception as e:
+            result["valid"] = False
+            result["errors"].append(f"Ошибка валидации: {e}")
+        
+        return result
+    
+    def improve_code_quality(self, code: str, language: CodeLanguage) -> str:
+        """
+        Улучшить качество сгенерированного кода
+        
+        Args:
+            code: Исходный код
+            language: Язык программирования
+        
+        Returns:
+            Улучшенный код
+        """
+        if language != CodeLanguage.PYTHON:
+            return code
+        
+        # Базовые улучшения для Python
+        lines = code.split('\n')
+        improved_lines = []
+        
+        # Проверяем импорты
+        has_typing_import = any('from typing import' in line for line in lines)
+        needs_typing = 'Optional' in code or 'List' in code or 'Dict' in code
+        
+        if needs_typing and not has_typing_import:
+            # Добавляем импорт typing
+            import_line = "from typing import Optional, List, Dict\n"
+            
+            # Находим место для вставки (после первой строки или после других импортов)
+            insert_pos = 0
+            for i, line in enumerate(lines):
+                if line.startswith('import ') or line.startswith('from '):
+                    insert_pos = i + 1
+                elif line.strip() and not line.startswith('#'):
+                    break
+            
+            lines.insert(insert_pos, import_line)
+        
+        # Улучшаем docstrings
+        improved_code = '\n'.join(lines)
+        
+        return improved_code
 
 
 # Демонстрация

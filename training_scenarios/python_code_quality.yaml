@@ -1,0 +1,239 @@
+name: "Правильная генерация Python кода"
+description: "Обучение Нейры создавать Python код с корректными типами и без ошибок Pylance"
+difficulty: medium
+estimated_time: 30
+
+metadata:
+  category: code_generation
+  language: python
+  version: "1.0"
+  tags: ["code", "python", "types", "quality"]
+
+phases:
+  - name: setup
+    description: "Изучение основ Python типизации"
+    duration: 5
+    steps:
+      - action: teach
+        content: |
+          📚 ОСНОВЫ КАЧЕСТВЕННОГО PYTHON КОДА
+          
+          1. ТИПЫ ДАННЫХ:
+             - Используй Optional[Type] для значений, которые могут быть None
+             - ПРАВИЛЬНО: def foo(x: Optional[str] = None) -> str:
+             - НЕПРАВИЛЬНО: def foo(x: str = None) -> str:
+          
+          2. ПРОВЕРКИ НА None:
+             - Всегда проверяй переменные перед использованием их методов
+             - ПРАВИЛЬНО:
+               if my_var is not None:
+                   result = my_var.upper()
+             - НЕПРАВИЛЬНО:
+               result = my_var.upper()  # может быть None!
+          
+          3. ИМПОРТЫ:
+             - Всегда добавляй необходимые импорты в начало файла
+             - from typing import Optional, List, Dict
+             - from dataclasses import dataclass
+          
+          4. DOCSTRINGS:
+             - Каждая функция должна иметь описание
+             - Формат: """Краткое описание\n\nArgs:\n    param: описание\n\nReturns:\n    описание"""
+        
+      - action: show_examples
+        content: |
+          ✅ ПРАВИЛЬНЫЕ ПРИМЕРЫ:
+          
+          ```python
+          from typing import Optional, List
+          
+          def process_text(text: Optional[str] = None) -> str:
+              """
+              Обработка текста
+              
+              Args:
+                  text: Текст для обработки (может быть None)
+              
+              Returns:
+                  Обработанный текст
+              """
+              if text is None:
+                  return ""
+              
+              return text.strip().upper()
+          
+          def find_items(items: List[str], query: str) -> Optional[List[str]]:
+              """
+              Поиск элементов
+              
+              Args:
+                  items: Список элементов
+                  query: Поисковый запрос
+              
+              Returns:
+                  Найденные элементы или None
+              """
+              if not items:
+                  return None
+              
+              result = [item for item in items if query in item]
+              return result if result else None
+          ```
+          
+          ❌ НЕПРАВИЛЬНЫЕ ПРИМЕРЫ:
+          
+          ```python
+          # Нет типов
+          def process_text(text=None):
+              return text.upper()  # Ошибка если text=None!
+          
+          # Неправильный тип для None
+          def find_items(items: List[str] = None):  # Должно быть Optional[List[str]]
+              return items[0]  # Ошибка если items=None!
+          ```
+
+  - name: execution
+    description: "Практика генерации кода"
+    duration: 15
+    steps:
+      - action: task
+        task_type: code_generation
+        content: |
+          ЗАДАНИЕ 1: Создай функцию для работы со списком
+          
+          Требования:
+          1. Функция get_first_element
+          2. Принимает список (может быть None)
+          3. Возвращает первый элемент или None
+          4. С правильными типами (Optional, List)
+          5. С проверкой на None
+          6. С docstring
+        
+        expected_patterns:
+          - "from typing import"
+          - "Optional"
+          - "List"
+          - "if.*is None"
+          - '"""'
+          - "Args:"
+          - "Returns:"
+        
+        validation_rules:
+          - no_none_errors: "Не должно быть ошибок с None"
+          - has_type_hints: "Должны быть аннотации типов"
+          - has_docstring: "Должен быть docstring"
+          - has_imports: "Должны быть импорты"
+      
+      - action: task
+        task_type: code_generation
+        content: |
+          ЗАДАНИЕ 2: Создай класс для хранения данных
+          
+          Требования:
+          1. Класс UserProfile с dataclass
+          2. Поля: name (str), age (int), email (Optional[str])
+          3. Метод get_info() -> str
+          4. С проверкой на None для email
+          5. С правильными импортами
+          6. С docstrings
+        
+        expected_patterns:
+          - "from dataclasses import dataclass"
+          - "from typing import Optional"
+          - "@dataclass"
+          - "class UserProfile:"
+          - "email: Optional[str]"
+          - "if self.email is not None"
+        
+        validation_rules:
+          - has_dataclass: "Должен использовать @dataclass"
+          - correct_types: "Типы должны быть корректными"
+          - none_safe: "Безопасная работа с None"
+
+  - name: validation
+    description: "Проверка качества кода"
+    duration: 5
+    steps:
+      - action: validate
+        validation_type: pylance_check
+        content: |
+          ПРОВЕРКА КОДА:
+          
+          1. Запусти Pylance на сгенерированном коде
+          2. Проверь что нет ошибок типов
+          3. Проверь что все импорты присутствуют
+          4. Проверь что есть docstrings
+        
+        success_criteria:
+          - "0 ошибок Pylance"
+          - "Все импорты на месте"
+          - "Все функции с docstrings"
+          - "Корректные Optional типы"
+
+  - name: feedback
+    description: "Обратная связь и улучшение"
+    duration: 5
+    steps:
+      - action: review
+        content: |
+          САМОПРОВЕРКА:
+          
+          Оцени свой код по критериям:
+          1. ✅ Правильные типы (Optional для None)
+          2. ✅ Проверки на None перед использованием
+          3. ✅ Все импорты добавлены
+          4. ✅ Docstrings для всех функций/классов
+          5. ✅ 0 ошибок Pylance
+        
+      - action: learn
+        content: |
+          ЗАПОМНИ ПРАВИЛА:
+          
+          1. ВСЕГДА используй Optional[T] для None значений
+          2. ВСЕГДА проверяй на None перед вызовом методов
+          3. ВСЕГДА добавляй импорты в начало файла
+          4. ВСЕГДА пиши docstrings
+          5. ВСЕГДА тестируй код через Pylance
+          
+          Эти правила - основа качественного Python кода!
+
+success_criteria:
+  min_score: 0.8
+  required_completions:
+    - "Все задания выполнены"
+    - "Код проходит Pylance без ошибок"
+    - "Используются правильные типы"
+  
+  quality_metrics:
+    - name: "Корректность типов"
+      weight: 0.4
+      check: "has_correct_types"
+    
+    - name: "Безопасность None"
+      weight: 0.3
+      check: "has_none_checks"
+    
+    - name: "Полнота документации"
+      weight: 0.2
+      check: "has_complete_docs"
+    
+    - name: "Чистота кода"
+      weight: 0.1
+      check: "no_pylance_errors"
+
+rewards:
+  on_success:
+    - pathway: "python_code_quality_expert"
+      tier: "WARM"
+      confidence: 0.9
+    
+    - template: "python_typed_function"
+      success_count: +5
+    
+    - experience: +100
+      category: "code_generation"
+
+next_scenarios:
+  - "advanced_python_patterns.yaml"
+  - "async_code_generation.yaml"
+  - "error_handling_best_practices.yaml"

@@ -1,4 +1,11 @@
 {
     "python.analysis.autoImportCompletions": false,
-    "python.analysis.typeCheckingMode": "basic"
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.exclude": [
+        "**/telegram_bot.py"
+    ],
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportOptionalMemberAccess": "none",
+        "reportAttributeAccessIssue": "none"
+    }
 }

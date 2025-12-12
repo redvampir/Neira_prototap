@@ -513,7 +513,12 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Инициализируем менеджер памяти
     from memory_system import MemoryManager
-    memory_manager = MemoryManager(neira_wrapper.neira.memory)
+    
+    if not neira_wrapper.neira.memory.memory_system:
+        await update.message.reply_text("❌ Система памяти не инициализирована")
+        return
+    
+    memory_manager = MemoryManager(neira_wrapper.neira.memory.memory_system)
     
     if action == "stats":
         # Детальная статистика
@@ -965,7 +970,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def learn_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запускает обучение по теме."""
-    topic = " ".join(context.args).strip()
+    topic = " ".join(context.args).strip() if context.args else ""
     if not topic:
         await update.message.reply_text("📖 Укажите тему: /learn <тема>")
         return
@@ -986,7 +991,7 @@ async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Авторизация пользователя."""
     global _ADMIN_ID
     
-    if len(context.args) < 2:
+    if not context.args or len(context.args) < 2:
         await update.message.reply_text("🔐 Использование: /auth 0 <пароль>")
         return
     
@@ -1154,7 +1159,7 @@ async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 @require_auth
 async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Генерация изображения по описанию."""
-    prompt = " ".join(context.args).strip()
+    prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
         await update.message.reply_text(
             "🎨 *Генерация изображений*\n\n"
@@ -2052,10 +2057,12 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # === Bootstrap ===
 def build_application() -> Application:
     """Настраивает Telegram-приложение."""
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN не установлен в переменных окружения")
+    
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .rate_limiter(None)  # без встроенного лимитера: работаем последовательным lock
         .build()
     )
 

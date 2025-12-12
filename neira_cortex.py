@@ -307,7 +307,7 @@ class NeiraCortex:
         template_used = None
         
         try:
-            if strategy == ResponseStrategy.NEURAL_PATHWAY:
+            if strategy == ResponseStrategy.NEURAL_PATHWAY and pathway_match:
                 # Заученный рефлекс - самый быстрый путь
                 response = self.pathways.execute(pathway_match, user_input, user_id)
                 pathway_tier = pathway_match.tier
@@ -421,14 +421,22 @@ class NeiraCortex:
                 f"Тип запроса: {intent.value}"
             )
             
-            response = self.llm_manager.generate(
-                prompt=user_input,
-                system_prompt=system_prompt,
-                max_tokens=500,
-                temperature=0.7
-            )
-            
-            return response["text"]
+            if self.llm_manager:
+                response = self.llm_manager.generate(
+                    prompt=user_input,
+                    system_prompt=system_prompt,
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                
+                if hasattr(response, 'content'):
+                    return response.content
+                elif isinstance(response, dict):
+                    return response.get("text", str(response))
+                else:
+                    return str(response)
+            else:
+                return self._fallback_response(intent)
             
         except Exception as e:
             print(f"⚠️ LLM ошибка: {e}")

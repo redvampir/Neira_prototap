@@ -388,6 +388,9 @@ class Cell:
     
     def _call_llm_manager(self, prompt: str, temperature: float, memory_context: str) -> str:
         """Вызов через LLM Manager с автоматическим fallback между провайдерами"""
+        if Cell._llm_manager is None:
+            raise RuntimeError("LLM Manager не инициализирован")
+            
         response = Cell._llm_manager.generate(
             prompt=prompt,
             system_prompt=self.system_prompt,

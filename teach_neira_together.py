@@ -124,7 +124,7 @@ class ClaudeTeacher:
             ]
         }
     
-    def get_random_question(self, category: str = None) -> tuple:
+    def get_random_question(self, category: Optional[str] = None) -> tuple:
         """Получить случайный обучающий вопрос"""
         import random
         
@@ -220,7 +220,7 @@ class TeachingSession:
         )
         
         # Добавляем в систему
-        pathway_system.pathways[pathway_id] = pathway
+        pathway_system.pathways.append(pathway)
         pathway_system.save()
         
         print_system(f"✅ Сохранено как pathway '{pathway_id}'")

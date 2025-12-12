@@ -118,12 +118,18 @@ class ResponseSynthesizer:
         variables = variables or {}
         
         if mode == ResponseMode.TEMPLATE:
+            if template_id is None:
+                raise ValueError("template_id обязателен для режима TEMPLATE")
             return self._synthesize_template(template_id, variables)
         elif mode == ResponseMode.FRAGMENT_ASSEMBLY:
+            if fragment_ids is None:
+                raise ValueError("fragment_ids обязателен для режима FRAGMENT_ASSEMBLY")
             return self._synthesize_fragments(fragment_ids, variables)
         elif mode == ResponseMode.RAG:
             return self._synthesize_rag(variables)
         else:
+            if template_id is None or fragment_ids is None:
+                raise ValueError("template_id и fragment_ids обязательны для режима HYBRID")
             return self._synthesize_hybrid(template_id, fragment_ids, variables)
     
     def _synthesize_template(self, template_id: str, variables: Dict[str, Any]) -> str:
