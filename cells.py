@@ -303,6 +303,7 @@ class Cell:
         temperature: float = 0.7,
         force_code_model: bool = False,
         model_key: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> LLMResponse:
         """Вызов LLM с опциональным контекстом памяти"""
         
@@ -371,8 +372,21 @@ class Cell:
             caller=self.name,
         )
 
+        metadata["request_id"] = request_id
+        metadata["model"] = model
+        metadata["model_source"] = "cloud" if "cloud" in (model_key or "") or "-cloud" in model else "local"
+
+        print(
+            f"[REQ {request_id or '-'}][{self.name}] 🛰️ Вызов LLM: модель='{model}' "
+            f"(источник: {metadata['model_source']})"
+        )
+
         if not response:
             metadata.setdefault("response_length", 0)
+            print(
+                f"[REQ {request_id or '-'}][{self.name}] 📜 Ответ LLM: len=0; пусто=True; "
+                f"fallback={metadata.get('fallback_reason') or 'none'}; preview=''"
+            )
             return LLMResponse(text="", metadata=metadata)
 
         try:
@@ -389,11 +403,19 @@ class Cell:
         if not text:
             metadata.setdefault("fallback_reason", "empty_response")
 
+        preview = text[:200].replace("\n", " ")
+        is_empty = len(text) == 0
+        fallback_reason = metadata.get("fallback_reason")
+        print(
+            f"[REQ {request_id or '-'}][{self.name}] 📜 Ответ LLM: len={len(text)}; "
+            f"пусто={is_empty}; fallback={fallback_reason or 'none'}; preview='{preview}'"
+        )
+
         return LLMResponse(text=text, metadata=metadata)
     
-    def process(self, input_data: str) -> CellResult:
+    def process(self, input_data: str, request_id: Optional[str] = None) -> CellResult:
         """Основной метод — переопределяется в наследниках"""
-        llm_result = self.call_llm(input_data)
+        llm_result = self.call_llm(input_data, request_id=request_id)
         return CellResult(
             content=llm_result.text,
             confidence=0.5,
@@ -432,8 +454,8 @@ class AnalyzerCell(Cell):
 КОД: <да/нет>
 ОПИСАНИЕ: <краткое описание задачи>"""
 
-    def process(self, input_data: str) -> CellResult:
-        llm_result = self.call_llm(f"Проанализируй:\n\n{input_data}")
+    def process(self, input_data: str, request_id: Optional[str] = None) -> CellResult:
+        llm_result = self.call_llm(f"Проанализируй:\n\n{input_data}", request_id=request_id)
 
         text_lower = llm_result.text.lower()
         needs_search = "поиск: да" in text_lower
@@ -483,7 +505,7 @@ class PlannerCell(Cell):
 1. [инструмент] действие
 2. [инструмент] действие"""
 
-    def process(self, input_data: Any) -> CellResult:
+    def process(self, input_data: Any, request_id: Optional[str] = None) -> CellResult:
         # Expect input_data to be a dict with 'input_data', 'analysis', and optionally 'model_key'
         if isinstance(input_data, dict):
             user_input = input_data.get('input_data')
@@ -492,7 +514,7 @@ class PlannerCell(Cell):
         else:
             raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
         prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
-        llm_result = self.call_llm(prompt, model_key=model_key)
+        llm_result = self.call_llm(prompt, model_key=model_key, request_id=request_id)
         confidence = 0.7 if "1." in llm_result.text else 0.4
         return CellResult(
             content=llm_result.text,
@@ -521,6 +543,7 @@ class ExecutorCell(Cell):
         extra_context: str = "",
         problems: str = "",
         model_key: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> CellResult:
         """
         problems — замечания верификатора для retry
@@ -536,7 +559,7 @@ class ExecutorCell(Cell):
 
         prompt += "\n\nВыполняю:"
 
-        llm_result = self.call_llm(prompt, model_key=model_key)
+        llm_result = self.call_llm(prompt, model_key=model_key, request_id=request_id)
         return CellResult(
             content=llm_result.text,
             confidence=0.7,
@@ -564,9 +587,9 @@ class VerifierCell(Cell):
 ПРОБЛЕМЫ: <конкретно что не так>
 КОММЕНТАРИЙ: <пояснение>"""
 
-    def process(self, request: str, answer: str) -> CellResult:
+    def process(self, request: str, answer: str, request_id: Optional[str] = None) -> CellResult:
         prompt = f"Запрос: {request}\n\nОтвет: {answer}\n\nПроверка:"
-        llm_result = self.call_llm(prompt, with_memory=False)
+        llm_result = self.call_llm(prompt, with_memory=False, request_id=request_id)
 
         if "ПРИНЯТ" in llm_result.text:
             confidence = 0.9
@@ -596,10 +619,15 @@ JSON формат:
 Если нет фактов: {"facts": []}
 ТОЛЬКО JSON."""
 
-    def process(self, user_input: str, response: str,
-                source: str = "conversation") -> List[dict]:
+    def process(
+        self,
+        user_input: str,
+        response: str,
+        source: str = "conversation",
+        request_id: Optional[str] = None,
+    ) -> List[dict]:
         prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
-        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3)
+        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3, request_id=request_id)
 
         if llm_result.metadata.get("fallback_reason"):
             return []
