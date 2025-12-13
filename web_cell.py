@@ -123,7 +123,8 @@ class WebSearchCell(Cell):
                     "query": query,
                     "reason_code": "requests_missing",
                     "reason_detail": "requests не установлен",
-                    "sources": [r.url for r in results]
+                    "sources": [r.url for r in results],
+                    "results_count": len(results)
                 }
             )
 
@@ -168,10 +169,16 @@ class WebSearchCell(Cell):
         results, reason = self.search(topic, max_results=7)
         if not results:
             return [], reason
-        
+
+        if not REQUESTS_AVAILABLE:
+            return [], {
+                "reason_code": "requests_missing",
+                "reason_detail": "requests не установлен"
+            }
+
         # Собираем весь текст
         all_text = "\n".join([f"{r.title}: {r.snippet}" for r in results])
-        
+
         # Извлекаем факты
         prompt = f"""Тема: {topic}
 
