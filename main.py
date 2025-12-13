@@ -159,7 +159,12 @@ class Neira:
             CellBlueprint("planner", lambda mem, manager: PlannerCell(mem, manager), "Планирование действий")
         )
         self.cell_factory.register_blueprint(
-            CellBlueprint("executor", lambda mem, manager: ExecutorCell(mem, manager), "Исполнение")
+            CellBlueprint(
+                "executor",
+                lambda mem, manager: ExecutorCell(mem, manager),
+                "Исполнение",
+                metadata={"lora": "executor_dialog"},
+            )
         )
         self.cell_factory.register_blueprint(
             CellBlueprint("verifier", lambda mem, manager: VerifierCell(mem, manager), "Верификация ответа")
@@ -183,7 +188,10 @@ class Neira:
         if CODE_AVAILABLE:
             self.cell_factory.register_blueprint(
                 CellBlueprint(
-                    "code", lambda mem, manager: CodeCell(mem, manager, work_dir="."), "Работа с исходниками"
+                    "code",
+                    lambda mem, manager: CodeCell(mem, manager, work_dir="."),
+                    "Работа с исходниками",
+                    metadata={"lora": "code_assistant"},
                 )
             )
             self.cell_factory.register_blueprint(
@@ -569,6 +577,9 @@ class Neira:
             output += f"  Текущая модель: {manager_stats.get('current_model', 'none')}\n"
             output += f"  Переключений: {manager_stats.get('switches', 0)}\n"
             output += f"  Загружено в VRAM: {', '.join(manager_stats.get('loaded_models', [])) or 'none'}\n\n"
+            output += f"  Текущий VRAM: {manager_stats.get('current_vram_gb', 0)} ГБ из {manager_stats.get('max_vram_gb', 0)}\n"
+            loras = manager_stats.get('loaded_loras', []) or ['none']
+            output += f"  LoRA: {', '.join(loras)}\n\n"
 
         output += f"Веб-поиск: {'✅' if WEB_AVAILABLE else '❌'}\n"
         output += f"Работа с кодом: {'✅' if CODE_AVAILABLE else '❌'}\n"

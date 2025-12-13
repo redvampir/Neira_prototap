@@ -241,10 +241,11 @@ class MemoryCell:
 # === БАЗОВАЯ КЛЕТКА ===
 class Cell:
     """Базовый класс для всех клеток"""
-    
+
     name: str = "base"
     system_prompt: str = "Ты — полезный ассистент."
     use_code_model: bool = False  # Флаг для использования code-модели
+    lora_key: Optional[str] = None  # Ключ адаптера LoRA
     
     def __init__(self, memory: Optional[MemoryCell] = None,
                  model_manager: Optional[ModelManager] = None):
@@ -286,6 +287,17 @@ class Cell:
         else:
             model = MODEL_CODE if target_key == "code" else MODEL_CHAT
         
+        adapter_option = None
+        if self.model_manager and self.lora_key:
+            adapter_name = self.model_manager.get_adapter_name(self.lora_key)
+            if adapter_name:
+                self.model_manager.activate_lora_for_cell(self.name, self.lora_key)
+                adapter_option = adapter_name
+
+        options = {"temperature": temperature, "num_predict": 2048}
+        if adapter_option:
+            options["adapter"] = adapter_option
+
         response = requests.post(
             OLLAMA_URL,
             json={
@@ -293,7 +305,7 @@ class Cell:
                 "prompt": full_prompt,
                 "system": self.system_prompt,
                 "stream": False,
-                "options": {"temperature": temperature, "num_predict": 2048}
+                "options": options
             },
             timeout=TIMEOUT
         )

@@ -58,7 +58,12 @@ class CellFactory:
     def create_cell(self, name: str) -> Cell:
         if name not in self._blueprints:
             raise KeyError(f"Чертёж '{name}' не найден")
-        cell = self._blueprints[name].create(self.memory, self.model_manager)
+        blueprint = self._blueprints[name]
+        cell = blueprint.create(self.memory, self.model_manager)
+        if hasattr(cell, "lora_key") and "lora" in blueprint.metadata:
+            cell.lora_key = blueprint.metadata.get("lora")
+            if self.model_manager:
+                self.model_manager.activate_lora_for_cell(name, cell.lora_key)
         self._active_cells[name] = cell
         if self.verbose:
             print(f"🧩 Создана клетка: {name}")

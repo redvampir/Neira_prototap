@@ -6,8 +6,8 @@ Manages 3 local models + 1 Ollama cloud model for complex tasks
 import requests
 import time
 import os
-from typing import Optional, Dict, Any
-from dataclasses import dataclass
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass, field
 
 OLLAMA_API = "http://localhost:11434/api"
 
@@ -19,6 +19,25 @@ class ModelInfo:
     size_gb: float
     type: str  # local / cloud
     use_case: str
+
+
+@dataclass
+class LoraInfo:
+    """Информация о LoRA-адаптере"""
+
+    key: str
+    adapter_name: str
+    size_gb: float
+    base_model_key: str
+    description: str = ""
+
+
+@dataclass
+class LoadedLoraState:
+    """Состояние загруженного LoRA в VRAM"""
+
+    info: LoraInfo
+    last_used: float = field(default_factory=time.time)
 
 
 # Model registry
@@ -34,6 +53,24 @@ MODELS = {
     "cloud_vision": ModelInfo("qwen3-vl:235b-cloud", 0, "cloud", "Multimodal tasks (235B params)")
 }
 
+# Реестр LoRA-адаптеров (ключ → параметры)
+LORA_ADAPTERS: Dict[str, LoraInfo] = {
+    "executor_dialog": LoraInfo(
+        key="executor_dialog",
+        adapter_name="executor-dialogue-lora",
+        size_gb=0.8,
+        base_model_key="reason",
+        description="Диалоговая настройка исполнителя"
+    ),
+    "code_assistant": LoraInfo(
+        key="code_assistant",
+        adapter_name="code-assistant-lora",
+        size_gb=0.6,
+        base_model_key="code",
+        description="Усиление для задач с кодом"
+    )
+}
+
 
 class ModelManager:
     """Manages model loading/unloading to stay within VRAM limits"""
@@ -44,6 +81,8 @@ class ModelManager:
         self.switch_count = 0
         self.verbose = verbose
         self.cloud_models_available = self._check_cloud_models()
+        self.loaded_loras: Dict[str, LoadedLoraState] = {}
+        self.current_vram: float = 0.0
 
     def log(self, message: str):
         if self.verbose:
@@ -70,6 +109,27 @@ class ModelManager:
 
         return available
 
+    def _current_base_vram(self) -> float:
+        """Оценка VRAM, занимаемой базовой моделью."""
+        if self.current_model and MODELS.get(self.current_model):
+            model_info = MODELS[self.current_model]
+            if model_info.type == "local":
+                return model_info.size_gb
+        return 0.0
+
+    def _update_vram_usage(self):
+        lora_sum = sum(state.info.size_gb for state in self.loaded_loras.values())
+        self.current_vram = self._current_base_vram() + lora_sum
+
+    def _evict_incompatible_loras(self):
+        """Выгрузить LoRA, несовместимые с текущей базовой моделью."""
+        incompatible = [
+            key for key, state in self.loaded_loras.items()
+            if state.info.base_model_key != self.current_model
+        ]
+        for key in incompatible:
+            self.unload_lora(key)
+
     def get_loaded_models(self) -> list:
         """Check which models are currently in VRAM"""
         try:
@@ -91,6 +151,50 @@ class ModelManager:
             self.log(f"🗑️ Unloaded: {model_name}")
         except Exception as e:
             self.log(f"⚠️ Failed to unload {model_name}: {e}")
+
+    def _load_lora_via_api(self, adapter_name: str, keep_alive: str = "10m") -> bool:
+        """Загрузить LoRA через API Ollama/llama.cpp"""
+        base_model = self.get_model_name(self.current_model or "")
+        if not base_model:
+            self.log("⚠️ Не выбрана базовая модель для загрузки LoRA")
+            return False
+        try:
+            resp = requests.post(
+                f"{OLLAMA_API}/generate",
+                json={
+                    "model": base_model,
+                    "prompt": "init",
+                    "stream": False,
+                    "keep_alive": keep_alive,
+                    "options": {"adapter": adapter_name},
+                },
+                timeout=60,
+            )
+            if resp.status_code == 200:
+                return True
+            self.log(f"❌ Не удалось загрузить LoRA {adapter_name}: {resp.status_code}")
+        except Exception as exc:
+            self.log(f"❌ Ошибка при загрузке LoRA {adapter_name}: {exc}")
+        return False
+
+    def _unload_lora_via_api(self, adapter_name: str):
+        base_model = self.get_model_name(self.current_model or "")
+        if not base_model:
+            return
+        try:
+            requests.post(
+                f"{OLLAMA_API}/generate",
+                json={
+                    "model": base_model,
+                    "prompt": "cleanup",
+                    "stream": False,
+                    "keep_alive": 0,
+                    "options": {"adapter": adapter_name},
+                },
+                timeout=30,
+            )
+        except Exception as exc:
+            self.log(f"⚠️ Ошибка выгрузки LoRA {adapter_name}: {exc}")
 
     def preload_model(self, model_name: str) -> bool:
         """Preload model into VRAM (warmup)"""
@@ -120,6 +224,79 @@ class ModelManager:
         except Exception as e:
             self.log(f"❌ Load error: {e}")
             return False
+
+    def can_load_lora(self, adapter_key: str) -> bool:
+        """Проверить, можно ли загрузить LoRA с учётом VRAM и LRU-выгрузки."""
+        if adapter_key not in LORA_ADAPTERS:
+            self.log(f"❌ Неизвестный LoRA-ключ: {adapter_key}")
+            return False
+
+        if self.current_model is None:
+            self.log("⚠️ Сначала выбери базовую модель перед загрузкой LoRA")
+            return False
+
+        if MODELS.get(self.current_model, ModelInfo("", 0, "cloud", "")).type != "local":
+            self.log("⚠️ LoRA доступна только для локальных моделей")
+            return False
+
+        info = LORA_ADAPTERS[adapter_key]
+        if info.base_model_key != self.current_model:
+            self.log(f"⚠️ LoRA {adapter_key} рассчитана на {info.base_model_key}, а активна {self.current_model}")
+            return False
+
+        if adapter_key in self.loaded_loras:
+            self.loaded_loras[adapter_key].last_used = time.time()
+            return True
+
+        projected = self._current_base_vram() + sum(s.info.size_gb for s in self.loaded_loras.values()) + info.size_gb
+        while projected > self.max_vram and self.loaded_loras:
+            # LRU: выгружаем самый давно использованный адаптер
+            lru_key = min(self.loaded_loras.items(), key=lambda item: item[1].last_used)[0]
+            if lru_key == adapter_key:
+                break
+            self.unload_lora(lru_key)
+            projected = self._current_base_vram() + sum(s.info.size_gb for s in self.loaded_loras.values()) + info.size_gb
+
+        if projected > self.max_vram:
+            self.log(
+                f"❌ Недостаточно VRAM для LoRA {adapter_key}: нужно {projected:.1f}ГБ, доступно {self.max_vram:.1f}ГБ"
+            )
+            return False
+        return True
+
+    def load_lora(self, adapter_key: str) -> bool:
+        """Загрузить LoRA с учётом VRAM и LRU."""
+        if adapter_key not in LORA_ADAPTERS:
+            self.log(f"❌ Неизвестный LoRA-адаптер: {adapter_key}")
+            return False
+
+        info = LORA_ADAPTERS[adapter_key]
+        if info.base_model_key and self.current_model != info.base_model_key:
+            if not self.switch_to(info.base_model_key):
+                return False
+
+        if not self.can_load_lora(adapter_key):
+            return False
+
+        if adapter_key in self.loaded_loras:
+            self.loaded_loras[adapter_key].last_used = time.time()
+            return True
+
+        if self._load_lora_via_api(info.adapter_name):
+            self.loaded_loras[adapter_key] = LoadedLoraState(info=info)
+            self._update_vram_usage()
+            self.log(f"✨ LoRA загружена: {info.adapter_name} (VRAM {info.size_gb} ГБ)")
+            return True
+        return False
+
+    def unload_lora(self, adapter_key: str):
+        if adapter_key not in self.loaded_loras:
+            return
+        info = self.loaded_loras[adapter_key].info
+        self._unload_lora_via_api(info.adapter_name)
+        del self.loaded_loras[adapter_key]
+        self._update_vram_usage()
+        self.log(f"🗑️ Выгружен LoRA: {info.adapter_name}")
 
     def switch_to(self, target_key: str) -> bool:
         """
@@ -167,24 +344,42 @@ class ModelManager:
                 return False
 
         self.current_model = target_key
+        self._evict_incompatible_loras()
+        self._update_vram_usage()
         self.switch_count += 1
         return True
 
+    def activate_lora_for_cell(self, cell_name: str, adapter_key: Optional[str]) -> None:
+        """Загрузить LoRA при переключении на клетку."""
+        if not adapter_key:
+            return
+        if self.load_lora(adapter_key):
+            self.log(f"🔌 Клетка {cell_name} активировала LoRA {adapter_key}")
+
     def get_stats(self) -> Dict[str, Any]:
         """Get manager statistics"""
+        self._update_vram_usage()
         return {
             "current_model": self.current_model,
             "current_model_info": MODELS.get(self.current_model),
             "switches": self.switch_count,
             "loaded_models": self.get_loaded_models(),
             "cloud_models_available": self.cloud_models_available,
-            "max_vram_gb": self.max_vram
+            "max_vram_gb": self.max_vram,
+            "current_vram_gb": round(self.current_vram, 2),
+            "loaded_loras": [state.info.adapter_name for state in self.loaded_loras.values()],
+            "lora_registry": {k: v.adapter_name for k, v in LORA_ADAPTERS.items()}
         }
 
     def get_model_name(self, key: str) -> str:
         """Get actual model name from key"""
         if key in MODELS:
             return MODELS[key].name
+        return ""
+
+    def get_adapter_name(self, adapter_key: str) -> str:
+        if adapter_key in LORA_ADAPTERS:
+            return LORA_ADAPTERS[adapter_key].adapter_name
         return ""
 
 
