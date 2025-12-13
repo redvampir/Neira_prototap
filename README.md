@@ -17,6 +17,24 @@
 **Вспомогательная embedding-модель:**
 - **nomic-embed-text** — генерация эмбеддингов для поиска и памяти (`ollama pull nomic-embed-text`)
 
+### LoRA-адаптеры
+
+ModelManager умеет подгружать адаптеры поверх базовых моделей:
+- **executor-dialogue-lora** (база: **mistral:7b-instruct**, +~0.8 ГБ VRAM) — диалоговая настройка исполнителя
+- **code-assistant-lora** (база: **qwen2.5-coder:7b**, +~0.6 ГБ VRAM) — усиление для задач с кодом
+
+Пример загрузки через Ollama (фактический код вызывает `generate` с `options.adapter`):
+```bash
+ollama pull executor-dialogue-lora
+ollama pull code-assistant-lora
+
+# ручной прогрев адаптера
+ollama run mistral:7b-instruct --adapter executor-dialogue-lora --prompt "init"
+ollama run qwen2.5-coder:7b --adapter code-assistant-lora --prompt "init"
+```
+
+Если используете llama.cpp напрямую, подключайте соответствующий GGUF-файл через `--lora <путь_к_adapter.gguf>` над базовой моделью (VRAM = размер базы + размер адаптера из списка выше).
+
 ### ModelManager — управление VRAM
 Автоматическое переключение моделей для работы на RTX 3060 Ti (8GB VRAM):
 - Динамическая загрузка/выгрузка моделей
