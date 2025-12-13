@@ -289,11 +289,13 @@ class Neira:
         needs_code = analysis.metadata.get("needs_code", False)
 
         # NEW v0.5: Маршрутизация модели (начальный выбор)
+        active_model_key: Optional[str] = None
         if self.model_manager and MODEL_ROUTING:
             target_model = MODEL_ROUTING.get(task_type, "reason")
             if self.verbose:
                 print(f"🎯 Тип задачи: {task_type}, сложность: {complexity} → модель: {target_model}")
-            self.model_manager.switch_to(target_model)
+            if self.model_manager.switch_to(target_model):
+                active_model_key = target_model
 
         # Получаем релевантный опыт
         experience_context = ""
@@ -303,8 +305,11 @@ class Neira:
                 experience_context = "\n[Из опыта]\n" + "\n".join(f"- {l}" for l in lessons)
                 if self.verbose:
                     print(f"\n📖 Применяю опыт: {lessons}")
-        
+
         extra_context = experience_context
+
+        if self.model_manager and active_model_key is None and self.model_manager.current_model:
+            active_model_key = self.model_manager.current_model
         
         # Добавляем информацию о субъекте в контекст
         if subject == "neira":
@@ -352,7 +357,7 @@ class Neira:
         
         # 4. Планирование
         self.log("📋 ПЛАНИРОВАНИЕ")
-        plan = self.planner.process(user_input, analysis.content)
+        plan = self.planner.process(user_input, analysis.content, model_key=active_model_key)
         if self.verbose:
             print(plan.content)
         
@@ -369,7 +374,8 @@ class Neira:
                 if cloud_model:
                     if self.verbose:
                         print(f"🌩️ Переключение на облачную модель: {cloud_model}")
-                    self.model_manager.switch_to(cloud_model)
+                    if self.model_manager.switch_to(cloud_model):
+                        active_model_key = cloud_model
 
             self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
 
@@ -378,7 +384,8 @@ class Neira:
                 user_input,
                 plan.content,
                 extra_context,
-                problems=problems if attempt > 0 else ""
+                problems=problems if attempt > 0 else "",
+                model_key=active_model_key
             )
             if self.verbose:
                 print(result.content)

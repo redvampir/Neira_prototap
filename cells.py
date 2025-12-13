@@ -252,10 +252,14 @@ class Cell:
         self.memory = memory
         self.model_manager = model_manager
 
-    def call_llm(self, prompt: str, with_memory: bool = True,
-                 temperature: float = 0.7,
-                 force_code_model: bool = False,
-                 model_key: Optional[str] = None) -> str:
+    def call_llm(
+        self,
+        prompt: str,
+        with_memory: bool = True,
+        temperature: float = 0.7,
+        force_code_model: bool = False,
+        model_key: Optional[str] = None,
+    ) -> str:
         """Вызов LLM с опциональным контекстом памяти"""
         
         full_prompt = prompt
@@ -280,12 +284,24 @@ class Cell:
         elif target_key is None:
             target_key = "reason"
 
-        model = MODEL_CHAT
+        model = ""
         if self.model_manager:
             manager_model = self.model_manager.get_model_name(target_key)
-            model = manager_model or (MODEL_CODE if target_key == "code" else MODEL_CHAT)
-        else:
-            model = MODEL_CODE if target_key == "code" else MODEL_CHAT
+            model = manager_model or ""
+
+        if not model:
+            fallback_models = {
+                "code": MODEL_CODE,
+                "reason": MODEL_CHAT,
+                "personality": MODEL_PERSONALITY or MODEL_CHAT,
+                "cloud_code": MODEL_CLOUD_CODE,
+                "cloud_universal": MODEL_CLOUD_UNIVERSAL,
+            }
+            model = fallback_models.get(target_key or "", MODEL_CHAT)
+
+        should_log = self.model_manager and self.model_manager.verbose
+        if should_log:
+            print(f"🧠 Модель для {self.name}: ключ='{target_key}', имя='{model}'")
         
         adapter_option = None
         if self.model_manager and self.lora_key:
@@ -395,9 +411,16 @@ class PlannerCell(Cell):
 1. [инструмент] действие
 2. [инструмент] действие"""
 
-    def process(self, input_data: str, analysis: str) -> CellResult:
-        prompt = f"Анализ: {analysis}\n\nЗапрос: {input_data}\n\nПлан:"
-        result = self.call_llm(prompt)
+    def process(self, input_data: Any) -> CellResult:
+        # Expect input_data to be a dict with 'input_data', 'analysis', and optionally 'model_key'
+        if isinstance(input_data, dict):
+            user_input = input_data.get('input_data')
+            analysis = input_data.get('analysis')
+            model_key = input_data.get('model_key', None)
+        else:
+            raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
+        prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
+        result = self.call_llm(prompt, model_key=model_key)
         confidence = 0.7 if "1." in result else 0.4
         return CellResult(content=result, confidence=confidence, cell_name=self.name)
 
@@ -414,9 +437,14 @@ class ExecutorCell(Cell):
 - Используй контекст и свой опыт
 - Будь конкретной и полезной"""
 
-    def process(self, input_data: str, plan: str, 
-                extra_context: str = "",
-                problems: str = "") -> CellResult:
+    def process(
+        self,
+        input_data: str,
+        plan: str,
+        extra_context: str = "",
+        problems: str = "",
+        model_key: Optional[str] = None,
+    ) -> CellResult:
         """
         problems — замечания верификатора для retry
         """
@@ -431,7 +459,7 @@ class ExecutorCell(Cell):
         
         prompt += "\n\nВыполняю:"
         
-        result = self.call_llm(prompt)
+        result = self.call_llm(prompt, model_key=model_key)
         return CellResult(content=result, confidence=0.7, cell_name=self.name)
 
 
