@@ -51,8 +51,10 @@ ollama pull nomic-embed-text
 
 ### 3. Установить зависимости Python
 ```bash
-pip install requests numpy duckduckgo-search
+pip install -r requirements.txt
 ```
+
+Зависимости закреплены в `requirements.txt`, чтобы Renovate мог отслеживать обновления библиотек.
 
 ### 4. (Опционально) Настроить облачные модели
 Облачные модели доступны через Ollama Cloud (требуется доступ):
