@@ -15,7 +15,7 @@ Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 
 import sys
 import re
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 try:
     from cells import (
@@ -41,6 +41,8 @@ except ImportError:
     MAX_RETRIES = 2
     MIN_ACCEPTABLE_SCORE = 7
     USE_CLOUD_IF = {"complexity": 5, "retries": 2}
+
+from cell_factory import CellBlueprint, CellFactory
 
 # Model Manager
 try:
@@ -99,12 +101,16 @@ class Neira:
             if verbose:
                 print("⚠️ ModelManager недоступен, используются модели без управления VRAM")
 
+        self.cell_factory = CellFactory(self.memory, self.model_manager, verbose=verbose)
+
+        self._register_blueprints()
+
         # Базовые клетки
-        self.analyzer = AnalyzerCell(self.memory, self.model_manager)
-        self.planner = PlannerCell(self.memory, self.model_manager)
-        self.executor = ExecutorCell(self.memory, self.model_manager)
-        self.verifier = VerifierCell(self.memory, self.model_manager)
-        self.fact_extractor = FactExtractorCell(self.memory, self.model_manager)
+        self.analyzer = self.cell_factory.create_cell("analyzer")
+        self.planner = self.cell_factory.create_cell("planner")
+        self.executor = self.cell_factory.create_cell("executor")
+        self.verifier = self.cell_factory.create_cell("verifier")
+        self.fact_extractor = self.cell_factory.create_cell("fact_extractor")
         
         # Обновляем системный промпт исполнителя с учётом личности
         if self.experience:
@@ -121,19 +127,70 @@ class Neira:
         
         # Веб-клетки
         if WEB_AVAILABLE:
-            self.web_search = WebSearchCell(self.memory, self.model_manager)
-            self.web_learner = WebLearnerCell(self.memory, self.model_manager)
+            self.web_search = self.cell_factory.create_cell("web_search")
+            self.web_learner = self.cell_factory.create_cell("web_learner")
         else:
             self.web_search = None
             self.web_learner = None
         
         # Код-клетки
         if CODE_AVAILABLE:
-            self.code = CodeCell(self.memory, self.model_manager, work_dir=".")
-            self.self_modify = SelfModifyCell(self.memory, self.model_manager)
+            self.code = self.cell_factory.create_cell("code")
+            self.self_modify = self.cell_factory.create_cell("self_modify")
         else:
             self.code = None
             self.self_modify = None
+
+        base_cells: List[str] = [
+            "analyzer",
+            "planner",
+            "executor",
+            "verifier",
+            "fact_extractor",
+        ]
+        self.core_organ = self.cell_factory.create_organ("core", base_cells, "Базовый цикл обработки запроса")
+
+    def _register_blueprints(self):
+        """Регистрирует все известные клетки в фабрике."""
+        self.cell_factory.register_blueprint(
+            CellBlueprint("analyzer", lambda mem, manager: AnalyzerCell(mem, manager), "Анализ запросов")
+        )
+        self.cell_factory.register_blueprint(
+            CellBlueprint("planner", lambda mem, manager: PlannerCell(mem, manager), "Планирование действий")
+        )
+        self.cell_factory.register_blueprint(
+            CellBlueprint("executor", lambda mem, manager: ExecutorCell(mem, manager), "Исполнение")
+        )
+        self.cell_factory.register_blueprint(
+            CellBlueprint("verifier", lambda mem, manager: VerifierCell(mem, manager), "Верификация ответа")
+        )
+        self.cell_factory.register_blueprint(
+            CellBlueprint(
+                "fact_extractor",
+                lambda mem, manager: FactExtractorCell(mem, manager),
+                "Извлечение фактов для памяти",
+            )
+        )
+
+        if WEB_AVAILABLE:
+            self.cell_factory.register_blueprint(
+                CellBlueprint("web_search", lambda mem, manager: WebSearchCell(mem, manager), "Поиск в интернете")
+            )
+            self.cell_factory.register_blueprint(
+                CellBlueprint("web_learner", lambda mem, manager: WebLearnerCell(mem, manager), "Обучение из веба")
+            )
+
+        if CODE_AVAILABLE:
+            self.cell_factory.register_blueprint(
+                CellBlueprint(
+                    "code", lambda mem, manager: CodeCell(mem, manager, work_dir="."), "Работа с исходниками"
+                )
+            )
+            self.cell_factory.register_blueprint(
+                CellBlueprint(
+                    "self_modify", lambda mem, manager: SelfModifyCell(mem, manager, work_dir="."), "Самомодификация"
+                )
+            )
     
     def log(self, message: str):
         if self.verbose:
@@ -418,6 +475,14 @@ class Neira:
         if not self.experience:
             return "❌ Система опыта недоступна"
         return self.experience.show_personality()
+
+    def train_new_cell_type(self, name: str, goal: str, example: str = "") -> str:
+        """Обучение нового типа клетки через LLM и регистрация чертежа."""
+        try:
+            blueprint = self.cell_factory.train_new_blueprint(name, goal, example)
+            return f"✅ Чертёж '{blueprint.name}' сохранён. Описание: {blueprint.description}"
+        except Exception as exc:
+            return f"❌ Обучение не удалось: {exc}"
     
     def cmd_learn(self, topic: str) -> str:
         """Изучить тему"""
@@ -474,6 +539,7 @@ class Neira:
 
 Прочее:
   /stats               — статистика
+  /train <имя> <цель>  — обучить новый тип клетки
   /models              — проверить модели
   /help                — эта справка
   /exit                — выход
@@ -509,6 +575,14 @@ class Neira:
         output += f"Система опыта: {'✅' if EXPERIENCE_AVAILABLE else '❌'}\n"
         output += f"Память: {self.memory.get_stats().get('total', 0)} записей\n"
         output += f"Контекст сессии: {len(self.memory.session_context)} сообщений\n"
+
+        factory_stats = self.cell_factory.get_stats()
+        output += "\nКлетки и органы:\n"
+        output += f"  Чертежей: {len(factory_stats['blueprints'])}\n"
+        output += f"  Активных клеток: {len(factory_stats['active_cells'])} ({', '.join(factory_stats['active_cells'])})\n"
+        output += f"  Органов: {len(factory_stats['organs'])}\n"
+        for organ_name, organ_cells in factory_stats["organs"].items():
+            output += f"    - {organ_name}: {', '.join(organ_cells)}\n"
 
         if self.experience:
             exp_stats = self.experience.get_stats()
@@ -568,6 +642,10 @@ def main():
                 print("🗑️ Память очищена")
             elif cmd == "learn" and args:
                 print(neira.cmd_learn(" ".join(args)))
+            elif cmd == "train" and len(args) >= 2:
+                name = args[0]
+                goal = " ".join(args[1:])
+                print(neira.train_new_cell_type(name, goal))
             elif cmd == "code":
                 print(neira.cmd_code(args[0] if args else "list", *args[1:]))
             elif cmd == "stats":
