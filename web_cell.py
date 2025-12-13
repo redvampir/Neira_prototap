@@ -253,7 +253,7 @@ class WebSearchCell(Cell):
 
         return [], {"reason_code": "parse_error", "reason_detail": parse_error or "unknown"}
     
-    def process(self, query: str) -> CellResult:
+    def process(self, query: str, request_id: Optional[str] = None) -> CellResult:
         """Основной метод — поиск и ответ"""
         return self.search_and_summarize(query)
 
@@ -307,7 +307,7 @@ class WebLearnerCell(Cell):
             metadata={"topic": topic, "facts_found": len(facts), "facts_saved": saved}
         )
     
-    def process(self, topic: str) -> CellResult:
+    def process(self, topic: str, request_id: Optional[str] = None) -> CellResult:
         return self.learn(topic)
 
 

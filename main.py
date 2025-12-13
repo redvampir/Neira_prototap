@@ -15,7 +15,8 @@ Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 
 import sys
 import re
-from typing import List, Optional, Tuple
+import uuid
+from typing import List, Optional, Tuple, Union, Dict, Any
 
 try:
     from cells import (
@@ -200,9 +201,10 @@ class Neira:
                 )
             )
     
-    def log(self, message: str):
+    def log(self, message: str, request_id: Optional[str] = None):
         if self.verbose:
-            print(f"\n{'='*50}\n{message}\n{'='*50}")
+            prefix = f"[REQ {request_id}] " if request_id else ""
+            print(f"\n{'='*50}\n{prefix}{message}\n{'='*50}")
     
     def _parse_verification(self, verification_text: str) -> Tuple[str, int, str]:
         """Парсим результат верификации"""
@@ -270,21 +272,32 @@ class Neira:
 
         return None
 
-    def process(self, user_input: str) -> str:
+    def process(
+        self,
+        user_input: str,
+        request_id: Optional[str] = None,
+        return_meta: bool = False,
+    ) -> Union[str, Tuple[str, Dict[str, Any]]]:
         """Главный метод обработки запроса"""
+
+        request_id = request_id or uuid.uuid4().hex
+        if self.verbose:
+            print(f"[REQ {request_id}] ▶️ Старт. Длина входа: {len(user_input)}")
         
         # Добавляем в контекст сессии
         self.memory.add_to_session(f"Пользователь: {user_input}")
         
         # 1. Анализ
-        self.log("🔍 АНАЛИЗ")
-        analysis = self.analyzer.process(user_input)
+        self.log("🔍 АНАЛИЗ", request_id=request_id)
+        analysis = self.analyzer.process(user_input, request_id=request_id)
         if self.verbose:
             print(analysis.content)
         
         task_type = self._extract_task_type(analysis.content)
         subject = self._extract_subject(analysis.content)
         complexity = self._extract_complexity(analysis.content)
+        if self.verbose:
+            print(f"[REQ {request_id}] 🧾 Анализ: тип={task_type}, сложность={complexity}")
         needs_search = analysis.metadata.get("needs_search", False)
         needs_code = analysis.metadata.get("needs_code", False)
 
@@ -296,6 +309,10 @@ class Neira:
                 print(f"🎯 Тип задачи: {task_type}, сложность: {complexity} → модель: {target_model}")
             if self.model_manager.switch_to(target_model):
                 active_model_key = target_model
+
+        if self.verbose:
+            source_type = "cloud" if (active_model_key and "cloud" in active_model_key) else "local"
+            print(f"[REQ {request_id}] 🧠 Выбор модели: {active_model_key or 'reason'} ({source_type})")
 
         # Получаем релевантный опыт
         experience_context = ""
@@ -317,15 +334,15 @@ class Neira:
         
         # 2. Поиск в интернете
         if needs_search and self.web_search:
-            self.log("🌐 ПОИСК В ИНТЕРНЕТЕ")
-            search_result = self.web_search.process(user_input)
+            self.log("🌐 ПОИСК В ИНТЕРНЕТЕ", request_id=request_id)
+            search_result = self.web_search.process(user_input, request_id=request_id)
             if self.verbose:
                 print(search_result.content[:500] + "..." if len(search_result.content) > 500 else search_result.content)
             extra_context += f"\n[Результаты поиска]\n{search_result.content}\n"
         
         # 3. ПРИНУДИТЕЛЬНАЯ работа с кодом (НОВОЕ!)
         if needs_code and self.code:
-            self.log("💻 РАБОТА С КОДОМ")
+            self.log("💻 РАБОТА С КОДОМ", request_id=request_id)
             
             # Если нужно читать код — читаем автоматически
             if "прочитай" in user_input.lower() or "изучи" in user_input.lower() or "проанализируй" in user_input.lower():
@@ -356,8 +373,9 @@ class Neira:
                 extra_context += f"\n[Сгенерированный код]\n{code_result.content}\n"
         
         # 4. Планирование
-        self.log("📋 ПЛАНИРОВАНИЕ")
-        plan = self.planner.process(user_input, analysis.content, model_key=active_model_key)
+        self.log("📋 ПЛАНИРОВАНИЕ", request_id=request_id)
+        plan_input = {"input_data": user_input, "analysis": analysis.content, "model_key": active_model_key}
+        plan = self.planner.process(plan_input, request_id=request_id)
         if self.verbose:
             print(plan.content)
         
@@ -373,11 +391,11 @@ class Neira:
                 cloud_model = self._should_use_cloud(task_type, complexity, attempt)
                 if cloud_model:
                     if self.verbose:
-                        print(f"🌩️ Переключение на облачную модель: {cloud_model}")
+                        print(f"[REQ {request_id}] 🌩️ Переключение на облачную модель: {cloud_model}")
                     if self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
 
-            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
+            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})", request_id=request_id)
 
             # Передаём проблемы от предыдущей попытки
             result = self.executor.process(
@@ -385,7 +403,8 @@ class Neira:
                 plan.content,
                 extra_context,
                 problems=problems if attempt > 0 else "",
-                model_key=active_model_key
+                model_key=active_model_key,
+                request_id=request_id,
             )
             if self.verbose:
                 print(result.content)
@@ -393,7 +412,10 @@ class Neira:
             exec_fallback = result.metadata.get("fallback_reason")
             exec_length = result.metadata.get("response_length", len(result.content))
             if exec_fallback or exec_length == 0:
-                print(f"⚠️ Исполнитель вернул пустой ответ ({exec_fallback or 'empty_response'}). Пробую другую модель")
+                print(
+                    f"[REQ {request_id}] ⚠️ Исполнитель вернул пустой ответ "
+                    f"({exec_fallback or 'empty_response'}). Пробую другую модель"
+                )
                 final_result = result
                 final_verdict = "ОТКЛОНЁН"
                 final_score = 0
@@ -403,22 +425,25 @@ class Neira:
                     cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
                     if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
-                        print(f"🌩️ Переключение на облако из-за пустого ответа: {cloud_model}")
+                        print(f"[REQ {request_id}] 🌩️ Переключение на облако из-за пустого ответа: {cloud_model}")
 
                 if attempt < MAX_RETRIES:
                     continue
                 break
 
             # 6. Верификация
-            self.log("✅ ВЕРИФИКАЦИЯ")
-            verification = self.verifier.process(user_input, result.content)
+            self.log("✅ ВЕРИФИКАЦИЯ", request_id=request_id)
+            verification = self.verifier.process(user_input, result.content, request_id=request_id)
             if self.verbose:
                 print(verification.content)
 
             verify_fallback = verification.metadata.get("fallback_reason")
             verify_length = verification.metadata.get("response_length", len(verification.content))
             if verify_fallback or verify_length == 0:
-                print(f"⚠️ Верификатор не дал ответ ({verify_fallback or 'empty_response'}). Переключаю модель и повторяю")
+                print(
+                    f"[REQ {request_id}] ⚠️ Верификатор не дал ответ "
+                    f"({verify_fallback or 'empty_response'}). Переключаю модель и повторяю"
+                )
                 final_result = result
                 final_verdict = "ТРЕБУЕТ_ДОРАБОТКИ"
                 final_score = 0
@@ -428,7 +453,7 @@ class Neira:
                     cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
                     if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
-                        print(f"🌩️ Облачная модель для повторной проверки: {cloud_model}")
+                        print(f"[REQ {request_id}] 🌩️ Облачная модель для повторной проверки: {cloud_model}")
 
                 if attempt < MAX_RETRIES:
                     continue
@@ -443,18 +468,18 @@ class Neira:
             # Если оценка достаточная — выходим из цикла
             if score >= MIN_ACCEPTABLE_SCORE:
                 if attempt > 0:
-                    print(f"✅ Исправлено с {attempt + 1}-й попытки!")
+                    print(f"[REQ {request_id}] ✅ Исправлено с {attempt + 1}-й попытки!")
                 break
 
             # Если оценка низкая и есть ещё попытки — продолжаем
             if attempt < MAX_RETRIES:
-                print(f"⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
+                print(f"[REQ {request_id}] ⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
             else:
-                print(f"⚠️ Достигнут лимит попыток. Возвращаю лучший результат.")
+                print(f"[REQ {request_id}] ⚠️ Достигнут лимит попыток. Возвращаю лучший результат.")
         
         # 7. Записываем опыт
         if self.experience:
-            self.log("📖 ЗАПИСЬ ОПЫТА")
+            self.log("📖 ЗАПИСЬ ОПЫТА", request_id=request_id)
             self.experience.record_experience(
                 task_type=task_type,
                 user_input=user_input,
@@ -464,8 +489,8 @@ class Neira:
             )
         
         # 8. Извлечение фактов для памяти
-        self.log("💾 ПАМЯТЬ")
-        facts = self.fact_extractor.process(user_input, final_result.content)
+        self.log("💾 ПАМЯТЬ", request_id=request_id)
+        facts = self.fact_extractor.process(user_input, final_result.content, request_id=request_id)
         for fact in facts:
             if fact.get("importance", 0) >= 0.5:
                 self.memory.remember(
@@ -480,7 +505,21 @@ class Neira:
         
         # Сохраняем ответ в контекст
         self.memory.add_to_session(f"Нейра: {final_result.content}")
-        
+
+        run_info = {
+            "request_id": request_id,
+            "task_type": task_type,
+            "complexity": complexity,
+            "model": final_result.metadata.get("model"),
+            "fallback_reason": final_result.metadata.get("fallback_reason"),
+            "len_raw": len(final_result.content),
+            "preview": final_result.content[:200],
+            "model_source": final_result.metadata.get("model_source"),
+        }
+
+        if return_meta:
+            return final_result.content, run_info
+
         return final_result.content
     
     # === КОМАНДЫ ===
