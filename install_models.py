@@ -132,7 +132,7 @@ def select_models(args: argparse.Namespace) -> List[ModelSpec]:
 def install_models(models: Iterable[ModelSpec], dry_run: bool) -> int:
     success = True
     for spec in models:
-        success &= pull_model(spec, dry_run=dry_run)
+        success = success and pull_model(spec, dry_run=dry_run)
     if success:
         print("🎉 Все выбранные модели обработаны.")
     else:
