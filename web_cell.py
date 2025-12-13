@@ -6,12 +6,13 @@ Neira Web Cell v0.3 — Поиск в интернете
 pip install duckduckgo-search
 """
 
-try:
-    import requests
-    REQUESTS_AVAILABLE = True
-except ImportError:
-    REQUESTS_AVAILABLE = False
+import importlib
+import importlib.util
 
+REQUESTS_AVAILABLE = importlib.util.find_spec("requests") is not None
+if REQUESTS_AVAILABLE:
+    import requests
+else:
     class _RequestsStub:
         def post(self, *args, **kwargs):
             raise ImportError("requests не установлен")
@@ -21,20 +22,23 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
 # Попробуем импортировать duckduckgo
-try:
+DDGS_AVAILABLE = importlib.util.find_spec("duckduckgo_search") is not None
+if DDGS_AVAILABLE:
     from duckduckgo_search import DDGS
-    DDGS_AVAILABLE = True
-except ImportError:
-    DDGS_AVAILABLE = False
+else:
     print("⚠️ duckduckgo-search не установлен. Выполни: pip install duckduckgo-search")
 
-try:
-    from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_CHAT, MODEL_REASON, TIMEOUT
-    MODEL = MODEL_CHAT
-except ImportError:
-    # Fallback для совместимости при отсутствии новых констант
-    from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_REASON, TIMEOUT  # type: ignore
-    MODEL = MODEL_REASON
+_cells_spec = importlib.util.find_spec("cells")
+if _cells_spec is None:
+    raise ImportError("Модуль cells обязателен для работы web_cell")
+
+from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, TIMEOUT  # type: ignore
+_cells_module = importlib.import_module("cells")
+_model_chat_spec = getattr(_cells_module, "MODEL_CHAT", None)
+_model_reason_spec = getattr(_cells_module, "MODEL_REASON", None)
+MODEL = _model_chat_spec or _model_reason_spec
+if MODEL is None:
+    raise ImportError("Не найдены MODEL_CHAT или MODEL_REASON в cells")
 
 
 @dataclass
@@ -204,6 +208,7 @@ class WebSearchCell(Cell):
         result = response.json().get("response", "")
         
         # Парсим JSON
+        parse_error: Optional[str] = None
         try:
             import json
             start = result.find("{")
@@ -211,19 +216,20 @@ class WebSearchCell(Cell):
             if start >= 0 and end > start:
                 data = json.loads(result[start:end])
                 facts = data.get("facts", [])
-                
+
                 # Добавляем метаданные
                 for fact in facts:
                     fact["source"] = "web"
                     fact["category"] = "learned"
                     fact["topic"] = topic
-                
+
                 print(f"📚 Извлечено фактов: {len(facts)}")
                 return facts, {}
         except Exception as e:
-            print(f"⚠️ Ошибка парсинга: {e}")
+            parse_error = str(e)
+            print(f"⚠️ Ошибка парсинга: {parse_error}")
 
-        return [], {"reason_code": "parse_error", "reason_detail": str(e)}
+        return [], {"reason_code": "parse_error", "reason_detail": parse_error or "unknown"}
     
     def process(self, query: str) -> CellResult:
         """Основной метод — поиск и ответ"""
