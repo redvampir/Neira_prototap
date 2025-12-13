@@ -15,7 +15,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Iterable, List, Sequence
 
-OLLAMA_API_URL = "http://localhost:11434/api/version"
+DEFAULT_OLLAMA_API_URL = "http://localhost:11434/api/version"
 
 
 @dataclass(frozen=True)
@@ -50,15 +50,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--only",
         nargs="+",
         metavar="MODEL",
-        help=(
-            "скачать только указанные модели. Доступные: "
-            "qwen2.5-coder:7b mistral:7b-instruct nomic-embed-text neira-personality"
-        ),
+        choices=[
+            "qwen2.5-coder:7b",
+            "mistral:7b-instruct",
+            "nomic-embed-text",
+            "neira-personality",
+        ],
+        help="скачать только указанные модели (список через пробел)",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="не выполнять команды, только показать план",
+    )
+    parser.add_argument(
+        "--server-url",
+        default=DEFAULT_OLLAMA_API_URL,
+        help="адрес Ollama для проверки доступности API (по умолчанию http://localhost:11434)",
     )
     return parser
 
@@ -70,15 +78,15 @@ def ensure_ollama_cli() -> bool:
     return False
 
 
-def warn_if_server_unavailable() -> None:
+def warn_if_server_unavailable(api_url: str) -> None:
     try:
-        with urllib.request.urlopen(OLLAMA_API_URL, timeout=3) as resp:
+        with urllib.request.urlopen(api_url, timeout=3) as resp:
             if resp.status != 200:
                 print("⚠️ Ollama отвечает нестандартно, возможно сервер не запущен.")
             return
     except urllib.error.URLError as exc:
         print(
-            "⚠️ Не удалось подключиться к Ollama (http://localhost:11434). "
+            f"⚠️ Не удалось подключиться к Ollama ({api_url}). "
             "Убедитесь, что запущено 'ollama serve'. Детали:",
             exc,
         )
@@ -110,16 +118,10 @@ def pull_model(model: ModelSpec, dry_run: bool) -> bool:
 
 def select_models(args: argparse.Namespace) -> List[ModelSpec]:
     requested: Sequence[str] = args.only or []
-    known = {spec.name: spec for spec in REQUIRED_MODELS + [PERSONALITY_MODEL]}
 
     if requested:
-        selection = []
-        for name in requested:
-            if name not in known:
-                print(f"⚠️ Модель {name} не известна и будет пропущена.")
-                continue
-            selection.append(known[name])
-        return selection
+        known = {spec.name: spec for spec in REQUIRED_MODELS + [PERSONALITY_MODEL]}
+        return [known[name] for name in requested]
 
     models: List[ModelSpec] = list(REQUIRED_MODELS)
     if args.with_personality:
@@ -131,6 +133,10 @@ def install_models(models: Iterable[ModelSpec], dry_run: bool) -> int:
     success = True
     for spec in models:
         success &= pull_model(spec, dry_run=dry_run)
+    if success:
+        print("🎉 Все выбранные модели обработаны.")
+    else:
+        print("⚠️ Некоторые модели не удалось скачать. Проверьте сообщения выше.")
     return 0 if success else 1
 
 
@@ -146,7 +152,7 @@ def main(argv: Sequence[str]) -> int:
     if not args.dry_run:
         if not ensure_ollama_cli():
             return 1
-        warn_if_server_unavailable()
+        warn_if_server_unavailable(api_url=args.server_url)
 
     return install_models(models, dry_run=args.dry_run)
 

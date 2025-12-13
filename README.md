@@ -55,6 +55,12 @@ python install_models.py --with-personality
 
 # Посмотреть, какие команды будут выполнены без скачивания
 python install_models.py --dry-run
+
+# Скачать только выбранные модели
+python install_models.py --only qwen2.5-coder:7b mistral:7b-instruct
+
+# Проверить доступность Ollama по другому адресу API
+python install_models.py --server-url http://127.0.0.1:11434/api/version
 ```
 
 Альтернатива — ручная установка:
