@@ -299,7 +299,7 @@ class Cell:
             }
             model = fallback_models.get(target_key or "", MODEL_CHAT)
 
-        should_log = (self.model_manager and self.model_manager.verbose) or (not self.model_manager)
+        should_log = self.model_manager and self.model_manager.verbose
         if should_log:
             print(f"🧠 Модель для {self.name}: ключ='{target_key}', имя='{model}'")
         
