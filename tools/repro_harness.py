@@ -1,5 +1,7 @@
 """Простой прогон 20 запросов для воспроизведения поведения Neira.
 
+Прогоняет 20 разнотипных запросов и печатает таблицу результатов.
+
 Формат вывода: request_id | task_type | model | fallback_reason | len_raw | preview
 """
 from __future__ import annotations
