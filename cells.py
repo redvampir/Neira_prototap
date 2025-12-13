@@ -411,8 +411,15 @@ class PlannerCell(Cell):
 1. [инструмент] действие
 2. [инструмент] действие"""
 
-    def process(self, input_data: str, analysis: str, model_key: Optional[str] = None) -> CellResult:
-        prompt = f"Анализ: {analysis}\n\nЗапрос: {input_data}\n\nПлан:"
+    def process(self, input_data: Any) -> CellResult:
+        # Expect input_data to be a dict with 'input_data', 'analysis', and optionally 'model_key'
+        if isinstance(input_data, dict):
+            user_input = input_data.get('input_data')
+            analysis = input_data.get('analysis')
+            model_key = input_data.get('model_key', None)
+        else:
+            raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
+        prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
         result = self.call_llm(prompt, model_key=model_key)
         confidence = 0.7 if "1." in result else 0.4
         return CellResult(content=result, confidence=confidence, cell_name=self.name)
