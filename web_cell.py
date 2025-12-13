@@ -8,6 +8,7 @@ pip install duckduckgo-search
 
 import importlib
 import importlib.util
+from urllib.parse import urlparse
 
 REQUESTS_AVAILABLE = importlib.util.find_spec("requests") is not None
 if REQUESTS_AVAILABLE:
@@ -40,6 +41,10 @@ MODEL = _model_chat_spec or _model_reason_spec
 if MODEL is None:
     raise ImportError("Не найдены MODEL_CHAT или MODEL_REASON в cells")
 
+LOCAL_URL_ALLOWLIST = {"localhost", "127.0.0.1", "::1"}
+MAX_QUERY_LENGTH = 256
+FORBIDDEN_QUERY_SUBSTRINGS = ["http://", "https://", "<script", "</script", "file://", "\n"]
+
 
 @dataclass
 class SearchResult:
@@ -60,6 +65,26 @@ class WebSearchCell(Cell):
         super().__init__(memory, model_manager)
         self.ddgs = DDGS() if DDGS_AVAILABLE else None
 
+    def _sanitize_query(self, query: str) -> str:
+        cleaned = query.strip()
+        if not cleaned:
+            raise ValueError("Пустой поисковый запрос")
+        if len(cleaned) > MAX_QUERY_LENGTH:
+            raise ValueError("Слишком длинный запрос")
+        lowered = cleaned.lower()
+        if any(substr in lowered for substr in FORBIDDEN_QUERY_SUBSTRINGS):
+            raise ValueError("Запрос содержит потенциально опасный ввод")
+        return cleaned
+
+    def _validate_local_url(self, url: str) -> str:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("Недопустимая схема OLLAMA_URL")
+        if host.lower() not in LOCAL_URL_ALLOWLIST:
+            raise ValueError("Небезопасный OLLAMA_URL: разрешены только локальные адреса")
+        return url
+
     def search(self, query: str, max_results: int = 5) -> Tuple[List[SearchResult], Dict[str, str]]:
         """Поиск в DuckDuckGo"""
         if not self.ddgs:
@@ -71,8 +96,9 @@ class WebSearchCell(Cell):
             return [], reason
 
         try:
+            safe_query = self._sanitize_query(query)
             results = []
-            for r in self.ddgs.text(query, max_results=max_results):
+            for r in self.ddgs.text(safe_query, max_results=max_results):
                 results.append(SearchResult(
                     title=r.get("title", ""),
                     url=r.get("href", ""),
@@ -90,8 +116,18 @@ class WebSearchCell(Cell):
     def search_and_summarize(self, query: str) -> CellResult:
         """Поиск + суммаризация результатов"""
         
-        print(f"🔎 Ищу: {query}")
-        results, reason = self.search(query)
+        try:
+            safe_query = self._sanitize_query(query)
+        except ValueError as err:
+            return CellResult(
+                content=f"Запрос отклонён: {err}",
+                confidence=0.0,
+                cell_name=self.name,
+                metadata={"query": query, "reason_code": "invalid_query", "reason_detail": str(err)}
+            )
+
+        print(f"🔎 Ищу: {safe_query}")
+        results, reason = self.search(safe_query)
 
         if not results:
             reason_code = reason.get("reason_code", "no_results")
@@ -129,7 +165,7 @@ class WebSearchCell(Cell):
             )
 
         # Просим LLM обработать
-        prompt = f"""Запрос пользователя: {query}
+        prompt = f"""Запрос пользователя: {safe_query}
 
 {context}
 
@@ -137,7 +173,7 @@ class WebSearchCell(Cell):
 
         try:
             response = requests.post(
-                OLLAMA_URL,
+                self._validate_local_url(OLLAMA_URL),
                 json={
                     "model": MODEL,
                     "prompt": prompt,
@@ -176,10 +212,15 @@ class WebSearchCell(Cell):
     def learn_topic(self, topic: str) -> Tuple[List[Dict], Dict[str, str]]:
         """Изучить тему и извлечь факты для памяти"""
         
-        print(f"📖 Изучаю тему: {topic}")
-        
+        try:
+            safe_topic = self._sanitize_query(topic)
+        except ValueError as err:
+            return [], {"reason_code": "invalid_query", "reason_detail": str(err)}
+
+        print(f"📖 Изучаю тему: {safe_topic}")
+
         # Поиск
-        results, reason = self.search(topic, max_results=7)
+        results, reason = self.search(safe_topic, max_results=7)
         if not results:
             return [], reason
 
@@ -193,7 +234,7 @@ class WebSearchCell(Cell):
         all_text = "\n".join([f"{r.title}: {r.snippet}" for r in results])
 
         # Извлекаем факты
-        prompt = f"""Тема: {topic}
+        prompt = f"""Тема: {safe_topic}
 
 Информация из интернета:
 {all_text}
@@ -215,7 +256,7 @@ class WebSearchCell(Cell):
 
         try:
             response = requests.post(
-                OLLAMA_URL,
+                self._validate_local_url(OLLAMA_URL),
                 json={
                     "model": MODEL,
                     "prompt": prompt,
