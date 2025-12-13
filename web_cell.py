@@ -135,20 +135,33 @@ class WebSearchCell(Cell):
 
 Проанализируй результаты и дай полезный ответ. Укажи источники."""
 
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "prompt": prompt,
-                "system": self.system_prompt,
-                "stream": False,
-                "options": {"temperature": 0.5, "num_predict": 2048}
-            },
-            timeout=TIMEOUT
-        )
-        
-        answer = response.json().get("response", "")
-        
+        try:
+            response = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": MODEL,
+                    "prompt": prompt,
+                    "system": self.system_prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.5, "num_predict": 2048}
+                },
+                timeout=TIMEOUT
+            )
+            answer = response.json().get("response", "")
+        except Exception as e:
+            return CellResult(
+                content="Не удалось получить сводку (причина: requests_error).",
+                confidence=0.05,
+                cell_name=self.name,
+                metadata={
+                    "query": query,
+                    "reason_code": "requests_error",
+                    "reason_detail": str(e),
+                    "sources": [r.url for r in results],
+                    "results_count": len(results)
+                }
+            )
+
         return CellResult(
             content=answer,
             confidence=0.7,
@@ -200,19 +213,21 @@ class WebSearchCell(Cell):
                 "reason_detail": "requests не установлен"
             }
 
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "prompt": prompt,
-                "system": "Ты — экстрактор знаний. Извлекай точные факты.",
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 1024}
-            },
-            timeout=TIMEOUT
-        )
-        
-        result = response.json().get("response", "")
+        try:
+            response = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": MODEL,
+                    "prompt": prompt,
+                    "system": "Ты — экстрактор знаний. Извлекай точные факты.",
+                    "stream": False,
+                    "options": {"temperature": 0.3, "num_predict": 1024}
+                },
+                timeout=TIMEOUT
+            )
+            result = response.json().get("response", "")
+        except Exception as e:
+            return [], {"reason_code": "requests_error", "reason_detail": str(e)}
         
         # Парсим JSON
         parse_error: Optional[str] = None
