@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "dependencyDashboard": true,
+  "rangeStrategy": "pin",
+  "enabledManagers": ["pip_requirements", "pip-compile"],
+  "schedule": ["after 2am on monday"],
+  "packageRules": [
+    {
+      "matchManagers": ["pip_requirements", "pip-compile"],
+      "matchDatasources": ["pypi"],
+      "ignoreUnstable": true
+    },
+    {
+      "matchManagers": ["pip_requirements", "pip-compile"],
+      "matchDatasources": ["pypi"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "matchManagers": ["pip_requirements", "pip-compile"],
+      "matchDatasources": ["pypi"],
+      "matchPackageNames": ["requests", "numpy", "duckduckgo-search"],
+      "groupName": "requests/numpy/duckduckgo-search",
+      "groupSlug": "python-core-requests-numpy-ddg"
+    }
+  ]
+}
