@@ -105,12 +105,12 @@ def pull_model(model: ModelSpec, dry_run: bool) -> bool:
         print("❌ Команда 'ollama' не найдена. Установите Ollama и повторите.")
         return False
 
-    if result.return_code == 0:
+    if result.returncode == 0:
         print(f"✅ {model.name} готова")
         return True
 
     print(
-        f"❌ Не удалось скачать {model.name}. Код {result.return_code}. "
+        f"❌ Не удалось скачать {model.name}. Код {result.returncode}. "
         f"Stdout: {result.stdout.strip()} | Stderr: {result.stderr.strip()}"
     )
     return False
