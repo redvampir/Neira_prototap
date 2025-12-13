@@ -390,11 +390,49 @@ class Neira:
             if self.verbose:
                 print(result.content)
 
+            exec_fallback = result.metadata.get("fallback_reason")
+            exec_length = result.metadata.get("response_length", len(result.content))
+            if exec_fallback or exec_length == 0:
+                print(f"⚠️ Исполнитель вернул пустой ответ ({exec_fallback or 'empty_response'}). Пробую другую модель")
+                final_result = result
+                final_verdict = "ОТКЛОНЁН"
+                final_score = 0
+                problems = "Ответ отсутствует, попробуй другой подход или модель"
+
+                if self.model_manager:
+                    cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
+                    if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
+                        active_model_key = cloud_model
+                        print(f"🌩️ Переключение на облако из-за пустого ответа: {cloud_model}")
+
+                if attempt < MAX_RETRIES:
+                    continue
+                break
+
             # 6. Верификация
             self.log("✅ ВЕРИФИКАЦИЯ")
             verification = self.verifier.process(user_input, result.content)
             if self.verbose:
                 print(verification.content)
+
+            verify_fallback = verification.metadata.get("fallback_reason")
+            verify_length = verification.metadata.get("response_length", len(verification.content))
+            if verify_fallback or verify_length == 0:
+                print(f"⚠️ Верификатор не дал ответ ({verify_fallback or 'empty_response'}). Переключаю модель и повторяю")
+                final_result = result
+                final_verdict = "ТРЕБУЕТ_ДОРАБОТКИ"
+                final_score = 0
+                problems = "Не удалось проверить ответ — нужен повтор с другой моделью"
+
+                if self.model_manager:
+                    cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
+                    if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
+                        active_model_key = cloud_model
+                        print(f"🌩️ Облачная модель для повторной проверки: {cloud_model}")
+
+                if attempt < MAX_RETRIES:
+                    continue
+                break
 
             verdict, score, problems = self._parse_verification(verification.content)
 
