@@ -12,7 +12,7 @@ Neira Cells v0.5 — Базовые клетки (ОБНОВЛЕНО)
 import requests
 import json
 import os
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 import numpy as np
@@ -63,6 +63,33 @@ USE_CLOUD_IF = {
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+
+def safe_post_json(url: str, payload: Dict[str, Any], timeout: int, caller: str) -> Tuple[Optional[Any], Dict[str, Any]]:
+    """Безопасный POST-запрос с логированием статуса и исключений."""
+    metadata: Dict[str, Any] = {}
+    try:
+        response = requests.post(url, json=payload, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        error_type = type(exc).__name__
+        timeout_type = getattr(requests, "Timeout", Exception)
+        metadata.update({
+            "fallback_reason": "timeout" if isinstance(exc, timeout_type) else "exception",
+            "error_type": error_type,
+        })
+        print(f"❌ {caller}: {error_type} при POST {url}: {exc}")
+        return None, metadata
+
+    if response.status_code != 200:
+        body_preview = response.text[:1000]
+        metadata.update({
+            "fallback_reason": "http_error",
+            "status_code": response.status_code,
+            "body_preview": body_preview,
+        })
+        print(f"⚠️ {caller}: статус {response.status_code} от {url}: {body_preview}")
+
+    return response, metadata
+
 # === РЕЗУЛЬТАТ КЛЕТКИ ===
 @dataclass
 class CellResult:
@@ -75,6 +102,14 @@ class CellResult:
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
+
+
+@dataclass
+class LLMResponse:
+    """Результат вызова LLM с дополнительными метаданными."""
+
+    text: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # === ПАМЯТЬ ===
@@ -146,15 +181,24 @@ class MemoryCell:
     
     def get_embedding(self, text: str) -> List[float]:
         """Получить embedding через Ollama"""
+        response, metadata = safe_post_json(
+            OLLAMA_EMBED_URL,
+            {"model": EMBED_MODEL, "prompt": text},
+            timeout=600,
+            caller="memory.embedding",
+        )
+        if not response:
+            return []
+
         try:
-            response = requests.post(
-                OLLAMA_EMBED_URL,
-                json={"model": EMBED_MODEL, "prompt": text},
-                timeout=600
-            )
-            return response.json().get("embedding", [])
-        except Exception as e:
-            print(f"⚠️ Ошибка embedding: {e}")
+            data = response.json()
+            embedding = data.get("embedding", [])
+            if not embedding and metadata.get("fallback_reason") is None:
+                metadata["fallback_reason"] = "empty_response"
+            metadata["response_length"] = len(embedding)
+            return embedding
+        except Exception as exc:  # noqa: BLE001
+            print(f"⚠️ Ошибка embedding ({type(exc).__name__}): {exc}")
             return []
     
     def cosine_similarity(self, a: List[float], b: List[float]) -> float:
@@ -259,7 +303,7 @@ class Cell:
         temperature: float = 0.7,
         force_code_model: bool = False,
         model_key: Optional[str] = None,
-    ) -> str:
+    ) -> LLMResponse:
         """Вызов LLM с опциональным контекстом памяти"""
         
         full_prompt = prompt
@@ -314,23 +358,48 @@ class Cell:
         if adapter_option:
             options["adapter"] = adapter_option
 
-        response = requests.post(
+        response, metadata = safe_post_json(
             OLLAMA_URL,
-            json={
+            {
                 "model": model,
                 "prompt": full_prompt,
                 "system": self.system_prompt,
                 "stream": False,
                 "options": options
             },
-            timeout=TIMEOUT
+            timeout=TIMEOUT,
+            caller=self.name,
         )
-        return response.json().get("response", "")
+
+        if not response:
+            metadata.setdefault("response_length", 0)
+            return LLMResponse(text="", metadata=metadata)
+
+        try:
+            data = response.json()
+        except Exception as exc:  # noqa: BLE001
+            metadata.setdefault("fallback_reason", "parse_error")
+            metadata.update({"error_type": type(exc).__name__})
+            metadata.setdefault("response_length", 0)
+            print(f"⚠️ {self.name}: ошибка разбора JSON ({type(exc).__name__}): {exc}")
+            return LLMResponse(text="", metadata=metadata)
+
+        text = data.get("response", "")
+        metadata["response_length"] = len(text)
+        if not text:
+            metadata.setdefault("fallback_reason", "empty_response")
+
+        return LLMResponse(text=text, metadata=metadata)
     
     def process(self, input_data: str) -> CellResult:
         """Основной метод — переопределяется в наследниках"""
-        result = self.call_llm(input_data)
-        return CellResult(content=result, confidence=0.5, cell_name=self.name)
+        llm_result = self.call_llm(input_data)
+        return CellResult(
+            content=llm_result.text,
+            confidence=0.5,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА АНАЛИЗА (УЛУЧШЕННАЯ) ===
@@ -364,9 +433,9 @@ class AnalyzerCell(Cell):
 ОПИСАНИЕ: <краткое описание задачи>"""
 
     def process(self, input_data: str) -> CellResult:
-        result = self.call_llm(f"Проанализируй:\n\n{input_data}")
-        
-        text_lower = result.lower()
+        llm_result = self.call_llm(f"Проанализируй:\n\n{input_data}")
+
+        text_lower = llm_result.text.lower()
         needs_search = "поиск: да" in text_lower
         needs_code = "код: да" in text_lower
         
@@ -379,17 +448,20 @@ class AnalyzerCell(Cell):
         elif "субъект: оба" in text_lower:
             subject = "both"
         
-        confidence = 0.8 if "ТИП:" in result and "СУБЪЕКТ:" in result else 0.4
-        
+        confidence = 0.8 if "ТИП:" in llm_result.text and "СУБЪЕКТ:" in llm_result.text else 0.4
+
+        metadata = {
+            "needs_search": needs_search,
+            "needs_code": needs_code,
+            "subject": subject
+        }
+        metadata.update(llm_result.metadata)
+
         return CellResult(
-            content=result,
+            content=llm_result.text,
             confidence=confidence,
             cell_name=self.name,
-            metadata={
-                "needs_search": needs_search, 
-                "needs_code": needs_code,
-                "subject": subject
-            }
+            metadata=metadata
         )
 
 
@@ -420,9 +492,14 @@ class PlannerCell(Cell):
         else:
             raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
         prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
-        result = self.call_llm(prompt, model_key=model_key)
-        confidence = 0.7 if "1." in result else 0.4
-        return CellResult(content=result, confidence=confidence, cell_name=self.name)
+        llm_result = self.call_llm(prompt, model_key=model_key)
+        confidence = 0.7 if "1." in llm_result.text else 0.4
+        return CellResult(
+            content=llm_result.text,
+            confidence=confidence,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА ИСПОЛНЕНИЯ ===
@@ -456,11 +533,16 @@ class ExecutorCell(Cell):
         # НОВОЕ: Если есть замечания от верификатора — добавляем их
         if problems:
             prompt += f"\n\n⚠️ ЗАМЕЧАНИЯ К ПРЕДЫДУЩЕЙ ПОПЫТКЕ:\n{problems}\n\nИсправь эти проблемы!"
-        
+
         prompt += "\n\nВыполняю:"
-        
-        result = self.call_llm(prompt, model_key=model_key)
-        return CellResult(content=result, confidence=0.7, cell_name=self.name)
+
+        llm_result = self.call_llm(prompt, model_key=model_key)
+        return CellResult(
+            content=llm_result.text,
+            confidence=0.7,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА ВЕРИФИКАЦИИ ===
@@ -484,16 +566,21 @@ class VerifierCell(Cell):
 
     def process(self, request: str, answer: str) -> CellResult:
         prompt = f"Запрос: {request}\n\nОтвет: {answer}\n\nПроверка:"
-        result = self.call_llm(prompt, with_memory=False)
-        
-        if "ПРИНЯТ" in result:
+        llm_result = self.call_llm(prompt, with_memory=False)
+
+        if "ПРИНЯТ" in llm_result.text:
             confidence = 0.9
-        elif "ДОРАБОТАТЬ" in result:
+        elif "ДОРАБОТАТЬ" in llm_result.text:
             confidence = 0.5
         else:
             confidence = 0.3
-            
-        return CellResult(content=result, confidence=confidence, cell_name=self.name)
+
+        return CellResult(
+            content=llm_result.text,
+            confidence=confidence,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА ИЗВЛЕЧЕНИЯ ФАКТОВ ===
@@ -509,21 +596,24 @@ JSON формат:
 Если нет фактов: {"facts": []}
 ТОЛЬКО JSON."""
 
-    def process(self, user_input: str, response: str, 
+    def process(self, user_input: str, response: str,
                 source: str = "conversation") -> List[dict]:
         prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
-        result = self.call_llm(prompt, with_memory=False, temperature=0.3)
-        
+        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3)
+
+        if llm_result.metadata.get("fallback_reason"):
+            return []
+
         try:
-            start = result.find("{")
-            end = result.rfind("}") + 1
+            start = llm_result.text.find("{")
+            end = llm_result.text.rfind("}") + 1
             if start >= 0 and end > start:
-                data = json.loads(result[start:end])
+                data = json.loads(llm_result.text[start:end])
                 facts = data.get("facts", [])
                 for fact in facts:
                     fact["source"] = source
                 return facts
-        except:
+        except Exception:
             pass
         return []
 
