@@ -284,12 +284,20 @@ class Cell:
         elif target_key is None:
             target_key = "reason"
 
-        model = MODEL_CHAT
+        model = ""
         if self.model_manager:
             manager_model = self.model_manager.get_model_name(target_key)
             model = manager_model or ""
+
         if not model:
-            model = MODEL_CODE if target_key == "code" else MODEL_CHAT
+            fallback_models = {
+                "code": MODEL_CODE,
+                "reason": MODEL_CHAT,
+                "personality": MODEL_PERSONALITY or MODEL_CHAT,
+                "cloud_code": MODEL_CLOUD_CODE,
+                "cloud_universal": MODEL_CLOUD_UNIVERSAL,
+            }
+            model = fallback_models.get(target_key or "", MODEL_CHAT)
 
         should_log = (self.model_manager and self.model_manager.verbose) or (not self.model_manager)
         if should_log:
