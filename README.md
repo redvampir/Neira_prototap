@@ -47,21 +47,31 @@ ollama serve
 
 ### 2. Установить модели
 ```bash
-# Основные модели
+# Автоматически подтянуть нужные модели (без neira-personality)
+python install_models.py
+
+# Добавить загрузку neira-personality (когда появится в публичном Ollama)
+python install_models.py --with-personality
+
+# Посмотреть, какие команды будут выполнены без скачивания
+python install_models.py --dry-run
+
+# Скачать только выбранные модели
+python install_models.py --only qwen2.5-coder:7b mistral:7b-instruct
+
+# Проверить доступность Ollama по другому адресу API
+python install_models.py --server-url http://127.0.0.1:11434/api/version
+```
+
+Альтернатива — ручная установка:
+
+```bash
 ollama pull qwen2.5-coder:7b
 ollama pull mistral:7b-instruct
 ollama pull nomic-embed-text
-```
-
-**neira-personality**
-
-Модель с личностью пока в разработке и не опубликована в публичном репозитории Ollama. По умолчанию система переключится на fallback (**mistral:7b-instruct**) при диалогах, так что дополнительная подготовка данных или весов не требуется. После релиза веса можно будет загрузить командой:
-
-```bash
+# neira-personality (опционально, после публикации)
 ollama pull neira-personality
 ```
-
-Ожидаемое потребление VRAM — ~1.5 ГБ (соответствует описанию в списке моделей).
 
 ### 3. Установить зависимости Python
 ```bash
