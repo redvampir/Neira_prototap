@@ -49,6 +49,7 @@ class CellFactory:
         self._organs: Dict[str, Organ] = {}
 
     def register_blueprint(self, blueprint: CellBlueprint) -> None:
+        self._validate_blueprint_name(blueprint.name)
         if blueprint.name in self._blueprints:
             raise ValueError(f"Чертёж с именем {blueprint.name} уже зарегистрирован")
         self._blueprints[blueprint.name] = blueprint
@@ -78,6 +79,10 @@ class CellFactory:
         return organ
 
     def train_new_blueprint(self, name: str, goal: str, example_query: str = "") -> CellBlueprint:
+        self._validate_blueprint_name(name)
+        if name in self._blueprints:
+            raise ValueError(f"Чертёж с именем {name} уже зарегистрирован")
+
         trainer = Cell(self.memory, self.model_manager)
         trainer.system_prompt = (
             "Ты — архитектор клеток системы Neira. Создай новый чертёж клетки. "
@@ -94,16 +99,22 @@ class CellFactory:
         raw_response = trainer.call_llm(prompt, with_memory=False, model_key="reason")
         spec = self._parse_blueprint_response(raw_response)
 
+        def _builder(memory: MemoryCell, manager: Optional[ModelManager], *,
+                     blueprint_name: str = name,
+                     system_prompt: str = spec.get("system_prompt", trainer.system_prompt),
+                     use_code_model: bool = bool(spec.get("use_code_model", False))) -> Cell:
+            return self._build_custom_cell(
+                name=blueprint_name,
+                system_prompt=system_prompt,
+                use_code_model=use_code_model,
+                memory=memory,
+                model_manager=manager,
+            )
+
         blueprint = CellBlueprint(
             name=name,
             description=spec.get("description", goal),
-            builder=lambda memory, manager: self._build_custom_cell(
-                name=name,
-                system_prompt=spec.get("system_prompt", trainer.system_prompt),
-                use_code_model=bool(spec.get("use_code_model", False)),
-                memory=memory,
-                model_manager=manager,
-            ),
+            builder=_builder,
             metadata={"source": "trained"},
         )
         self.register_blueprint(blueprint)
@@ -130,6 +141,12 @@ class CellFactory:
         custom_cell.system_prompt = system_prompt
         custom_cell.use_code_model = use_code_model
         return custom_cell
+
+    def _validate_blueprint_name(self, name: str) -> None:
+        if not isinstance(name, str) or not name:
+            raise ValueError("Имя чертежа должно быть непустой строкой")
+        if not re.fullmatch(r"[\w\-]+", name):
+            raise ValueError("Имя чертежа может содержать только буквы, цифры, подчёркивания и дефисы")
 
     def get_stats(self) -> Dict[str, object]:
         return {
