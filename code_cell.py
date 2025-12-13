@@ -15,6 +15,7 @@ import requests
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import urlparse
 
 # Пробуем импортировать из новой версии (cells_v3), иначе из старой (cells)
 try:
@@ -30,12 +31,12 @@ except ImportError:
     TIMEOUT = 120
 
 # === НАСТРОЙКИ ОБЛАКА (Ollama Cloud) ===
-CLOUD_ENABLED = True
+CLOUD_ENABLED = os.getenv("OLLAMA_CLOUD_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 # URL для Ollama Cloud (OpenAI-compatible endpoint)
-CLOUD_API_URL = "https://api.ollama.ai/v1/chat/completions"
+CLOUD_API_URL = os.getenv("OLLAMA_CLOUD_URL", "https://api.ollama.ai/v1/chat/completions")
 
-CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "e630650f605748a4a3b9b7288babc441.hOiyzpmocy52kPJfrlTy8VmL")
+CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 # Используй самую мощную модель из облака Ollama (эквивалент GPT-4 уровня)
 CLOUD_MODEL = "qwen3-coder:480b-cloud"   # Альтернатива: "codellama:70b" или "mistral-nemo:12b"
@@ -44,6 +45,7 @@ CLOUD_MODEL = "qwen3-coder:480b-cloud"   # Альтернатива: "codellama:
 ALLOWED_EXTENSIONS = [".py", ".json", ".txt", ".md", ".yaml", ".yml", ".toml"]
 BACKUP_DIR = "backups"
 MAX_FILE_SIZE = 100_000
+LOCAL_URL_ALLOWLIST = {"localhost", "127.0.0.1", "::1"}
 
 
 @dataclass
@@ -69,11 +71,38 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
         super().__init__(memory, model_manager)
         self.work_dir = os.path.abspath(work_dir)
         os.makedirs(BACKUP_DIR, exist_ok=True)
+
+    def _validate_https_url(self, url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Небезопасный CLOUD_API_URL: требуется https и хост")
+        return url
+
+    def _validate_local_url(self, url: str) -> str:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("Недопустимая схема OLLAMA_URL")
+        if host.lower() not in LOCAL_URL_ALLOWLIST:
+            raise ValueError("Небезопасный OLLAMA_URL: разрешены только локальные адреса")
+        return url
+
+    def _cloud_ready(self) -> Tuple[bool, str]:
+        if not CLOUD_ENABLED:
+            return False, "Облако отключено через OLLAMA_CLOUD_ENABLED"
+        if not CLOUD_API_KEY:
+            return False, "Нет CLOUD_API_KEY"
+        try:
+            self._validate_https_url(CLOUD_API_URL)
+        except ValueError as err:
+            return False, str(err)
+        return True, "ok"
     
     def _call_cloud_api(self, messages: List[Dict]) -> str:
         """Вызов облачного API (OpenAI compatible)"""
-        if not CLOUD_ENABLED or not CLOUD_API_KEY or "sk-..." in CLOUD_API_KEY:
-            raise ValueError("Облако не настроено (проверь CLOUD_API_KEY в code_cell.py)")
+        ready, reason = self._cloud_ready()
+        if not ready:
+            raise ValueError(f"Облако недоступно: {reason}")
 
         headers = {
             "Authorization": f"Bearer {CLOUD_API_KEY}",
@@ -86,9 +115,9 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
             "temperature": 0.2, # Для кода температура ниже
             "max_tokens": 4096
         }
-        
+
         # Внимание: таймаут для облака больше, так как большие модели думают дольше
-        response = requests.post(CLOUD_API_URL, headers=headers, json=payload, timeout=120)
+        response = requests.post(self._validate_https_url(CLOUD_API_URL), headers=headers, json=payload, timeout=120)
         response.raise_for_status()
         
         # Обработка разных форматов ответа (на случай специфичных API)
@@ -109,18 +138,21 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
         ]
 
         # 1. Попытка Облака
+        ready, reason = self._cloud_ready()
         try:
-            if CLOUD_ENABLED:
+            if ready:
                 print(f"☁️ Посылаю запрос в облако ({CLOUD_MODEL})...")
                 content = self._call_cloud_api(messages)
                 return content, "CLOUD:" + CLOUD_MODEL
+            else:
+                print(f"⚠️ Облако пропущено: {reason}")
         except Exception as e:
             print(f"⚠️ Ошибка облака: {e}")
             print(f"🔄 Переключаюсь на локальную модель ({LOCAL_MODEL})...")
 
         # 2. Fallback на локальную модель
         try:
-            ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+            ollama_url = self._validate_local_url(os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate"))
             payload = {
                 "model": LOCAL_MODEL,
                 "prompt": f"{system or self.system_prompt}\n\n{prompt}",
