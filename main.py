@@ -295,6 +295,8 @@ class Neira:
                 cell_name = result.split(":")[1].split("\n")[0].strip()
                 self.evolution.cmd_activate_cell(cell_name)
                 return f"Готово! Я создала новый орган: {cell_name}. Теперь я могу {cell_description}."
+        needs_search = analysis.metadata.get("needs_search", False)
+        needs_code = analysis.metadata.get("needs_code", False)
 
         # NEW v0.5: Маршрутизация модели (начальный выбор)
         if self.model_manager and MODEL_ROUTING:
@@ -378,6 +380,8 @@ class Neira:
                     if self.verbose:
                         print(f"🌩️ Переключение на облачную модель: {cloud_model}")
                     self.model_manager.switch_to(cloud_model)
+                    if self.model_manager.switch_to(cloud_model):
+                        active_model_key = cloud_model
 
             self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
 
@@ -406,6 +410,25 @@ class Neira:
             verification = self.verifier.process(user_input, result.content)
             if self.verbose:
                 print(verification.content)
+
+            verify_fallback = verification.metadata.get("fallback_reason")
+            verify_length = verification.metadata.get("response_length", len(verification.content))
+            if verify_fallback or verify_length == 0:
+                print(f"⚠️ Верификатор не дал ответ ({verify_fallback or 'empty_response'}). Переключаю модель и повторяю")
+                final_result = result
+                final_verdict = "ТРЕБУЕТ_ДОРАБОТКИ"
+                final_score = 0
+                problems = "Не удалось проверить ответ — нужен повтор с другой моделью"
+
+                if self.model_manager:
+                    cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
+                    if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
+                        active_model_key = cloud_model
+                        print(f"🌩️ Облачная модель для повторной проверки: {cloud_model}")
+
+                if attempt < MAX_RETRIES:
+                    continue
+                break
 
             verdict, score, problems = self._parse_verification(verification.content)
 

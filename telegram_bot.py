@@ -2110,7 +2110,7 @@ def build_application() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
 
     # Глобальный обработчик ошибок: не падаем на сетевых таймаутах
-    async def on_error(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         err = context.error
         if isinstance(err, NetworkError):
             logging.warning("Network error, continue polling: %s", err)

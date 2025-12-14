@@ -496,6 +496,12 @@ class Cell:
         result = self.call_llm(input_data)
         confidence = 0.5 if self._ollama_available else 0.1
         return CellResult(content=result, confidence=confidence, cell_name=self.name)
+        return CellResult(
+            content=llm_result.text,
+            confidence=0.5,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА АНАЛИЗА (УЛУЧШЕННАЯ) ===
@@ -595,6 +601,22 @@ class PlannerCell(Cell):
         result = self.call_llm(prompt)
         confidence = 0.7 if "1." in result else 0.4
         return CellResult(content=result, confidence=confidence, cell_name=self.name)
+        # Expect input_data to be a dict with 'input_data', 'analysis', and optionally 'model_key'
+        if isinstance(input_data, dict):
+            user_input = input_data.get('input_data')
+            analysis = input_data.get('analysis')
+            model_key = input_data.get('model_key', None)
+        else:
+            raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
+        prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
+        llm_result = self.call_llm(prompt, model_key=model_key)
+        confidence = 0.7 if "1." in llm_result.text else 0.4
+        return CellResult(
+            content=llm_result.text,
+            confidence=confidence,
+            cell_name=self.name,
+            metadata=llm_result.metadata,
+        )
 
 
 # === КЛЕТКА ИСПОЛНЕНИЯ ===
@@ -723,6 +745,12 @@ JSON формат:
         prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
         result = self.call_llm(prompt, with_memory=False, temperature=0.3)
         
+        prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
+        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3)
+
+        if llm_result.metadata.get("fallback_reason"):
+            return []
+
         try:
             start = result.find("{")
             end = result.rfind("}") + 1
