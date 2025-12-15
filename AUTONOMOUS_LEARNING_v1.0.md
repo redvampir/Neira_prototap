@@ -266,7 +266,7 @@ quarantine_entry = QuarantineEntry(
 
 ```python
 autonomous_learning_system = AutonomousLearningSystem(
-    memory_system=neira_wrapper.memory,
+    memory_system=neira_wrapper.neira.memory,
     idle_threshold_minutes=30,      # Минут без активности = idle
     admin_telegram_id=123456789     # ID администратора для уведомлений
 )

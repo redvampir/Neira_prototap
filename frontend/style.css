@@ -285,6 +285,13 @@ body {
     opacity: 0.5;
 }
 
+.send-button.processing {
+    background: var(--accent-orange);
+    cursor: wait;
+    opacity: 0.8;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
 .shortcut {
     opacity: 0.6;
     font-size: 0.85rem;

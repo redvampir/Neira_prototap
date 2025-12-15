@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import os
+import re
+import time
 import hashlib
 import secrets
 import base64
@@ -22,7 +24,7 @@ except Exception:
 
 import aiohttp
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.constants import ChatAction, ParseMode
 from telegram.error import TimedOut, NetworkError
 from telegram.ext import (
@@ -59,12 +61,71 @@ logging.basicConfig(
 
 load_dotenv()
 
+# Снижаем шум в логах от HTTP-клиента (иначе getUpdates забивает всё).
+_httpx_level_name = os.getenv("NEIRA_HTTPX_LOG_LEVEL", "WARNING").upper()
+_httpx_level = getattr(logging, _httpx_level_name, logging.WARNING)
+logging.getLogger("httpx").setLevel(_httpx_level)
+logging.getLogger("httpcore").setLevel(_httpx_level)
+
+try:
+    _TYPING_THROTTLE_SECONDS = float(os.getenv("NEIRA_TG_TYPING_THROTTLE_SECONDS", "3.0"))
+except ValueError:
+    _TYPING_THROTTLE_SECONDS = 3.0
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError(
         "Не задан TELEGRAM_BOT_TOKEN. Укажите его в переменных окружения "
         "или в файле .env (см. .env.example)."
     )
+
+
+class _SensitiveDataFilter(logging.Filter):
+    """Фильтр логов: скрывает токены/ключи, чтобы не засветить их в tg.log."""
+
+    _telegram_url_re = re.compile(
+        r"(https://api\.telegram\.org/bot)[^/\s]+",
+        flags=re.IGNORECASE,
+    )
+    _telegram_token_re = re.compile(r"\bbot\d+:[A-Za-z0-9_-]+\b")
+
+    def __init__(self, secrets: Iterable[str]) -> None:
+        super().__init__()
+        self._secrets = [s for s in secrets if isinstance(s, str) and s]
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - имя задано logging API
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+
+        redacted = self._telegram_url_re.sub(r"\1<redacted>", message)
+        redacted = self._telegram_token_re.sub("bot<redacted>", redacted)
+        for secret in self._secrets:
+            if secret in redacted:
+                redacted = redacted.replace(secret, "<redacted>")
+
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+
+def _install_log_redaction_filter() -> None:
+    secrets: List[str] = [BOT_TOKEN]
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY"):
+        value = os.getenv(key)
+        if value:
+            secrets.append(value)
+
+    filt = _SensitiveDataFilter(secrets)
+    root = logging.getLogger()
+    root.addFilter(filt)
+    for handler in root.handlers:
+        handler.addFilter(filt)
+
+
+_install_log_redaction_filter()
 
 # === ЗАЩИТА: Администратор ===
 # Хеш пароля администратора (из переменной окружения или по умолчанию)
@@ -198,6 +259,45 @@ def format_stage(stage: str | None) -> str:
     return mapping.get(stage or "", "Подготовка")
 
 
+def is_cortex_placeholder_response(text: str) -> bool:
+    """
+    Cortex (в автономном режиме) часто возвращает «заглушки», если не хватает
+    pathway/фрагментов/шаблонов. В Telegram это выглядит как «бот сломан».
+
+    В режиме `NEIRA_CORTEX_MODE=auto` такие ответы лучше отдавать в legacy Neira.
+    """
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return True
+
+    placeholder_markers = (
+        "не нашла подходящий фрагмент ответа",
+        "дай мне секунду подумать",
+        "интересный вопрос! дай подумать",
+        "дай подумать над этим",
+        "понял задачу, работаю над этим",
+        "сейчас напишу код для тебя",
+        "расскажи подробнее",
+        "не совсем поняла",
+    )
+
+    return any(marker in normalized for marker in placeholder_markers)
+
+
+async def safe_reply_text(
+    message: Message,
+    text: str,
+    *,
+    parse_mode: str | ParseMode | None = None,
+) -> Message | None:
+    """Безопасная отправка reply_text: не роняет обработчик на сетевых ошибках."""
+    try:
+        return await message.reply_text(text, parse_mode=parse_mode)
+    except (TimedOut, NetworkError) as exc:
+        logging.warning("Telegram reply_text не удалось отправить: %s", exc)
+        return None
+
+
 async def send_chunks(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -206,17 +306,35 @@ async def send_chunks(
     """Отправляет список сообщений, соблюдая лимиты Telegram."""
     chat_id = update.effective_chat.id
     for part in chunks:
-        await context.bot.send_message(chat_id=chat_id, text=part)
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=part)
+        except (TimedOut, NetworkError) as exc:
+            logging.warning("Telegram send_message не удалось отправить: %s", exc)
 
 
 async def show_typing(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Отправляет действие 'печатает' для UX."""
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action=ChatAction.TYPING,
-    )
+    throttle_seconds = max(_TYPING_THROTTLE_SECONDS, 0.0)
+    if throttle_seconds > 0:
+        now = time.monotonic()
+        try:
+            last_ts = float(context.chat_data.get("_neira_last_typing_ts", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            last_ts = 0.0
+        if now - last_ts < throttle_seconds:
+            return
+        context.chat_data["_neira_last_typing_ts"] = now
+
+    try:
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id,
+            action=ChatAction.TYPING,
+        )
+    except (TimedOut, NetworkError):
+        # Сеть/Telegram бывают нестабильны — это не должно ломать обработку.
+        return
 
 
 # === Работа с изображениями ===
@@ -1816,35 +1934,63 @@ async def chat_handler(
             
             # Отправляем ответ
             full_response = result.response
+
+            should_fallback_to_legacy = (
+                CORTEX_MODE == "auto"
+                and not result.llm_used
+                and is_cortex_placeholder_response(full_response)
+            )
             
-            if full_response and full_response.strip():
-                parts = split_message(full_response)
-                for part in parts:
-                    if part.strip():
-                        await update.message.reply_text(part)
-                
-                # Сохраняем в контекст
-                parallel_mind.add_message(chat_id, "assistant", full_response)
-                
-                # Метаинфо (опционально, можно отключить)
-                if os.getenv("NEIRA_SHOW_CORTEX_INFO", "false") == "true":
-                    meta_info = (
-                        f"{strategy_emoji} {result.strategy.value}{tier_info} | "
-                        f"{result.latency_ms:.0f}ms{llm_marker}"
-                    )
-                    await update.message.reply_text(
-                        f"__{meta_info}__",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-            else:
-                await update.message.reply_text(
-                    "🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос."
+            # КРИТИЧНО: Фильтруем слишком длинные технические ответы (>2000 символов)
+            # И ответы с техническим "мусором" (упоминание нейросетей, кода и т.д.)
+            is_too_technical = (
+                len(full_response) > 2000 and 
+                any(marker in full_response.lower() for marker in [
+                    "нейронн", "трансформер", "машинное обучение", "глубок",
+                    "import", "class", "def ", "asyncio", "```"
+                ])
+            )
+            
+            if should_fallback_to_legacy or is_too_technical:
+                logging.info(
+                    "Cortex (auto) вернул заглушку/мусор (%s, len=%d) — переключаюсь на legacy",
+                    result.strategy.value,
+                    len(full_response)
                 )
-            
-            return
+            else:
+                if full_response and full_response.strip():
+                    parts = split_message(full_response)
+                    for part in parts:
+                        if part.strip():
+                            await safe_reply_text(update.message, part)
+                    
+                    # Сохраняем в контекст
+                    parallel_mind.add_message(chat_id, "assistant", full_response)
+                    
+                    # Метаинфо (опционально, можно отключить)
+                    if os.getenv("NEIRA_SHOW_CORTEX_INFO", "false") == "true":
+                        meta_info = (
+                            f"{strategy_emoji} {result.strategy.value}{tier_info} | "
+                            f"{result.latency_ms:.0f}ms{llm_marker}"
+                        )
+                        await safe_reply_text(
+                            update.message,
+                            f"__{meta_info}__",
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                else:
+                    await safe_reply_text(
+                        update.message,
+                        "🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос.",
+                    )
+                
+                return
             
         except Exception as cortex_error:
-            logging.warning(f"Cortex обработка провалилась: {cortex_error}, переключаемся на legacy")
+            logging.warning(
+                "Cortex обработка провалилась: %s, переключаемся на legacy",
+                cortex_error,
+            )
             # Fallback на legacy режим ниже
     
     # === LEGACY ПУТЬ: Через NeiraWrapper ===
@@ -1866,7 +2012,7 @@ async def chat_handler(
         # Продолжаем обычный диалог
         user_text = clean_text if clean_text else "Создай для меня новый орган"
     
-    status_msg = await update.message.reply_text("🔄 Начинаю обработку...")
+    status_msg: Message | None = await safe_reply_text(update.message, "🔄 Начинаю обработку...")
 
     async with processing_lock:
         try:
@@ -1878,24 +2024,42 @@ async def chat_handler(
                     if stage_name != last_stage:
                         emoji = {"Анализ": "🔍", "Планирование": "📋", 
                                 "Исполнение": "⚡", "Проверка": "✅"}.get(stage_name, "⚙️")
-                        await status_msg.edit_text(f"{emoji} {stage_name}...")
+                        if status_msg:
+                            try:
+                                await status_msg.edit_text(f"{emoji} {stage_name}...")
+                            except (TimedOut, NetworkError):
+                                pass
                         last_stage = stage_name
                     await show_typing(update, context)
                 elif chunk.type == "content":
-                    await status_msg.delete()
+                    if status_msg:
+                        try:
+                            await status_msg.delete()
+                        except (TimedOut, NetworkError):
+                            pass
+                        status_msg = None
                     full_response = chunk.content
                     
                     # Защита от пустого ответа
                     if not chunk.content or not chunk.content.strip():
-                        await update.message.reply_text("🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос.")
+                        await safe_reply_text(
+                            update.message,
+                            "🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос.",
+                        )
                         return
                     
                     parts = split_message(chunk.content)
                     for part in parts:
                         if part.strip():  # Отправляем только непустые части
-                            await update.message.reply_text(part)
+                            await safe_reply_text(update.message, part)
                 elif chunk.type == "error":
-                    await status_msg.edit_text(f"❌ Ошибка: {chunk.content}")
+                    if status_msg:
+                        try:
+                            await status_msg.edit_text(f"❌ Ошибка: {chunk.content}")
+                            return
+                        except (TimedOut, NetworkError):
+                            pass
+                    await safe_reply_text(update.message, f"❌ Ошибка: {chunk.content}")
                     return
             
             # Сохраняем ответ Neira в контекст
@@ -1904,11 +2068,13 @@ async def chat_handler(
 
         except Exception as exc:
             logging.exception("Сбой при обработке сообщения")
-            try:
-                await status_msg.edit_text(f"❌ Ошибка: {exc}")
-            except Exception:
-                # Если не удалось отредактировать, отправляем новое сообщение
-                await update.message.reply_text(f"❌ Ошибка: {exc}")
+            if status_msg:
+                try:
+                    await status_msg.edit_text(f"❌ Ошибка: {exc}")
+                    return
+                except (TimedOut, NetworkError):
+                    pass
+            await safe_reply_text(update.message, f"❌ Ошибка: {exc}")
 
 
 @require_auth

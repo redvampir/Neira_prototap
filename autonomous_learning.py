@@ -29,6 +29,8 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import hashlib
 
+from memory_system import MemoryCategory
+
 try:
     import aiohttp
     import requests
@@ -328,10 +330,10 @@ class AutonomousLearningSystem:
     """Система автономного самообучения"""
     
     def __init__(self, memory_system, idle_threshold_minutes: int = 30, admin_telegram_id: Optional[int] = None):
-        self.memory = memory_system
+        self.memory = self._unwrap_memory_system(memory_system)
         self.idle_threshold = idle_threshold_minutes
         self.admin_telegram_id = admin_telegram_id
-        self.validator = KnowledgeValidator(memory_system)
+        self.validator = KnowledgeValidator(self.memory)
         
         # Карантинная зона
         self.quarantine_path = "neira_quarantine.json"
@@ -355,6 +357,25 @@ class AutonomousLearningSystem:
         self.running = False
         
         logging.info("🎓 Autonomous Learning System инициализирован")
+
+    @staticmethod
+    def _unwrap_memory_system(memory_system):
+        """
+        Поддержка двух режимов:
+        - MemorySystem v2 (имеет long_term/short_term)
+        - MemoryCell (имеет memory_system -> MemorySystem v2)
+        """
+        inner = getattr(memory_system, "memory_system", None)
+        resolved = inner if inner is not None else memory_system
+
+        required_attrs = ("long_term", "short_term", "remember")
+        if not all(hasattr(resolved, attr) for attr in required_attrs):
+            raise TypeError(
+                "AutonomousLearningSystem ожидает MemorySystem v2 "
+                "(или MemoryCell с включённым memory_system)."
+            )
+
+        return resolved
     
     def _load_quarantine(self) -> List[QuarantineEntry]:
         """Загрузить карантин из файла"""
@@ -530,7 +551,16 @@ class AutonomousLearningSystem:
         api_ru = f"https://ru.wikipedia.org/api/rest_v1/page/summary/{title}"
         api_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 
-        async with aiohttp.ClientSession() as session:
+        # Wikipedia REST API часто отдаёт 403 без явного User-Agent.
+        headers = {
+            "User-Agent": os.getenv(
+                "NEIRA_HTTP_USER_AGENT",
+                "NeiraAutonomousLearning/1.0 (mailto:local@example.invalid)",
+            ),
+            "Accept": "application/json",
+        }
+
+        async with aiohttp.ClientSession(headers=headers) as session:
             # Сначала пробуем ru
             summary = await fetch_summary(session, api_ru)
             if summary:
@@ -553,7 +583,7 @@ class AutonomousLearningSystem:
                 self.memory.remember(
                     text=entry.text,
                     source=f"autonomous_learning:{entry.source_url}",
-                    category="learned",
+                    category=MemoryCategory.LEARNED,
                     force_long_term=True
                 )
                 
@@ -574,7 +604,7 @@ class AutonomousLearningSystem:
                 self.memory.remember(
                     text=entry.text,
                     source=f"autonomous_learning:{entry.source_url}",
-                    category="learned",
+                    category=MemoryCategory.LEARNED,
                     force_long_term=True
                 )
                 

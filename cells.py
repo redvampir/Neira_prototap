@@ -745,10 +745,8 @@ JSON формат:
         prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
         result = self.call_llm(prompt, with_memory=False, temperature=0.3)
         
-        prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
-        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3)
-
-        if llm_result.metadata.get("fallback_reason"):
+        # result это строка, не объект с metadata
+        if not result or len(result) < 10:
             return []
 
         try:

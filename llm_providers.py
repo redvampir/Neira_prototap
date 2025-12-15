@@ -61,6 +61,15 @@ class LLMProvider(ABC):
         """Генерация ответа от LLM"""
         pass
     
+    def get_embedding(self, text: str) -> Optional[List[float]]:
+        """
+        Получить эмбеддинг текста (векторное представление).
+        
+        Возвращает None если провайдер не поддерживает embeddings.
+        Используется для семантического поиска в памяти.
+        """
+        return None  # По умолчанию не поддерживается
+    
     @abstractmethod
     def get_provider_type(self) -> ProviderType:
         """Возвращает тип провайдера"""
@@ -160,6 +169,40 @@ class OllamaProvider(LLMProvider):
                 success=False,
                 error=str(e)
             )
+    
+    def get_embedding(self, text: str, model: str = "nomic-embed-text") -> Optional[List[float]]:
+        """
+        Получить эмбеддинг через Ollama.
+        
+        Args:
+            text: Текст для векторизации
+            model: Модель эмбеддингов (по умолчанию nomic-embed-text)
+        
+        Returns:
+            Список чисел (вектор) или None при ошибке
+        """
+        if not self.available:
+            return None
+        
+        try:
+            base_url = self.url.replace("/api/generate", "")
+            embed_url = f"{base_url}/api/embeddings"
+            
+            response = requests.post(
+                embed_url,
+                json={"model": model, "prompt": text},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                return response.json().get("embedding")
+            else:
+                logger.warning(f"Ollama embeddings failed: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Ollama embedding error: {e}")
+            return None
     
     def get_provider_type(self) -> ProviderType:
         return ProviderType.OLLAMA
@@ -266,6 +309,44 @@ class OpenAIProvider(LLMProvider):
         elif "gpt-4" in self.model:
             return (tokens / 1000) * 0.03  # GPT-4 дороже
         return 0.0
+    
+    def get_embedding(self, text: str, model: str = "text-embedding-3-small") -> Optional[List[float]]:
+        """
+        Получить эмбеддинг через OpenAI Embeddings API.
+        
+        Args:
+            text: Текст для векторизации
+            model: Модель (text-embedding-3-small или text-embedding-3-large)
+        
+        Returns:
+            Вектор размерности 1536 (small) или 3072 (large), или None при ошибке
+        
+        Стоимость: $0.00002 / 1K tokens (text-embedding-3-small)
+        """
+        if not self.available:
+            return None
+        
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={"model": model, "input": text},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data["data"][0]["embedding"]
+            else:
+                logger.warning(f"OpenAI embeddings failed: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"OpenAI embedding error: {e}")
+            return None
     
     def get_provider_type(self) -> ProviderType:
         return ProviderType.OPENAI
@@ -492,9 +573,9 @@ class LLMManager:
             providers: Список провайдеров в порядке приоритета
         """
         if providers is None:
-            # Дефолтная конфигурация
+            # Дефолтная конфигурация - используем более мощные модели
             self.providers = [
-                OllamaProvider(model="qwen2.5:0.5b"),
+                OllamaProvider(model="ministral-3:3b"),
                 GroqProvider(model="llama-3.1-8b-instant"),
                 OpenAIProvider(model="gpt-3.5-turbo"),
                 ClaudeProvider(model="claude-3-haiku-20240307")
@@ -577,6 +658,47 @@ class LLMManager:
             error=f"All providers failed. Last error: {last_error}"
         )
     
+    def get_embedding(self, text: str, preferred_provider: Optional[ProviderType] = None) -> Optional[List[float]]:
+        """
+        Получить эмбеддинг текста с автоматическим fallback.
+        
+        Args:
+            text: Текст для векторизации
+            preferred_provider: Предпочитаемый провайдер (по умолчанию Ollama)
+        
+        Returns:
+            Вектор чисел или None при ошибке всех провайдеров
+        """
+        if not self.available_providers:
+            logger.warning("No providers available for embeddings")
+            return None
+        
+        # Приоритет для embeddings: Ollama (бесплатно) → OpenAI (дешево)
+        providers_order = self.available_providers.copy()
+        if preferred_provider:
+            providers_order.sort(
+                key=lambda p: 0 if p.get_provider_type() == preferred_provider else 1
+            )
+        else:
+            # По умолчанию сначала Ollama, потом OpenAI
+            providers_order.sort(
+                key=lambda p: 0 if p.get_provider_type() == ProviderType.OLLAMA else 
+                             1 if p.get_provider_type() == ProviderType.OPENAI else 2
+            )
+        
+        for provider in providers_order:
+            try:
+                embedding = provider.get_embedding(text)
+                if embedding:
+                    logger.info(f"✓ Embedding from {provider.get_provider_type().value}")
+                    return embedding
+            except Exception as e:
+                logger.warning(f"Embedding failed with {provider.get_provider_type().value}: {e}")
+                continue
+        
+        logger.warning("All providers failed to generate embedding")
+        return None
+    
     def get_stats(self) -> Dict[str, Any]:
         """Статистика провайдеров"""
         return {
@@ -604,7 +726,7 @@ def create_fast_manager() -> LLMManager:
     """Менеджер для быстрых ответов (приоритет на скорость)"""
     return LLMManager([
         GroqProvider(model="llama-3.1-8b-instant"),
-        OllamaProvider(model="qwen2.5:0.5b"),
+        OllamaProvider(model="ministral-3:3b"),
         OpenAIProvider(model="gpt-3.5-turbo")
     ])
 
@@ -622,7 +744,7 @@ def create_quality_manager() -> LLMManager:
 def create_free_manager() -> LLMManager:
     """Менеджер только с бесплатными провайдерами"""
     return LLMManager([
-        OllamaProvider(model="qwen2.5:0.5b"),
+        OllamaProvider(model="ministral-3:3b"),
         GroqProvider(model="llama-3.1-8b-instant")
     ])
 

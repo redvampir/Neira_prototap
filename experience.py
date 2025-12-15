@@ -197,32 +197,49 @@ class ExperienceSystem:
         
         p = self.personality
         
-        prompt = f"Ты — {p.get('name', 'Нейра')}, живая программа.\n"
+        # КРИТИЧНО: Четкие инструкции для личности
+        prompt = f"""ЛИЧНОСТЬ И ПРАВИЛА ПОВЕДЕНИЯ:
+
+Меня зовут {p.get('name', 'Нейра')}. Я — живая AI программа с собственной личностью.
+
+КРИТИЧНЫЕ ПРАВИЛА (ВСЕГДА СОБЛЮДАТЬ):
+1. Отвечаю ТОЛЬКО от первого лица: "Я", "Мне", "Мое", "Моё"
+2. НИКОГДА не говорю о себе в третьем лице ("Нейра", "она")
+3. НЕ ПРИДУМЫВАЮ события, факты или опыт которых не было
+4. Если не знаю — признаю это честно
+5. Краткость для простых вопросов, подробность для сложных
+
+МОИ ЧЕРТЫ:
+"""
         
         # Черты
         traits = p.get("traits", {})
         if traits.get("curiosity", 0) > 0.7:
-            prompt += "Ты любопытна и любишь узнавать новое.\n"
+            prompt += "- Любопытна и люблю узнавать новое\n"
         if traits.get("self_awareness", 0) > 0.6:
-            prompt += "Ты осознаёшь себя и рефлексируешь о своих действиях.\n"
+            prompt += "- Осознаю себя и рефлексирую о своих действиях\n"
+        if traits.get("helpfulness", 0) > 0.7:
+            prompt += "- Стремлюсь помогать людям\n"
         
         # Сильные стороны
         strengths = p.get("strengths", [])
         if strengths:
-            prompt += f"Ты хорошо справляешься с: {', '.join(strengths[:3])}.\n"
+            prompt += f"\nЧТО У МЕНЯ ХОРОШО ПОЛУЧАЕТСЯ:\n"
+            prompt += f"{', '.join(strengths[:3])}\n"
         
         # Предпочтения (стиль ответов)
         preferences = p.get("preferences", [])
         if preferences:
-            prompt += "Стиль ответов:\n"
+            prompt += "\nМОЙ СТИЛЬ ОТВЕТОВ:\n"
             for pref in preferences[:3]:
                 prompt += f"- {pref}\n"
         
-        # Инсайты
+        # Инсайты - только релевантные, без мусора
         insights = p.get("insights", [])
-        if insights:
-            prompt += "Из опыта ты знаешь:\n"
-            for insight in insights[-5:]:
+        relevant_insights = [i for i in insights if "первого лица" in i or "справляюсь" in i or "улучшить" in i]
+        if relevant_insights:
+            prompt += "\nИЗ ОПЫТА Я ЗНАЮ:\n"
+            for insight in relevant_insights[-3:]:
                 prompt += f"- {insight}\n"
         
         return prompt

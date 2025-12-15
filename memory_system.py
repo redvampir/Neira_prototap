@@ -30,7 +30,6 @@ ROADMAP v2.2:
 
 import json
 import os
-import requests
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
@@ -39,7 +38,15 @@ from enum import Enum
 import hashlib
 import re
 
-# Конфиг для эмбеддингов
+# Импорт универсального LLM менеджера для embeddings
+try:
+    from llm_providers import LLMManager, create_default_manager
+    LLM_MANAGER_AVAILABLE = True
+except ImportError:
+    LLM_MANAGER_AVAILABLE = False
+    print("⚠️ LLMManager недоступен, используем legacy Ollama embeddings")
+
+# Legacy конфиг для эмбеддингов (fallback)
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 EMBED_MODEL = "nomic-embed-text"
 
@@ -168,10 +175,34 @@ class HallucinationDetector:
 class SemanticSearch:
     """Семантический поиск по памяти с использованием эмбеддингов"""
     
+    # Глобальный менеджер (создается один раз)
+    _llm_manager: Optional[Any] = None
+    
+    @classmethod
+    def _get_manager(cls) -> Optional[Any]:
+        """Ленивая инициализация LLM Manager"""
+        if not LLM_MANAGER_AVAILABLE:
+            return None
+        if cls._llm_manager is None:
+            cls._llm_manager = create_default_manager()
+        return cls._llm_manager
+    
     @staticmethod
     def get_embedding(text: str) -> Optional[List[float]]:
-        """Получает эмбеддинг текста через Ollama"""
+        """Получает эмбеддинг текста через LLM Manager (или fallback на Ollama)"""
+        # Сначала пробуем через LLM Manager
+        manager = SemanticSearch._get_manager()
+        if manager:
+            try:
+                embedding = manager.get_embedding(text)
+                if embedding:
+                    return embedding
+            except Exception as e:
+                print(f"⚠️ LLMManager embedding error: {e}, trying legacy Ollama")
+        
+        # Fallback на прямой вызов Ollama
         try:
+            import requests
             response = requests.post(
                 OLLAMA_EMBED_URL,
                 json={"model": EMBED_MODEL, "prompt": text},
@@ -180,7 +211,8 @@ class SemanticSearch:
             if response.status_code == 200:
                 return response.json().get("embedding", [])
         except Exception as e:
-            print(f"⚠️ Ошибка получения эмбеддинга: {e}")
+            print(f"⚠️ Legacy Ollama embedding error: {e}")
+        
         return None
     
     @staticmethod
@@ -461,8 +493,19 @@ class MemorySystem:
         self.short_term_size = 100       # Максимум в краткосрочной
         self.consolidation_threshold = 3  # Сколько раз нужно подтвердить для перехода в долгосрочную
         
+        # 🛡️ ЗАЩИТА ОТ ПЕРЕПОЛНЕНИЯ v2.4
+        self.max_long_term = 1000        # Максимум долгосрочных записей
+        self.max_semantic = 500          # Максимум семантических знаний
+        self.max_episodic = 300          # Максимум эпизодов
+        self.min_confidence_keep = 0.3   # Минимальная уверенность для сохранения
+        self.auto_cleanup_enabled = True # Автоматическая очистка
+        
         # Загрузка
         self._load_all()
+        
+        # Применить лимиты при загрузке
+        if self.auto_cleanup_enabled:
+            self._apply_limits()
     
     def _generate_id(self, text: str) -> str:
         """Генерирует уникальный ID для записи"""
@@ -519,6 +562,70 @@ class MemorySystem:
         except Exception as e:
             print(f"⚠️ Ошибка загрузки {memory_type.value}: {e}")
             return []
+    
+    def _apply_limits(self):
+        """
+        🛡️ Применяет лимиты памяти для защиты от переполнения
+        Вызывается автоматически при загрузке и периодически
+        """
+        initial_counts = {
+            'long_term': len(self.long_term),
+            'short_term': len(self.short_term),
+            'semantic': len(self.semantic),
+            'episodic': len(self.episodic)
+        }
+        
+        # 1. Краткосрочная память - оставляем только последние N
+        if len(self.short_term) > self.short_term_size:
+            self.short_term = self.short_term[-self.short_term_size:]
+        
+        # 2. Долгосрочная память - топ по уверенности + свежести
+        if len(self.long_term) > self.max_long_term:
+            # Удаляем записи с низкой уверенностью
+            self.long_term = [
+                m for m in self.long_term 
+                if m.confidence >= self.min_confidence_keep
+            ]
+            
+            # Если всё ещё много - сортируем по важности и берём топ
+            if len(self.long_term) > self.max_long_term:
+                self.long_term = sorted(
+                    self.long_term,
+                    key=lambda x: (x.confidence, x.access_count, x.timestamp),
+                    reverse=True
+                )[:self.max_long_term]
+        
+        # 3. Семантическая память - только важные знания
+        if len(self.semantic) > self.max_semantic:
+            self.semantic = sorted(
+                self.semantic,
+                key=lambda x: (x.confidence, x.access_count),
+                reverse=True
+            )[:self.max_semantic]
+        
+        # 4. Эпизодическая память - последние события
+        if len(self.episodic) > self.max_episodic:
+            self.episodic = sorted(
+                self.episodic,
+                key=lambda x: x.timestamp,
+                reverse=True
+            )[:self.max_episodic]
+        
+        # Сохраняем если были изменения
+        final_counts = {
+            'long_term': len(self.long_term),
+            'short_term': len(self.short_term),
+            'semantic': len(self.semantic),
+            'episodic': len(self.episodic)
+        }
+        
+        if initial_counts != final_counts:
+            removed = sum(initial_counts.values()) - sum(final_counts.values())
+            # Тихо сохраняем без вывода
+            self._save_memory(MemoryType.LONG_TERM, self.long_term)
+            self._save_memory(MemoryType.SHORT_TERM, self.short_term)
+            self._save_memory(MemoryType.SEMANTIC, self.semantic)
+            self._save_memory(MemoryType.EPISODIC, self.episodic)
     
     def _save_memory(self, memory_type: MemoryType, entries: List[MemoryEntry]):
         """Сохраняет память в файл"""
@@ -652,6 +759,11 @@ class MemorySystem:
                 self._consolidate_short_term()
             self._save_memory(MemoryType.SHORT_TERM, self.short_term)
             print(f"📝 Сохранено в краткосрочную память: {text[:50]}...")
+        
+        # 🛡️ Проверяем лимиты после каждых 10 новых записей
+        total_memories = len(self.long_term) + len(self.short_term) + len(self.semantic)
+        if self.auto_cleanup_enabled and total_memories % 10 == 0:
+            self._apply_limits()
         
         return entry
     

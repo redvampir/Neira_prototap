@@ -190,22 +190,49 @@ function toggleStats() {
 function sendMessage() {
     const message = elements.userInput.value.trim();
 
-    if (!message || isProcessing || ws.readyState !== WebSocket.OPEN) {
+    if (!message) {
+        // Пустое сообщение
+        elements.userInput.focus();
         return;
     }
 
-    // Add user message to UI
-    addMessage('user', message);
+    if (isProcessing) {
+        // Уже обрабатывается запрос
+        console.log('Ожидайте завершения предыдущего запроса');
+        return;
+    }
 
-    // Clear input
-    elements.userInput.value = '';
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // WebSocket не подключен
+        addMessage('system', '❗ Нет связи с сервером. Попытка пereconnect...');
+        connectWebSocket();
+        return;
+    }
 
-    // Send to backend
-    ws.send(JSON.stringify({ message }));
+    try {
+        // Add user message to UI
+        addMessage('user', message);
 
-    // Update UI state
-    isProcessing = true;
-    elements.sendButton.disabled = true;
+        // Clear input
+        elements.userInput.value = '';
+        autoResizeTextarea(); // Сбросить высоту
+
+        // Send to backend
+        ws.send(JSON.stringify({ message }));
+
+        // Update UI state
+        isProcessing = true;
+        elements.sendButton.disabled = true;
+        elements.sendButton.classList.add('processing');
+        elements.sendButton.querySelector('span').textContent = 'Обработка...';
+    } catch (error) {
+        console.error('Send message error:', error);
+        addMessage('system', `❗ Ошибка отправки: ${error.message}`);
+        isProcessing = false;
+        elements.sendButton.disabled = false;
+        elements.sendButton.classList.remove('processing');
+        elements.sendButton.querySelector('span').textContent = 'Отправить';
+    }
 }
 
 // Handle WebSocket message
@@ -224,18 +251,25 @@ function handleMessage(data) {
 
         case 'done':
             hideStage();
-            isProcessing = false;
-            elements.sendButton.disabled = false;
+            resetProcessingState();
             fetchStats(); // Refresh stats after completion
             break;
 
         case 'error':
             hideStage();
-            addMessage('system', `Ошибка: ${content}`);
-            isProcessing = false;
-            elements.sendButton.disabled = false;
+            addMessage('system', `❌ Ошибка: ${content}`);
+            resetProcessingState();
             break;
     }
+}
+
+// Сбросить состояние обработки
+function resetProcessingState() {
+    isProcessing = false;
+    elements.sendButton.disabled = false;
+    elements.sendButton.classList.remove('processing');
+    elements.sendButton.querySelector('span').textContent = 'Отправить';
+    elements.userInput.focus();
 }
 
 // Show processing stage
@@ -294,12 +328,43 @@ function addMessage(role, content, metadata = null) {
 // Fetch stats from API
 async function fetchStats() {
     try {
-        const response = await fetch(`${CONFIG.API_URL}/stats`);
-        const data = await response.json();
+        // Визуальный feedback
+        if (elements.refreshStats) {
+            elements.refreshStats.disabled = true;
+            elements.refreshStats.textContent = '⏳ Обновление...';
+        }
 
+        const response = await fetch(`${CONFIG.API_URL}/stats`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
         updateStatsUI(data);
+        
+        // Успех
+        if (elements.refreshStats) {
+            elements.refreshStats.textContent = '✅ Обновлено';
+            setTimeout(() => {
+                elements.refreshStats.textContent = '🔄 Обновить';
+                elements.refreshStats.disabled = false;
+            }, 1000);
+        }
     } catch (error) {
         console.error('Failed to fetch stats:', error);
+        
+        // Ошибка
+        if (elements.refreshStats) {
+            elements.refreshStats.textContent = '❌ Ошибка';
+            setTimeout(() => {
+                elements.refreshStats.textContent = '🔄 Обновить';
+                elements.refreshStats.disabled = false;
+            }, 2000);
+        }
+        
+        // Показать ошибку в UI
+        addMessage('system', `⚠️ Не удалось обновить статистику: ${error.message}`);
     }
 }
 

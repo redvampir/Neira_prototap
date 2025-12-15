@@ -36,11 +36,11 @@ class NeiraConfig:
     CODE_MODEL_CLOUD: str = os.getenv("LLM_CODE_MODEL_CLOUD", "gpt-4")
     
     # Для рассуждений
-    REASON_MODEL_OLLAMA: str = os.getenv("LLM_REASON_MODEL_OLLAMA", "qwen2.5:0.5b")
+    REASON_MODEL_OLLAMA: str = os.getenv("LLM_REASON_MODEL_OLLAMA", "ministral-3:3b")
     REASON_MODEL_CLOUD: str = os.getenv("LLM_REASON_MODEL_CLOUD", "claude-3-haiku-20240307")
     
     # Для личности/диалогов
-    PERSONALITY_MODEL_OLLAMA: str = os.getenv("LLM_PERSONALITY_MODEL_OLLAMA", "qwen2.5:0.5b")
+    PERSONALITY_MODEL_OLLAMA: str = os.getenv("LLM_PERSONALITY_MODEL_OLLAMA", "ministral-3:3b")
     PERSONALITY_MODEL_CLOUD: str = os.getenv("LLM_PERSONALITY_MODEL_CLOUD", "claude-3-5-sonnet-20241022")
     
     # === GROQ МОДЕЛИ (бесплатные) ===

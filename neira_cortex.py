@@ -163,17 +163,15 @@ class DecisionRouter:
         Выбрать стратегию ответа
         
         Логика:
-        0. **КРИТИЧНО**: Если есть pathway - ИСПОЛЬЗУЕМ ЕГО ВСЕГДА (особенно для кризисов!)
+        0. **КРИТИЧНО**: Если есть pathway - ИСПОЛЬЗУЕМ ЕГО ВСЕГДА!
         1. Если простое намерение (greeting, thanks) → TEMPLATE
         2. Если сложный запрос и нет pathway → LLM_CONSULTANT (если доступен)
         3. Иначе → FRAGMENT_ASSEMBLY
         """
         
-        # 0. PATHWAY FIRST - КРИТИЧНО для кризисных ситуаций!
-        if pathway_match:
-            return ResponseStrategy.NEURAL_PATHWAY
-        # 1. Pathway найден и уверенность высокая
-        if pathway_match and pathway_match.confidence >= 0.7:
+        # 0. PATHWAY FIRST - ВСЕГДА! Даже с низким confidence
+        # Это заученные рефлексы и КРИТИЧЕСКИЕ ситуации
+        if pathway_match and pathway_match.confidence >= 0.3:
             return ResponseStrategy.NEURAL_PATHWAY
         
         # 2. Простые намерения → шаблоны

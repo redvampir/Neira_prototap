@@ -170,6 +170,7 @@ class ResponseSynthesizer:
         RAG без генерации - просто поиск и компиляция
         
         Ищем релевантные фрагменты по тегам/категории
+        ВАЖНО: НЕ возвращаем заглушки - лучше пустой ответ, чтобы упасть в fallback
         """
         # Получаем категорию из variables
         category = variables.get("category", "general")
@@ -185,18 +186,20 @@ class ResponseSynthesizer:
             elif any(tag in fragment.tags for tag in tags):
                 relevant_fragments.append(fragment)
         
+        # КРИТИЧНО: Не возвращаем заглушки - пусть fallback сработает
         if not relevant_fragments:
-            return "🤔 Не нашла подходящий фрагмент ответа."
+            return ""
         
         # Берем наиболее используемые (проверенные)
         relevant_fragments.sort(key=lambda f: f.usage_count, reverse=True)
         
-        # Собираем ответ из топ-3
-        parts = []
-        for fragment in relevant_fragments[:3]:
-            part = fragment.apply_variables(**variables)
-            parts.append(part)
-            fragment.usage_count += 1
+        # Собираем ответ из топ-1 самого проверенного фрагмента
+        # НЕ склеиваем несколько фрагментов - это создает мусор
+        fragment = relevant_fragments[0]
+        result = fragment.apply_variables(**variables)
+        fragment.usage_count += 1
+        
+        return result
         
         return " ".join(parts)
     

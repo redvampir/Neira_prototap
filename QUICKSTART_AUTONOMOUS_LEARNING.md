@@ -63,7 +63,7 @@ python telegram_bot.py
 Редактируй [telegram_bot.py](telegram_bot.py):
 ```python
 autonomous_learning_system = AutonomousLearningSystem(
-    memory_system=neira_wrapper.memory,
+    memory_system=neira_wrapper.neira.memory,
     idle_threshold_minutes=60,  # ← измени здесь
     admin_telegram_id=_ADMIN_ID
 )
