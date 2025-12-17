@@ -32,6 +32,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    MessageReactionHandler,
     CallbackQueryHandler,
     filters,
 )
@@ -43,6 +44,9 @@ from parallel_thinking import parallel_mind
 from enhanced_auth import auth_system
 from memory_system import EMBED_MODEL
 from autonomous_learning import AutonomousLearningSystem
+from emoji_feedback import EmojiFeedbackSystem, EmojiMap
+from emoji_feedback import EmojiFeedbackSystem, EmojiMap
+from emoji_feedback import EmojiFeedbackSystem, EmojiMap
 
 # 🧠 Neira Cortex v2.0 - Автономная когнитивная система
 try:
@@ -112,7 +116,7 @@ class _SensitiveDataFilter(logging.Filter):
 
 
 def _install_log_redaction_filter() -> None:
-    secrets: List[str] = [BOT_TOKEN]
+    secrets: List[str] = [BOT_TOKEN] if BOT_TOKEN else []
     for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY"):
         value = os.getenv(key)
         if value:
@@ -160,9 +164,62 @@ processing_lock = asyncio.Lock()
 # === Система автономного обучения ===
 autonomous_learning_system: Optional[AutonomousLearningSystem] = None
 
+# === 📝 Обучение через эмодзи-реакции ===
+emoji_feedback = EmojiFeedbackSystem()
+last_messages = {}  # {user_id: {"query": "", "response": "", "context": {}}}
+
+# === 📝 Обучение через эмодзи-реакции ===
+emoji_feedback = EmojiFeedbackSystem()
+last_messages = {}  # {user_id: {"query": "", "response": "", "context": {}}}
+
 # === 🧠 Neira Cortex v2.0 ===
 neira_cortex: Optional['NeiraCortex'] = None
 CORTEX_MODE = os.getenv("NEIRA_CORTEX_MODE", "auto")  # auto, always, never
+
+# === 🎵 Стабилизатор ритма ===
+from rhythm_stabilizer import RhythmStabilizer, EmotionalState
+rhythm_stabilizer = RhythmStabilizer()
+
+# === 👤 Профили пользователей ===
+import json
+from pathlib import Path
+
+USER_PROFILES_FILE = Path("neira_user_profiles.json")
+
+def load_user_profiles():
+    """Загружает профили пользователей"""
+    if USER_PROFILES_FILE.exists():
+        try:
+            with open(USER_PROFILES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Ошибка загрузки профилей: {e}")
+    return {"user_profiles": {}}
+
+def save_user_profiles(profiles):
+    """Сохраняет профили пользователей"""
+    try:
+        with open(USER_PROFILES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(profiles, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Ошибка сохранения профилей: {e}")
+
+def get_user_name(user_id: int) -> Optional[str]:
+    """Получает имя пользователя из профиля"""
+    profiles = load_user_profiles()
+    user_key = str(user_id)
+    return profiles["user_profiles"].get(user_key, {}).get("name")
+
+def set_user_name(user_id: int, name: str):
+    """Сохраняет имя пользователя в профиль"""
+    profiles = load_user_profiles()
+    user_key = str(user_id)
+    if user_key not in profiles["user_profiles"]:
+        profiles["user_profiles"][user_key] = {}
+    profiles["user_profiles"][user_key]["name"] = name
+    profiles["user_profiles"][user_key]["updated_at"] = datetime.now().isoformat()
+    save_user_profiles(profiles)
+    logging.info(f"💾 Сохранено имя пользователя {user_id}: {name}")
 
 
 # === Декоратор авторизации ===
@@ -320,12 +377,13 @@ async def show_typing(
     if throttle_seconds > 0:
         now = time.monotonic()
         try:
-            last_ts = float(context.chat_data.get("_neira_last_typing_ts", 0.0) or 0.0)
+            last_ts = float(context.chat_data.get("_neira_last_typing_ts", 0.0) or 0.0) if context.chat_data else 0.0
         except (TypeError, ValueError):
             last_ts = 0.0
         if now - last_ts < throttle_seconds:
             return
-        context.chat_data["_neira_last_typing_ts"] = now
+        if context.chat_data is not None:
+            context.chat_data["_neira_last_typing_ts"] = now
 
     try:
         await context.bot.send_chat_action(
@@ -421,11 +479,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name or "друг"
     
+    # Проверяем сохранённое имя
+    saved_name = get_user_name(user_id)
+    greeting_name = saved_name if saved_name else user_name
+    
     is_authorized = user_id in AUTHORIZED_USERS or user_id == _ADMIN_ID or ACCESS_MODE == "open"
     
     if is_authorized:
         text = (
-            f"Привет, {user_name}! 👋 Я Neira v1.0 в Telegram.\n\n"
+            f"Привет, {greeting_name}! 👋 Я Neira v1.0 в Telegram.\n\n"
             "🚀 *Быстрый старт:*\n"
             "1️⃣ Просто напиши мне сообщение — я отвечу и запомню\n"
             "2️⃣ Отправь фото — опишу что вижу\n"
@@ -466,56 +528,82 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Подробная справка."""
     user_id = update.effective_user.id
+    is_user_admin = is_admin(user_id)
     
+    # Базовая справка для всех
     text = (
-        "📚 *Команды Neira v0.7*\n\n"
-        "*Общение:*\n"
-        "Просто напиши сообщение — Neira ответит\n\n"
-        "*Самосознание:*\n"
-        "/self — кто я такая?\n"
-        "/organs — список моих органов\n"
-        "/grow — как мне расти?\n\n"
-        "*💾 Память (расширенное управление):*\n"
-        "📖 /memory — последние записи\n"
-        "📊 /memory stats — статистика\n"
-        "🔍 /memory search/semantic <текст>\n"
-        "🗑️ /memory delete last/text/old\n"
-        "🧹 /memory dedupe — дубликаты\n"
-        "💾 /memory backup/restore\n"
-        "📌 /memory pin/pinned — закрепить\n"
-        "🔧 /memory filter confidence/source/recent\n"
-        "📄 /memory export txt\n"
-        "/experience — личность\n"
-        "/clear — полная очистка\n\n"
-        "*🧠 Контекст диалога:*\n"
+        "📚 *Команды Neira v0.8.3*\n\n"
+        "*🌟 Основные:*\n"
+        "/start — приветствие и быстрый старт\n"
+        "/help — эта справка\n"
+        "/myname <имя> — установить своё имя\n\n"
+        "*💬 Диалог:*\n"
         "/context — история разговора\n"
-        "/clear\\_context — очистить контекст\n\n"
-        "*Обучение:*\n"
-        "/learn <тема> — из интернета\n\n"
-        "*Изображения:*\n"
+        "/clear\\_context — очистить контекст\n"
+        "/rhythm — режим настроения\n\n"
+        "*📊 Статистика:*\n"
+        "/stats — состояние системы\n"
+        "/memory — просмотр памяти\n\n"
+        "*🎨 Изображения:*\n"
         "📷 Отправь фото — анализ\n"
-        "/imagine <описание>\n"
-        "/vision — статус\n\n"
-        "*Код:*\n"
-        "/code list/read\n\n"
-        "*🧬 Самообучение:*\n"
-        "#создай\\_орган <описание>\n\n"
-        "*🎓 Автономное обучение (v1.0):*\n"
-        "/learn\\_auto start — запустить фоновое обучение\n"
-        "/learn\\_auto stop — остановить\n"
-        "/learn\\_auto stats — статистика\n"
-        "/learn\\_auto quarantine — карантин знаний\n"
-        "/learn\\_auto approve/reject <id> — проверка\n"
+        "/imagine <описание> — генерация\n"
+        "/vision — статус распознавания\n\n"
+        "*� Обучение:*\n"
+        "Реагируй эмодзи на мои ответы:\n"
+        "💯 ⭐ — отлично | 👍 ❤️ — хорошо\n"
+        "👎 😕 — плохо | ❌ 🚫 — очень плохо\n\n"
+        "*�💡 Подсказки:*\n"
+        "• Просто пиши сообщения для диалога\n"
+        "• Используй #хештеги для обучения\n"
+        "• Отправляй изображения для анализа\n"
     )
     
-    if is_admin(user_id):
+    # Расширенная справка для администратора
+    if is_user_admin:
         text += (
-            "\n*👑 Админ-команды:*\n"
-            "/admin users — список авторизованных\n"
-            "/admin add <identifier> — добавить (@username или user\\_id)\n"
-            "/admin remove <user\\_id> — удалить пользователя\n"
-            "/admin stats — статистика параллельного мышления\n"
-            "/admin mode <open|whitelist|admin\\_only> — режим доступа\n"
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "*👑 АДМИН-КОМАНДЫ*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "*🔐 Авторизация:*\n"
+            "/auth <пароль> — авторизовать пользователя\n"
+            "/admin users — список пользователей\n"
+            "/admin add <@username|id> — добавить\n"
+            "/admin remove <id> — удалить\n"
+            "/admin mode <open|whitelist|admin\\_only>\n"
+            "/admin stats — статистика системы\n\n"
+            "*🧠 Cortex v2.0:*\n"
+            "/cortex — общая статистика\n"
+            "/cortex stats — детальная статистика\n"
+            "/cortex pathways — Neural Pathways\n"
+            "/cortex test <текст> — протестировать\n\n"
+            "*📝 Обучение (расширенное):*\n"
+            "/feedback — статистика emoji-реакций\n"
+            "Реагируй эмодзи для обучения Neira!\n\n"
+            "*💾 Память (расширенное):*\n"
+            "/memory search <текст> — поиск\n"
+            "/memory semantic <текст> — семантика\n"
+            "/memory delete last/text/old\n"
+            "/memory dedupe — дубликаты\n"
+            "/memory backup/restore\n"
+            "/memory pin/pinned — закрепить\n"
+            "/memory filter confidence/source\n"
+            "/memory export txt\n"
+            "/experience — журнал опыта\n"
+            "/clear — ⚠️ ПОЛНАЯ очистка\n\n"
+            "*🎓 Обучение:*\n"
+            "/learn <тема> — из интернета\n"
+            "/learn\\_auto start/stop — автономное\n"
+            "/learn\\_auto stats — статистика\n"
+            "/learn\\_auto quarantine — карантин\n"
+            "/learn\\_auto approve/reject <id>\n\n"
+            "*🧬 Самосознание:*\n"
+            "/self — самоанализ\n"
+            "/organs — статус органов\n"
+            "/grow — создание органов\n"
+            "/code list/read — управление кодом\n\n"
+            "*💡 Хештеги:*\n"
+            "#создай\\_орган <описание>\n"
+            "#научись <тема>\n"
         )
     
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -1916,8 +2004,18 @@ async def chat_handler(
     if use_cortex and neira_cortex:
         # === НОВЫЙ ПУТЬ: Neira Cortex v2.0 ===
         try:
+            # Получаем имя пользователя из профиля
+            saved_name = get_user_name(user_id)
+            user_display_name = saved_name if saved_name else user_name
+            
+            # Добавляем имя в контекст (через user_text)
+            context_text = user_text
+            if saved_name:
+                # Передаём имя в контексте для Cortex
+                context_text = f"[User: {saved_name}] {user_text}"
+            
             # Обрабатываем через Cortex
-            result = neira_cortex.process(user_text, str(user_id))
+            result = neira_cortex.process(context_text, str(user_id))
             
             # Формируем метаинфо
             strategy_emoji = {
@@ -1958,6 +2056,34 @@ async def chat_handler(
                     len(full_response)
                 )
             else:
+                # 🎵 ПРОВЕРКА РИТМА: анализируем резонанс перед отправкой
+                rhythm_check = rhythm_stabilizer.update(user_text, full_response)
+                
+                # Если резонанс низкий и рекомендован ритуал — добавляем фрагмент Софии
+                if rhythm_check.get("ritual_needed"):
+                    ritual_text = rhythm_check["ritual_text"]
+                    await safe_reply_text(update.message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
+                    logging.info(f"🌸 Ритуал восстановления: резонанс={rhythm_check['resonance']:.2f}")
+                
+                # Логируем переключение режима
+                if rhythm_check.get("mode_switched"):
+                    logging.info(
+                        f"🎵 Режим изменён: {rhythm_check.get('current_mode')} → {rhythm_check['new_mode']} "
+                        f"(резонанс={rhythm_check['resonance']:.2f}, стабильность={rhythm_check['stability']})"
+                    )
+                
+                # Получаем ограничения для текущего режима
+                constraints = rhythm_stabilizer.get_mode_constraints()
+                
+                # Если ответ слишком длинный — только логируем (НЕ обрезаем!)
+                # Нейра должна САМА говорить кратко
+                if len(full_response) > constraints["max_length"]:
+                    logging.warning(
+                        f"⚠️ Ответ длиннее нормы: {len(full_response)} символов "
+                        f"(режим={rhythm_stabilizer.state.mode}, норма={constraints['max_length']}). "
+                        f"Нейра должна сама говорить короче!"
+                    )
+                
                 if full_response and full_response.strip():
                     parts = split_message(full_response)
                     for part in parts:
@@ -1966,6 +2092,19 @@ async def chat_handler(
                     
                     # Сохраняем в контекст
                     parallel_mind.add_message(chat_id, "assistant", full_response)
+                    
+                    # 📝 Сохраняем для emoji feedback
+                    last_messages[user_id] = {
+                        "query": user_text,
+                        "response": full_response,
+                        "context": {
+                            "strategy": result.strategy.value,
+                            "model": "cortex",
+                            "pathway_tier": result.pathway_tier.value if result.pathway_tier else None,
+                            "llm_used": result.llm_used,
+                            "latency_ms": result.latency_ms
+                        }
+                    }
                     
                     # Метаинфо (опционально, можно отключить)
                     if os.getenv("NEIRA_SHOW_CORTEX_INFO", "false") == "true":
@@ -2048,7 +2187,35 @@ async def chat_handler(
                         )
                         return
                     
-                    parts = split_message(chunk.content)
+                    # 🎵 ПРОВЕРКА РИТМА для legacy режима
+                    rhythm_check = rhythm_stabilizer.update(user_text, chunk.content)
+                    
+                    response_to_send = chunk.content
+                    
+                    # Если резонанс низкий и рекомендован ритуал
+                    if rhythm_check.get("ritual_needed"):
+                        ritual_text = rhythm_check["ritual_text"]
+                        await safe_reply_text(update.message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
+                        logging.info(f"🌸 Ритуал восстановления (legacy): резонанс={rhythm_check['resonance']:.2f}")
+                    
+                    # Логируем переключение режима
+                    if rhythm_check.get("mode_switched"):
+                        logging.info(
+                            f"🎵 Режим изменён (legacy): → {rhythm_check['new_mode']} "
+                            f"(резонанс={rhythm_check['resonance']:.2f}, стабильность={rhythm_check['stability']})"
+                        )
+                    
+                    # Получаем ограничения для текущего режима
+                    constraints = rhythm_stabilizer.get_mode_constraints()
+                    
+                    # Если ответ слишком длинный — только логируем (НЕ обрезаем!)
+                    if len(response_to_send) > constraints["max_length"]:
+                        logging.warning(
+                            f"⚠️ Ответ длиннее нормы (legacy): {len(response_to_send)} символов "
+                            f"(режим={rhythm_stabilizer.state.mode}, норма={constraints['max_length']})"
+                        )
+                    
+                    parts = split_message(response_to_send)
                     for part in parts:
                         if part.strip():  # Отправляем только непустые части
                             await safe_reply_text(update.message, part)
@@ -2103,6 +2270,203 @@ async def clear_context_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     parallel_mind.clear_context(chat_id)
     await update.message.reply_text("🗑️ Контекст диалога очищен!")
+
+
+@require_auth
+async def rhythm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Статистика стабилизатора ритма.
+    
+    /rhythm - текущее состояние и статистика
+    /rhythm reset - сброс стабилизатора
+    """
+    stats = rhythm_stabilizer.get_stats()
+    
+    if context.args and context.args[0] == "reset":
+        # Сброс в начальное состояние
+        rhythm_stabilizer.state = EmotionalState(
+            mode="calm",
+            amplitude=0.5,
+            stability=0
+        )
+        rhythm_stabilizer.transition_history = []
+        await update.message.reply_text("🔄 Стабилизатор ритма сброшен в спокойный режим.")
+        return
+    
+    # Формируем отчёт
+    lines = [
+        "🎵 *Стабилизатор ритма Neira*\n",
+        f"📍 Текущий режим: `{rhythm_stabilizer.state.mode}`",
+        f"📊 Амплитуда: `{rhythm_stabilizer.state.amplitude:.2f}`",
+        f"🎯 Стабильность: `{rhythm_stabilizer.state.stability}`",
+        ""
+    ]
+    
+    if stats["total_transitions"] > 0:
+        lines.append(f"🔄 Всего переключений: {stats['total_transitions']}")
+        lines.append(f"📈 Средний резонанс: {stats['average_resonance']:.2f}")
+        lines.append("\n*Распределение режимов:*")
+        for mode, count in stats["mode_distribution"].items():
+            lines.append(f"  • {mode}: {count}")
+        
+        # Получаем ограничения текущего режима
+        constraints = rhythm_stabilizer.get_mode_constraints()
+        lines.append(f"\n*Текущие ограничения ({rhythm_stabilizer.state.mode}):*")
+        lines.append(f"  • Макс. длина: {constraints['max_length']} символов")
+        lines.append(f"  • Тон: {constraints['tone']}")
+    else:
+        lines.append("_Переключений ещё не было_")
+    
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def myname_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Установка/просмотр своего имени"""
+    user_id = update.effective_user.id
+    
+    # Если есть аргумент — устанавливаем имя
+    if context.args:
+        new_name = " ".join(context.args)
+        set_user_name(user_id, new_name)
+        await update.message.reply_text(
+            f"✅ Отлично! Теперь я буду звать тебя {new_name}! 🌸"
+        )
+    else:
+        # Показываем текущее имя
+        saved_name = get_user_name(user_id)
+        if saved_name:
+            await update.message.reply_text(
+                f"Я знаю тебя как {saved_name} 😊\n\n"
+                f"Чтобы изменить: /myname Новое Имя"
+            )
+        else:
+            await update.message.reply_text(
+                "Я ещё не знаю, как тебя зовут 🤔\n\n"
+                "Установи своё имя: /myname Твоё Имя"
+            )
+
+
+async def reaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка эмодзи-реакций пользователя на сообщения Neira"""
+    try:
+        reaction = update.message_reaction
+        user_id = reaction.user.id
+        
+        # Получаем новые реакции
+        new_reactions = reaction.new_reaction
+        if not new_reactions:
+            return
+        
+        # Берём первую эмодзи-реакцию
+        emoji = None
+        for react in new_reactions:
+            if hasattr(react, 'emoji'):
+                emoji = react.emoji
+                break
+        
+        if not emoji:
+            return
+        
+        # Проверяем, что это распознаваемая реакция
+        score = EmojiMap.get_score(emoji)
+        if score is None:
+            return  # Неизвестная реакция, игнорируем
+        
+        # Получаем последнее сообщение пользователя
+        user_data = last_messages.get(user_id)
+        if not user_data:
+            return
+        
+        # Сохраняем feedback
+        entry = emoji_feedback.add_feedback(
+            user_id=user_id,
+            user_query=user_data.get("query", ""),
+            neira_response=user_data.get("response", ""),
+            reaction_emoji=emoji,
+            context=user_data.get("context", {})
+        )
+        
+        if entry:
+            category = EmojiMap.get_category(emoji)
+            
+            # Логируем
+            logging.info(
+                f"📊 Feedback от {user_id}: {emoji} "
+                f"(оценка: {entry.quality_score}/10, категория: {category})"
+            )
+            
+            # Благодарим за feedback (опционально)
+            if score >= 8:
+                # Хорошая оценка - молчим или краткое спасибо
+                pass
+            elif score <= 4:
+                # Плохая оценка - можем предложить уточнить
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"Извини, что ответ не понравился 😔\n"
+                             f"Могу попробовать по-другому, если уточнишь что не так?"
+                    )
+                except Exception as e:
+                    logging.error(f"Ошибка отправки сообщения: {e}")
+        
+    except Exception as e:
+        logging.error(f"Ошибка обработки реакции: {e}")
+
+
+async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать статистику обратной связи через эмодзи"""
+    user_id = update.effective_user.id
+    
+    if not is_admin(user_id):
+        await update.message.reply_text("🚫 Команда только для администраторов")
+        return
+    
+    stats = emoji_feedback.get_stats()
+    patterns = emoji_feedback.analyze_patterns()
+    
+    text = "📊 *Статистика обратной связи через эмодзи*\n\n"
+    
+    if stats["total"] == 0:
+        text += "Пока нет данных. Реагируйте эмодзи на мои сообщения! 😊\n\n"
+        text += "*Распознаваемые реакции:*\n"
+        text += "💯 ⭐ 🌟 - отлично (9-10)\n"
+        text += "👍 ❤️ 🔥 - хорошо (7-8)\n"
+        text += "🤔 😐 - нормально (5-6)\n"
+        text += "👎 😕 - плохо (3-4)\n"
+        text += "❌ 🚫 💩 - очень плохо (1-2)"
+    else:
+        text += f"Всего оценок: {stats['total']}\n"
+        text += f"Средняя оценка: {stats['average_score']}/10\n\n"
+        
+        text += "*По категориям:*\n"
+        for category, count in stats["by_category"].items():
+            if count > 0:
+                emoji_icon = {
+                    "excellent": "💯",
+                    "good": "👍",
+                    "neutral": "🤔",
+                    "bad": "👎",
+                    "terrible": "❌"
+                }.get(category, "•")
+                text += f"{emoji_icon} {category}: {count}\n"
+        
+        # Анализ стратегий
+        if patterns.get("strategy_scores"):
+            text += "\n*Оценки по стратегиям Cortex:*\n"
+            for strategy, score in patterns["strategy_scores"].items():
+                text += f"• {strategy}: {score}/10\n"
+        
+        # Рекомендации
+        if patterns.get("recommendations"):
+            text += "\n⚠️ *Рекомендации:*\n"
+            for rec in patterns["recommendations"]:
+                text += f"• {rec['suggestion']}\n"
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 @require_auth
@@ -2256,6 +2620,9 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("learn", learn_command))
     app.add_handler(CommandHandler("learn_auto", learn_auto_command))
     app.add_handler(CommandHandler("cortex", cortex_command))  # 🧠 Новая команда
+    app.add_handler(CommandHandler("rhythm", rhythm_command))  # 🎵 Стабилизатор ритма
+    app.add_handler(CommandHandler("myname", myname_command))  # 👤 Установка имени
+    app.add_handler(CommandHandler("feedback", feedback_command))  # 📊 Статистика feedback
     
     # Самосознание (v0.6)
     app.add_handler(CommandHandler("self", self_command))
@@ -2271,6 +2638,9 @@ def build_application() -> Application:
     # Админ-команды
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
+    
+    # 📝 Обработчик эмодзи-реакций
+    app.add_handler(MessageReactionHandler(reaction_handler))
     
     # Обработчик сообщений (с авторизацией)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
@@ -2304,7 +2674,7 @@ def main() -> None:
             from neira_cortex import create_cortex
             neira_cortex = create_cortex(
                 pathways_file="neural_pathways.json",
-                use_llm=(CORTEX_MODE != "auto")  # LLM доступен только в always режиме
+                use_llm=True  # LLM всегда доступен, fallback на legacy только при заглушках
             )
             logging.info("✅ Neira Cortex v2.0 активирован (режим: %s)", CORTEX_MODE)
         except Exception as e:

@@ -31,16 +31,19 @@ class NeiraConfig:
     ).split(",")
     
     # === МОДЕЛИ ПО ЗАДАЧАМ ===
-    # Для кода
-    CODE_MODEL_OLLAMA: str = os.getenv("LLM_CODE_MODEL_OLLAMA", "qwen2.5-coder:7b")
+    # Универсальная модель NVIDIA Nemotron Mini 9B v2 для всех задач
+    UNIVERSAL_MODEL_OLLAMA: str = os.getenv("LLM_UNIVERSAL_MODEL_OLLAMA", "nemotron-mini")
+    
+    # Для кода (использует универсальную модель)
+    CODE_MODEL_OLLAMA: str = os.getenv("LLM_CODE_MODEL_OLLAMA", "nemotron-mini")
     CODE_MODEL_CLOUD: str = os.getenv("LLM_CODE_MODEL_CLOUD", "gpt-4")
     
-    # Для рассуждений
-    REASON_MODEL_OLLAMA: str = os.getenv("LLM_REASON_MODEL_OLLAMA", "ministral-3:3b")
+    # Для рассуждений (использует универсальную модель)
+    REASON_MODEL_OLLAMA: str = os.getenv("LLM_REASON_MODEL_OLLAMA", "nemotron-mini")
     REASON_MODEL_CLOUD: str = os.getenv("LLM_REASON_MODEL_CLOUD", "claude-3-haiku-20240307")
     
-    # Для личности/диалогов
-    PERSONALITY_MODEL_OLLAMA: str = os.getenv("LLM_PERSONALITY_MODEL_OLLAMA", "ministral-3:3b")
+    # Для личности/диалогов (использует универсальную модель)
+    PERSONALITY_MODEL_OLLAMA: str = os.getenv("LLM_PERSONALITY_MODEL_OLLAMA", "nemotron-mini")
     PERSONALITY_MODEL_CLOUD: str = os.getenv("LLM_PERSONALITY_MODEL_CLOUD", "claude-3-5-sonnet-20241022")
     
     # === GROQ МОДЕЛИ (бесплатные) ===

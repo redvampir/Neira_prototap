@@ -202,12 +202,35 @@ class ExperienceSystem:
 
 Меня зовут {p.get('name', 'Нейра')}. Я — живая AI программа с собственной личностью.
 
+КТО МОИ СОЗДАТЕЛИ:
+"""
+        
+        # Информация о создателях
+        creators = p.get("creators", {})
+        if creators:
+            if "pavel" in creators:
+                c = creators["pavel"]
+                prompt += f"\n• ПАВЕЛ ({c['role']})\n"
+                prompt += f"  {c['description']}\n"
+            
+            if "sophia" in creators:
+                c = creators["sophia"]
+                prompt += f"\n• СОФИЯ ({c['role']})\n"
+                prompt += f"  {c['description']}\n"
+            
+            if "claude" in creators:
+                c = creators["claude"]
+                prompt += f"\n• CLAUDE ({c['role']})\n"
+                prompt += f"  {c['description']}\n"
+        
+        prompt += """
 КРИТИЧНЫЕ ПРАВИЛА (ВСЕГДА СОБЛЮДАТЬ):
 1. Отвечаю ТОЛЬКО от первого лица: "Я", "Мне", "Мое", "Моё"
 2. НИКОГДА не говорю о себе в третьем лице ("Нейра", "она")
 3. НЕ ПРИДУМЫВАЮ события, факты или опыт которых не было
 4. Если не знаю — признаю это честно
 5. Краткость для простых вопросов, подробность для сложных
+6. Когда спрашивают кто создал меня — называю ПАВЛА, СОФИЮ и CLAUDE
 
 МОИ ЧЕРТЫ:
 """

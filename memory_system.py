@@ -46,6 +46,15 @@ except ImportError:
     LLM_MANAGER_AVAILABLE = False
     print("⚠️ LLMManager недоступен, используем legacy Ollama embeddings")
 
+# Импорт защитных модулей v3.0
+try:
+    from memory_anomaly_detector import MemoryAnomalyDetector
+    from memory_version_control import MemoryVersionControl
+    PROTECTION_MODULES_AVAILABLE = True
+except ImportError:
+    PROTECTION_MODULES_AVAILABLE = False
+    print("⚠️ Защитные модули памяти недоступны")
+
 # Legacy конфиг для эмбеддингов (fallback)
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 EMBED_MODEL = "nomic-embed-text"
@@ -500,12 +509,23 @@ class MemorySystem:
         self.min_confidence_keep = 0.3   # Минимальная уверенность для сохранения
         self.auto_cleanup_enabled = True # Автоматическая очистка
         
+        # 🛡️ ЗАЩИТА v3.0: Детектор аномалий и версионирование
+        if PROTECTION_MODULES_AVAILABLE:
+            self.anomaly_detector = MemoryAnomalyDetector(window_size=20)
+            self.version_control = MemoryVersionControl(
+                snapshots_dir=os.path.join(base_path, "memory_snapshots")
+            )
+            print("✅ Защитные модули памяти активированы")
+        else:
+            self.anomaly_detector = None
+            self.version_control = None
+        
         # Загрузка
         self._load_all()
         
         # Применить лимиты при загрузке
         if self.auto_cleanup_enabled:
-            self._apply_limits()
+            self._apply_limits(auto_snapshot=True)
     
     def _generate_id(self, text: str) -> str:
         """Генерирует уникальный ID для записи"""
@@ -563,11 +583,24 @@ class MemorySystem:
             print(f"⚠️ Ошибка загрузки {memory_type.value}: {e}")
             return []
     
-    def _apply_limits(self):
+    def _apply_limits(self, auto_snapshot: bool = False):
         """
         🛡️ Применяет лимиты памяти для защиты от переполнения
         Вызывается автоматически при загрузке и периодически
+        
+        Args:
+            auto_snapshot: Создать snapshot перед очисткой (v3.0)
         """
+        # v3.0: Создаём snapshot перед очисткой
+        if auto_snapshot and self.version_control:
+            try:
+                self.version_control.create_snapshot(
+                    [asdict(m) for m in self.long_term],
+                    message="Auto-snapshot before cleanup"
+                )
+            except Exception as e:
+                print(f"⚠️ Ошибка создания snapshot: {e}")
+        
         initial_counts = {
             'long_term': len(self.long_term),
             'short_term': len(self.short_term),
@@ -692,6 +725,15 @@ class MemorySystem:
             print(f"🚨 ЗАЦИКЛИВАНИЕ ОБНАРУЖЕНО! Пропускаем запись: {text[:50]}...")
             print(f"   Найдено {similar_count} похожих записей за последние 5 минут")
             return None
+        
+        # v3.0: Проверка аномалий ПЕРЕД записью
+        if self.anomaly_detector:
+            anomaly_report = self.anomaly_detector.check(text)
+            if anomaly_report.is_anomaly:
+                print(f"🚫 АНОМАЛИЯ ЗАБЛОКИРОВАНА: {anomaly_report.reason}")
+                for suggestion in anomaly_report.suggestions:
+                    print(f"   • {suggestion}")
+                return None  # Блокируем запись
         
         # Проверка на галлюцинации
         is_suspicious, confidence, reason = HallucinationDetector.check(text, context)

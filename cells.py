@@ -78,10 +78,10 @@ except ImportError:
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
-# МОДЕЛИ v0.5 — локальные + облачные
-MODEL_CODE = "qwen2.5:3b"        # Самая лёгкая локальная модель для кода/ответов
-MODEL_REASON = "qwen2.5:3b"      # Самая лёгкая модель рассуждений
-MODEL_PERSONALITY = "ministral-3:3b" # Используем ministral-3:3b до появления кастомной личности
+# МОДЕЛИ v0.9 — NVIDIA Nemotron Mini 9B (универсальная для всех задач)
+MODEL_CODE = "nemotron-mini"        # Кодогенерация и ответы
+MODEL_REASON = "nemotron-mini"      # Рассуждения и анализ
+MODEL_PERSONALITY = "nemotron-mini" # Личность Neira (9B параметров, 128K контекст)
 
 # Облачные модели (0 VRAM, удалённые вычисления)
 MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)

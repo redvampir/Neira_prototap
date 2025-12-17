@@ -292,12 +292,14 @@ class EvolutionManager:
         pattern = description.split()[:2]
         pattern = " ".join(pattern).lower() if len(pattern) >= 2 else description[:20].lower()
 
-        cell = self.cell_factory.create_cell(pattern, [])
+        result = self.cell_factory.create_cell(pattern, [])
 
-        if cell:
+        if result and result.get("success"):
+            cell = result["cell"]
             return f"✅ Клетка создана: {cell.cell_name}\nФайл: {cell.file_path}"
         else:
-            return "❌ Не удалось создать клетку"
+            error_msg = result.get("error", "Неизвестная ошибка") if result else "Не удалось создать клетку"
+            return f"❌ {error_msg}"
 
     def cmd_activate_cell(self, cell_name: str) -> str:
         """Активировать сгенерированную клетку"""

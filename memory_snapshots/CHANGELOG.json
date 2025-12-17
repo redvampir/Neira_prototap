@@ -1,0 +1,231 @@
+{
+  "created_at": "2025-12-16T06:24:39.617899",
+  "snapshots": [
+    {
+      "id": "aff7549a",
+      "timestamp": "20251216_062439",
+      "message": "Before consolidation: Долгосрочная память",
+      "stats": {
+        "total_memories": 107,
+        "avg_confidence": 0.0,
+        "by_category": {
+          "learned": 25,
+          "fact": 27,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 34,
+          "preference": 18
+        },
+        "by_validation": {
+          "unknown": 107
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_062439_aff7549a.json"
+    },
+    {
+      "id": "4be29342",
+      "timestamp": "20251216_062440",
+      "message": "Before consolidation: Краткосрочная память",
+      "stats": {
+        "total_memories": 10,
+        "avg_confidence": 0.29,
+        "by_category": {
+          "learned": 10
+        },
+        "by_validation": {
+          "pending": 10
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_062440_4be29342.json"
+    },
+    {
+      "id": "e2502e98",
+      "timestamp": "20251216_062529",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 107,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 25,
+          "fact": 27,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 34,
+          "preference": 18
+        },
+        "by_validation": {
+          "pending": 107
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_062529_e2502e98.json"
+    },
+    {
+      "id": "68e6ff05",
+      "timestamp": "20251216_062536",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 107,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 25,
+          "fact": 27,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 34,
+          "preference": 18
+        },
+        "by_validation": {
+          "pending": 107
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_062536_68e6ff05.json"
+    },
+    {
+      "id": "e20df365",
+      "timestamp": "20251216_062542",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 107,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 25,
+          "fact": 27,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 34,
+          "preference": 18
+        },
+        "by_validation": {
+          "pending": 107
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_062542_e20df365.json"
+    },
+    {
+      "id": "098639e6",
+      "timestamp": "20251216_063449",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 107,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 25,
+          "fact": 27,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 34,
+          "preference": 18
+        },
+        "by_validation": {
+          "pending": 107
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_063449_098639e6.json"
+    },
+    {
+      "id": "b32c46e7",
+      "timestamp": "20251216_065345",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 117,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 27,
+          "fact": 28,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 39,
+          "preference": 20
+        },
+        "by_validation": {
+          "pending": 117
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_065345_b32c46e7.json"
+    },
+    {
+      "id": "4036e640",
+      "timestamp": "20251216_065453",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 117,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 27,
+          "fact": 28,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 39,
+          "preference": 20
+        },
+        "by_validation": {
+          "pending": 117
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251216_065453_4036e640.json"
+    },
+    {
+      "id": "bbfa2db3",
+      "timestamp": "20251217_032211",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 149,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 33,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 50,
+          "preference": 25
+        },
+        "by_validation": {
+          "pending": 149
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251217_032211_bbfa2db3.json"
+    },
+    {
+      "id": "9a2cd5ab",
+      "timestamp": "20251217_033105",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 149,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 33,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 50,
+          "preference": 25
+        },
+        "by_validation": {
+          "pending": 149
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251217_033105_9a2cd5ab.json"
+    },
+    {
+      "id": "394bec06",
+      "timestamp": "20251217_053816",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 149,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 33,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 50,
+          "preference": 25
+        },
+        "by_validation": {
+          "pending": 149
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251217_053816_394bec06.json"
+    }
+  ]
+}
