@@ -118,6 +118,47 @@ class ModelManagerGetLoadedModelsTest(unittest.TestCase):
 
         self.assertEqual(loaded, ["alpha"])
 
+    @mock.patch("model_manager.requests.get")
+    def test_get_loaded_models_invalid_payload_structure_keeps_cache(self, mock_get):
+        mock_get.side_effect = [
+            _FakeResponse(json_data={"models": []}),
+            _FakeResponse(json_data={"models": [{"name": "ok"}]}),
+            _FakeResponse(json_data=["broken"]),
+        ]
+
+        manager = ModelManager(verbose=False)
+        manager.log = mock.MagicMock()
+
+        manager.get_loaded_models()
+        manager.log.reset_mock()
+        fallback = manager.get_loaded_models()
+
+        self.assertEqual(fallback, ["ok"])
+        manager.log.assert_called_once()
+        self.assertIn("Некорректный формат", manager.log.call_args[0][0])
+
+    @mock.patch("model_manager.requests.get")
+    def test_get_loaded_models_invalid_models_keeps_cache(self, mock_get):
+        mock_get.side_effect = [
+            _FakeResponse(json_data={"models": []}),
+            _FakeResponse(json_data={"models": [{"name": "ok"}]}),
+            _FakeResponse(json_data={"models": [
+                {"not_name": "beta"},
+                "broken",
+            ]}),
+        ]
+
+        manager = ModelManager(verbose=False)
+        manager.log = mock.MagicMock()
+
+        manager.get_loaded_models()
+        manager.log.reset_mock()
+        fallback = manager.get_loaded_models()
+
+        self.assertEqual(fallback, ["ok"])
+        manager.log.assert_called_once()
+        self.assertIn("некорректные элементы", manager.log.call_args[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

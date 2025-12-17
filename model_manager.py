@@ -243,7 +243,7 @@ class ModelManager:
                 return self.last_loaded_models
 
             try:
-                models_raw = resp.json().get("models", [])
+                payload = resp.json()
             except ValueError as json_error:
                 body_snippet = resp.text[:500]
                 self.log(
@@ -251,7 +251,21 @@ class ModelManager:
                 )
                 return self.last_loaded_models
 
+            if not isinstance(payload, dict) or "models" not in payload:
+                self.log(
+                    "⚠️ Некорректный формат ответа /ps: ожидается словарь с ключом 'models'"
+                )
+                return self.last_loaded_models
+
+            models_raw = payload.get("models", [])
             loaded_models = _sanitize_models(models_raw)
+
+            if models_raw and not loaded_models:
+                self.log(
+                    "⚠️ /ps вернул некорректные элементы, сохраняю предыдущее состояние"
+                )
+                return self.last_loaded_models
+
             self.last_loaded_models = loaded_models
             return loaded_models
         except requests.RequestException as exc:
