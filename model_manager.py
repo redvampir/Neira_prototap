@@ -90,23 +90,60 @@ class ModelManager:
 
     def _check_cloud_models(self) -> Dict[str, bool]:
         """Check which cloud models are available in Ollama"""
-        available = {
+        previous_state = getattr(self, "cloud_models_available", None)
+        available = previous_state.copy() if isinstance(previous_state, dict) else {
             "cloud_code": False,
             "cloud_universal": False,
-            "cloud_vision": False
+            "cloud_vision": False,
         }
-        try:
-            resp = requests.get(f"{OLLAMA_API}/tags", timeout=5)
-            models = resp.json().get("models", [])
-            model_names = [m.get("name", "") for m in models]
 
-            for key in ["cloud_code", "cloud_universal", "cloud_vision"]:
-                cloud_model = MODELS[key].name
-                available[key] = cloud_model in model_names or any(cloud_model in m for m in model_names)
+        attempts = 2
+        last_error: Optional[Exception] = None
 
-        except Exception as e:
-            self.log(f"⚠️ Failed to check cloud models: {e}")
+        for attempt in range(1, attempts + 1):
+            try:
+                resp = requests.get(f"{OLLAMA_API}/tags", timeout=3)
 
+                if resp.status_code != 200:
+                    self.log(
+                        "⚠️ Ollama /tags вернул ошибку "
+                        f"{resp.status_code}: тело='{resp.text}', заголовки={dict(resp.headers)}"
+                    )
+                    return {key: False for key in available}
+
+                try:
+                    models = resp.json().get("models", [])
+                except Exception as json_error:
+                    body_snippet = resp.text[:500]
+                    self.log(
+                        "⚠️ Ошибка разбора JSON /tags: "
+                        f"{json_error}; тело='{body_snippet}', заголовки={dict(resp.headers)}"
+                    )
+                    return available
+
+                model_names = [m.get("name", "") for m in models]
+
+                for key in ["cloud_code", "cloud_universal", "cloud_vision"]:
+                    cloud_model = MODELS[key].name
+                    available[key] = cloud_model in model_names or any(cloud_model in m for m in model_names)
+
+                return available
+
+            except requests.RequestException as exc:
+                last_error = exc
+                self.log(
+                    f"⚠️ Сетевая ошибка при проверке облачных моделей (попытка {attempt}/{attempts}): {exc}"
+                )
+                if attempt < attempts:
+                    time.sleep(0.5)
+                continue
+            except Exception as exc:
+                last_error = exc
+                self.log(f"⚠️ Неожиданная ошибка при проверке облачных моделей: {exc}")
+                return available
+
+        if last_error:
+            self.log(f"⚠️ Не удалось проверить облачные модели: {last_error}")
         return available
 
     def _current_base_vram(self) -> float:
