@@ -101,6 +101,15 @@ class WebCellLearnTopicTest(unittest.TestCase):
         self.assertEqual(reason.get("reason_code"), "parse_error")
         self.assertTrue(reason.get("reason_detail"))
 
+    def test_learn_topic_requests_error(self):
+        with mock.patch("web_cell.REQUESTS_AVAILABLE", True), \
+                mock.patch("web_cell.requests.post", side_effect=Exception("boom")):
+            facts, reason = self.cell.learn_topic("Тест")
+
+        self.assertEqual(facts, [])
+        self.assertEqual(reason.get("reason_code"), "requests_error")
+        self.assertIn("boom", reason.get("reason_detail", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
