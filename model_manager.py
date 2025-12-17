@@ -94,6 +94,7 @@ class ModelManager:
         self.cloud_models_available = self._check_cloud_models()
         self.loaded_loras: Dict[str, LoadedLoraState] = {}
         self.current_vram: float = 0.0
+        self.last_loaded_models: List[str] = []
 
     def log(self, message: str):
         if self.verbose:
@@ -221,10 +222,27 @@ class ModelManager:
         """Check which models are currently in VRAM"""
         try:
             resp = requests.get(f"{OLLAMA_API}/ps", timeout=5)
-            return [m["name"] for m in resp.json().get("models", [])]
+            if resp.status_code != 200:
+                self.log(
+                    f"⚠️ Ollama /ps вернул {resp.status_code}: тело='{resp.text}'"
+                )
+                return self.last_loaded_models
+
+            try:
+                models_raw = resp.json().get("models", [])
+            except ValueError as json_error:
+                body_snippet = resp.text[:500]
+                self.log(
+                    f"⚠️ Ошибка разбора JSON /ps: {json_error}; тело='{body_snippet}'"
+                )
+                return self.last_loaded_models
+
+            loaded_models = [m.get("name", "") for m in models_raw if isinstance(m, dict)]
+            self.last_loaded_models = loaded_models
+            return loaded_models
         except Exception as e:
             self.log(f"⚠️ Failed to check loaded models: {e}")
-            return []
+            return self.last_loaded_models
 
     def unload_model(self, model_name: str):
         """Unload model from VRAM"""
