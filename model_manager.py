@@ -6,7 +6,7 @@ Manages 3 local models + 1 Ollama cloud model for complex tasks
 import requests
 import time
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 
 OLLAMA_API = "http://localhost:11434/api"
@@ -38,6 +38,15 @@ class LoadedLoraState:
 
     info: LoraInfo
     last_used: float = field(default_factory=time.time)
+
+
+class CloudModelCheckError(RuntimeError):
+    """Специальная ошибка проверки доступности облачных моделей."""
+
+    def __init__(self, message: str, *, is_network: bool = False, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.is_network = is_network
+        self.status_code = status_code
 
 
 # Model registry
@@ -80,6 +89,8 @@ class ModelManager:
         self.current_model: Optional[str] = None
         self.switch_count = 0
         self.verbose = verbose
+        self.last_cloud_check: Optional[float] = None
+        self.last_cloud_error: Optional[CloudModelCheckError] = None
         self.cloud_models_available = self._check_cloud_models()
         self.loaded_loras: Dict[str, LoadedLoraState] = {}
         self.current_vram: float = 0.0
@@ -99,26 +110,35 @@ class ModelManager:
 
         attempts = 2
         last_error: Optional[Exception] = None
+        self.last_cloud_error = None
 
         for attempt in range(1, attempts + 1):
             try:
                 resp = requests.get(f"{OLLAMA_API}/tags", timeout=3)
 
                 if resp.status_code != 200:
-                    self.log(
-                        "⚠️ Ollama /tags вернул ошибку "
-                        f"{resp.status_code}: тело='{resp.text}', заголовки={dict(resp.headers)}"
+                    error = CloudModelCheckError(
+                        "⚠️ Ollama /tags вернул ошибку "+
+                        f"{resp.status_code}: тело='{resp.text}', заголовки={dict(resp.headers)}",
+                        status_code=resp.status_code,
                     )
+                    self.last_cloud_error = error
+                    self.log(str(error))
+                    self.last_cloud_check = time.time()
                     return {key: False for key in available}
 
                 try:
                     models = resp.json().get("models", [])
                 except Exception as json_error:
                     body_snippet = resp.text[:500]
-                    self.log(
+                    error = CloudModelCheckError(
                         "⚠️ Ошибка разбора JSON /tags: "
-                        f"{json_error}; тело='{body_snippet}', заголовки={dict(resp.headers)}"
+                        f"{json_error}; тело='{body_snippet}', заголовки={dict(resp.headers)}",
+                        status_code=resp.status_code,
                     )
+                    self.last_cloud_error = error
+                    self.log(str(error))
+                    self.last_cloud_check = time.time()
                     return available
 
                 model_names = [m.get("name", "") for m in models]
@@ -127,24 +147,54 @@ class ModelManager:
                     cloud_model = MODELS[key].name
                     available[key] = cloud_model in model_names or any(cloud_model in m for m in model_names)
 
+                self.last_cloud_check = time.time()
+                self.last_cloud_error = None
                 return available
 
             except requests.RequestException as exc:
                 last_error = exc
-                self.log(
-                    f"⚠️ Сетевая ошибка при проверке облачных моделей (попытка {attempt}/{attempts}): {exc}"
+                error = CloudModelCheckError(
+                    f"⚠️ Сетевая ошибка при проверке облачных моделей (попытка {attempt}/{attempts}): {exc}",
+                    is_network=True,
                 )
+                self.last_cloud_error = error
+                self.log(str(error))
                 if attempt < attempts:
                     time.sleep(0.5)
                 continue
             except Exception as exc:
                 last_error = exc
-                self.log(f"⚠️ Неожиданная ошибка при проверке облачных моделей: {exc}")
+                error = CloudModelCheckError(
+                    f"⚠️ Неожиданная ошибка при проверке облачных моделей: {exc}"
+                )
+                self.last_cloud_error = error
+                self.log(str(error))
+                self.last_cloud_check = time.time()
                 return available
 
         if last_error:
-            self.log(f"⚠️ Не удалось проверить облачные модели: {last_error}")
+            error = CloudModelCheckError(
+                f"⚠️ Не удалось проверить облачные модели: {last_error}",
+                is_network=isinstance(last_error, requests.RequestException),
+            )
+            self.last_cloud_error = error
+            self.log(str(error))
+        self.last_cloud_check = time.time()
         return available
+
+    def refresh_cloud_models(self, *, force: bool = False) -> Dict[str, bool]:
+        """Обновить состояние доступности облачных моделей с троттлингом."""
+        if self.last_cloud_check and not force:
+            elapsed = time.time() - self.last_cloud_check
+            if elapsed < 30:
+                return self.cloud_models_available
+
+        self.cloud_models_available = self._check_cloud_models()
+        return self.cloud_models_available
+
+    def get_cloud_status(self) -> Tuple[Dict[str, bool], Optional[CloudModelCheckError]]:
+        """Получить флаги доступности и последнюю ошибку проверки."""
+        return self.cloud_models_available, self.last_cloud_error
 
     def _current_base_vram(self) -> float:
         """Оценка VRAM, занимаемой базовой моделью."""
@@ -353,8 +403,10 @@ class ModelManager:
 
         # Cloud model - also managed by Ollama, but no VRAM constraints
         if model_info.type == "cloud":
+            self.refresh_cloud_models()
             if not self.cloud_models_available.get(target_key, False):
-                self.log(f"⚠️ Cloud model '{target_key}' not available in Ollama")
+                reason = f" Причина: {self.last_cloud_error}" if self.last_cloud_error else ""
+                self.log(f"⚠️ Cloud model '{target_key}' not available in Ollama.{reason}")
                 return False
             # Don't unload local models for cloud - it uses remote compute
             self.current_model = target_key
