@@ -1,6 +1,8 @@
 import unittest
 from unittest import mock
 
+import requests
+
 from model_manager import ModelManager
 
 
@@ -77,6 +79,44 @@ class ModelManagerGetLoadedModelsTest(unittest.TestCase):
         self.assertEqual(manager.last_loaded_models, ["ok"])
         manager.log.assert_called_once()
         self.assertIn("Ошибка разбора JSON", manager.log.call_args[0][0])
+
+    @mock.patch("model_manager.requests.get")
+    def test_get_loaded_models_network_error_uses_cache(self, mock_get):
+        mock_get.side_effect = [
+            _FakeResponse(json_data={"models": []}),
+            _FakeResponse(json_data={"models": [{"name": "ok"}]}),
+            requests.RequestException("timeout"),
+        ]
+
+        manager = ModelManager(verbose=False)
+        manager.log = mock.MagicMock()
+
+        manager.get_loaded_models()
+        manager.log.reset_mock()
+        fallback = manager.get_loaded_models()
+
+        self.assertEqual(fallback, ["ok"])
+        manager.log.assert_called_once()
+        self.assertIn("Сетевая ошибка", manager.log.call_args[0][0])
+
+    @mock.patch("model_manager.requests.get")
+    def test_get_loaded_models_ignores_invalid_entries(self, mock_get):
+        mock_get.side_effect = [
+            _FakeResponse(json_data={"models": []}),
+            _FakeResponse(json_data={"models": [
+                {"name": "alpha"},
+                {"name": ""},
+                {"name": None},
+                "broken",
+                {"not_name": "beta"},
+            ]}),
+        ]
+
+        manager = ModelManager(verbose=False)
+
+        loaded = manager.get_loaded_models()
+
+        self.assertEqual(loaded, ["alpha"])
 
 
 if __name__ == "__main__":

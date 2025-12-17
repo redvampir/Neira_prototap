@@ -220,11 +220,25 @@ class ModelManager:
 
     def get_loaded_models(self) -> list:
         """Check which models are currently in VRAM"""
+
+        def _sanitize_models(raw: Any) -> List[str]:
+            if not isinstance(raw, list):
+                return []
+            names: List[str] = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name")
+                if isinstance(name, str) and name:
+                    names.append(name)
+            return names
+
         try:
             resp = requests.get(f"{OLLAMA_API}/ps", timeout=5)
             if resp.status_code != 200:
+                body_snippet = resp.text[:500]
                 self.log(
-                    f"⚠️ Ollama /ps вернул {resp.status_code}: тело='{resp.text}'"
+                    f"⚠️ Ollama /ps вернул {resp.status_code}: тело='{body_snippet}'"
                 )
                 return self.last_loaded_models
 
@@ -237,9 +251,12 @@ class ModelManager:
                 )
                 return self.last_loaded_models
 
-            loaded_models = [m.get("name", "") for m in models_raw if isinstance(m, dict)]
+            loaded_models = _sanitize_models(models_raw)
             self.last_loaded_models = loaded_models
             return loaded_models
+        except requests.RequestException as exc:
+            self.log(f"⚠️ Сетевая ошибка при проверке /ps: {exc}")
+            return self.last_loaded_models
         except Exception as e:
             self.log(f"⚠️ Failed to check loaded models: {e}")
             return self.last_loaded_models
