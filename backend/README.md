@@ -1,30 +1,36 @@
-# Neira Backend API v0.5
+# Neira Backend API
 
 REST API + WebSocket сервер для Neira AI Assistant.
+
+Backend реализован на **Starlette (ASGI)** и запускается через **Uvicorn**.
+Это сделано специально, чтобы не зависеть от Pydantic/FastAPI в окружениях,
+где пакеты с бинарными расширениями могут не импортироваться (например, Python 3.14).
 
 ## Установка
 
 ```bash
 # Установить зависимости
 pip install -r requirements.txt
-
-# Или через parent requirements
-cd ..
-pip install requests numpy duckduckgo-search
-cd backend
-pip install -r requirements.txt
 ```
 
 ## Запуск
 
-### Разработка (с auto-reload)
+Важно: запускать нужно **из корня репозитория**, чтобы работали импорты:
+
 ```bash
-python api.py
+uvicorn backend.api:app --host 127.0.0.1 --port 8000
 ```
 
-### Продакшен
+Если порт `8000` занят (часто на Windows), используйте `8001`:
+
 ```bash
-uvicorn api:app --host 0.0.0.0 --port 8000
+uvicorn backend.api:app --host 127.0.0.1 --port 8001
+```
+
+Быстрый рестарт Desktop UI на `8001`:
+
+```powershell
+./restart_desktop_8001.ps1
 ```
 
 ### Docker (будущее)
@@ -33,8 +39,7 @@ docker-compose up
 ```
 
 После запуска доступно:
-- **API Docs**: http://localhost:8000/docs
-- **Alternative Docs**: http://localhost:8000/redoc
+- **REST API**: http://localhost:8000/api/...
 - **WebSocket**: ws://localhost:8000/ws/chat
 
 ---

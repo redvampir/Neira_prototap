@@ -1,17 +1,17 @@
-"""
-Nervous System v1.0 — Система метрик, мониторинга и алертов Neira
+"""Nervous System v1.0 — Система метрик, мониторинга и алертов Neira.
 
-Отслеживает:
-- Здоровье всех систем (CPU, RAM, VRAM, диск)
-- Ошибки и их частоту
-- Производительность ответов
-- Аномалии в поведении
+Важно для Windows/Python 3.14:
+`psutil` (и другие пакеты с бинарными расширениями) могут падать при импорте.
+Поэтому psutil здесь **не импортируется по умолчанию**.
+Если у вас совместимое окружение и psutil нужен — включите:
+    NEIRA_USE_PSUTIL=true
 """
 
 import time
-import psutil
+import os
 import threading
 import json
+import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
@@ -99,6 +99,19 @@ class MetricsCollector:
     
     def __init__(self):
         self.gpu_available = self._check_gpu()
+        # psutil опционален и по умолчанию выключен (см. docstring).
+        self._use_psutil = os.getenv("NEIRA_USE_PSUTIL", "false").lower() == "true"
+        self._psutil = None
+        if self._use_psutil:
+            # Важно: импортируем ТОЛЬКО если явно включили. Иначе на некоторых
+            # окружениях (например Python 3.14) возможен краш интерпретатора.
+            try:
+                import psutil as _psutil  # type: ignore
+
+                self._psutil = _psutil
+            except Exception as e:
+                self._psutil = None
+                logger.warning("psutil включён, но недоступен: %s", e)
     
     def _check_gpu(self) -> bool:
         """Проверка доступности GPU"""
@@ -114,9 +127,11 @@ class MetricsCollector:
     
     def collect_cpu(self) -> Metric:
         """Загрузка CPU"""
+        if self._psutil is None:
+            return Metric(name="cpu_usage", value=0.0, unit="%")
         return Metric(
             name="cpu_usage",
-            value=psutil.cpu_percent(interval=0.1),
+            value=self._psutil.cpu_percent(interval=0.1),
             unit="%",
             threshold_warning=80.0,
             threshold_critical=95.0
@@ -124,7 +139,9 @@ class MetricsCollector:
     
     def collect_ram(self) -> Metric:
         """Использование RAM"""
-        mem = psutil.virtual_memory()
+        if self._psutil is None:
+            return Metric(name="ram_usage", value=0.0, unit="%")
+        mem = self._psutil.virtual_memory()
         return Metric(
             name="ram_usage",
             value=mem.percent,
@@ -135,7 +152,9 @@ class MetricsCollector:
     
     def collect_ram_available(self) -> Metric:
         """Доступная RAM в GB"""
-        mem = psutil.virtual_memory()
+        if self._psutil is None:
+            return Metric(name="ram_available", value=0.0, unit="GB")
+        mem = self._psutil.virtual_memory()
         return Metric(
             name="ram_available",
             value=round(mem.available / (1024**3), 2),
@@ -169,10 +188,14 @@ class MetricsCollector:
     
     def collect_disk(self) -> Metric:
         """Использование диска"""
-        disk = psutil.disk_usage('/')
+        try:
+            total, used, free = shutil.disk_usage(os.getcwd())
+            percent = (used / total) * 100 if total else 0.0
+        except Exception:
+            percent = 0.0
         return Metric(
             name="disk_usage",
-            value=disk.percent,
+            value=round(percent, 2),
             unit="%",
             threshold_warning=85.0,
             threshold_critical=95.0

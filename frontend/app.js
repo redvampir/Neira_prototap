@@ -15,7 +15,7 @@ const CONFIG = {
 let ws = null;
 let isProcessing = false;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 20;  // Увеличено для большей надёжности
 
 // DOM elements
 const elements = {
@@ -72,6 +72,13 @@ function connectWebSocket() {
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
+            
+            // Обработка keepalive ping от сервера
+            if (data.type === 'ping') {
+                // Просто игнорируем, соединение живо
+                return;
+            }
+            
             handleMessage(data);
         };
 
@@ -84,15 +91,17 @@ function connectWebSocket() {
             console.log('WebSocket disconnected');
             updateConnectionStatus(false);
 
-            // Attempt reconnection
+            // Attempt reconnection with exponential backoff
             if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000); // max 10s
                 setTimeout(() => {
                     console.log(`Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
                     connectWebSocket();
-                }, 2000 * reconnectAttempts);
+                }, delay);
             } else {
-                addMessage('system', 'Не удалось подключиться к серверу. Проверьте, что backend запущен на http://localhost:8000');
+                const port = CONFIG.WS_URL.includes('8001') ? '8001' : '8000';
+                addMessage('system', `Не удалось подключиться к серверу. Проверьте, что backend запущен на 127.0.0.1:${port}`);
             }
         };
     } catch (error) {

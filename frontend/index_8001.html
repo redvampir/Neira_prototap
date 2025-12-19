@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neira AI (8001)</title>
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Переопределяем адрес backend, если порт 8000 занят (например Apache).
+    window.NEIRA_API_URL = 'http://127.0.0.1:8001/api';
+    window.NEIRA_WS_URL = 'ws://127.0.0.1:8001/ws/chat';
+  </script>
+</head>
+<body>
+  <!-- Используем тот же DOM, что и в index.html -->
+  <div class="container">
+    <header class="header">
+      <h1>🧠 Neira AI</h1>
+      <div class="header-controls">
+        <button class="stats-toggle" id="statsToggle" title="Показать статистику">📊</button>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-indicator" id="statusIndicator"></span>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <div class="chat-section">
+        <div class="chat-container">
+          <div class="messages" id="messages">
+            <div class="message system">
+              <div class="message-content">
+                Привет! Я Neira. Backend запущен на <b>127.0.0.1:8001</b>.
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-indicator" id="stageIndicator" style="display: none;">
+            <div class="stage-icon">⚙️</div>
+            <div class="stage-text" id="stageText"></div>
+          </div>
+
+          <div class="input-container">
+            <textarea id="userInput" placeholder="Введите сообщение..." rows="3"></textarea>
+            <button id="sendButton" class="send-button">
+              <span>Отправить</span>
+              <span class="shortcut">⏎</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="stats-sidebar">
+        <div class="stats-header">
+          <h2>Статистика</h2>
+          <button class="refresh-button" id="refreshStats">🔄</button>
+        </div>
+        <div class="stats-content">
+          <div class="stat-group">
+            <h3>Модель</h3>
+            <div class="stat-item"><span>Current:</span> <span id="currentModel">-</span></div>
+            <div class="stat-item"><span>Switches:</span> <span id="modelSwitches">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Память</h3>
+            <div class="stat-item"><span>Total:</span> <span id="memoryTotal">-</span></div>
+            <div class="stat-item"><span>Context:</span> <span id="memoryContext">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Опыт</h3>
+            <div class="stat-item"><span>Total:</span> <span id="expTotal">-</span></div>
+            <div class="stat-item"><span>Score:</span> <span id="expScore">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Код/Причина/Личность</h3>
+            <div class="stat-item"><span>Code:</span> <span id="modelCode">-</span></div>
+            <div class="stat-item"><span>Reason:</span> <span id="modelReason">-</span></div>
+            <div class="stat-item"><span>Personality:</span> <span id="modelPersonality">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Cloud</h3>
+            <div class="stat-item"><span>Code:</span> <span id="cloudCode">-</span></div>
+            <div class="stat-item"><span>Universal:</span> <span id="cloudUniversal">-</span></div>
+            <div class="stat-item"><span>Vision:</span> <span id="cloudVision">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>VRAM</h3>
+            <div class="stat-item"><span>Usage:</span> <span id="vramUsage">-</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

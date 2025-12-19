@@ -30,7 +30,14 @@ ROADMAP v2.2:
 
 import json
 import os
-import numpy as np
+import math
+
+try:
+    import numpy as np  # type: ignore
+    _NUMPY_AVAILABLE = True
+except Exception:
+    np = None  # type: ignore
+    _NUMPY_AVAILABLE = False
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict, field
@@ -229,11 +236,21 @@ class SemanticSearch:
         """Косинусное сходство между векторами"""
         if not a or not b:
             return 0.0
-        a_np = np.array(a)
-        b_np = np.array(b)
-        dot = np.dot(a_np, b_np)
-        norm = np.linalg.norm(a_np) * np.linalg.norm(b_np)
-        return float(dot / (norm + 1e-8))
+        if _NUMPY_AVAILABLE and np is not None:
+            a_np = np.array(a)
+            b_np = np.array(b)
+            dot = np.dot(a_np, b_np)
+            norm = np.linalg.norm(a_np) * np.linalg.norm(b_np)
+            return float(dot / (norm + 1e-8))
+
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += float(x) * float(y)
+            norm_a += float(x) * float(x)
+            norm_b += float(y) * float(y)
+        return float(dot / (math.sqrt(norm_a) * math.sqrt(norm_b) + 1e-8))
     
     @classmethod
     def search(cls, query: str, entries: List['MemoryEntry'], 

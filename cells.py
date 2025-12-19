@@ -21,7 +21,14 @@ import time
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
-import numpy as np
+import math
+
+try:
+    import numpy as np  # type: ignore
+    _NUMPY_AVAILABLE = True
+except Exception:
+    np = None  # type: ignore
+    _NUMPY_AVAILABLE = False
 
 try:
     from model_layers import ModelLayersRegistry
@@ -234,9 +241,19 @@ class MemoryCell:
         """Косинусное сходство между векторами"""
         if not a or not b:
             return 0.0
-        a_np = np.array(a)
-        b_np = np.array(b)
-        return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np) + 1e-8))
+        if _NUMPY_AVAILABLE and np is not None:
+            a_np = np.array(a)
+            b_np = np.array(b)
+            return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np) + 1e-8))
+
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += float(x) * float(y)
+            norm_a += float(x) * float(x)
+            norm_b += float(y) * float(y)
+        return float(dot / (math.sqrt(norm_a) * math.sqrt(norm_b) + 1e-8))
     
     def remember(self, text: str, importance: float = 0.5, 
                  category: str = "general", source: str = "conversation"):

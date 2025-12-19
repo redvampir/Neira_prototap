@@ -5,21 +5,24 @@ Claude играет против Нейры, комментируя ходы!
 """
 
 import random
-import ollama
+import requests
 from tic_tac_toe_cell import TicTacToeCell
 
 def ask_neira(prompt: str) -> str:
     """Спросить Нейру"""
     try:
-        response = ollama.chat(
-            model="ministral-3:3b",
-            messages=[{
-                "role": "user",
-                "content": prompt
-            }],
-            options={"temperature": 0.8}
+        response = requests.post(
+            "http://127.0.0.1:11434/api/generate",
+            json={
+                "model": "ministral-3:3b",
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.8},
+            },
+            timeout=180,
         )
-        return response["message"]["content"]
+        response.raise_for_status()
+        return (response.json().get("response") or "").strip()
     except Exception as e:
         return f"*молчит* ({e})"
 

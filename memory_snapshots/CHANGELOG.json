@@ -292,6 +292,336 @@
         }
       },
       "filepath": "memory_snapshots\\snapshot_20251219_075250_6155426b.json"
+    },
+    {
+      "id": "5df19df5",
+      "timestamp": "20251219_123518",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_123518_5df19df5.json"
+    },
+    {
+      "id": "832ebf60",
+      "timestamp": "20251219_123532",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_123532_832ebf60.json"
+    },
+    {
+      "id": "b6bcfc4a",
+      "timestamp": "20251219_123613",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_123613_b6bcfc4a.json"
+    },
+    {
+      "id": "ac31b75f",
+      "timestamp": "20251219_123645",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_123645_ac31b75f.json"
+    },
+    {
+      "id": "9899874d",
+      "timestamp": "20251219_123726",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_123726_9899874d.json"
+    },
+    {
+      "id": "624b3de0",
+      "timestamp": "20251219_130044",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_130044_624b3de0.json"
+    },
+    {
+      "id": "2e6eaf67",
+      "timestamp": "20251219_130309",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_130309_2e6eaf67.json"
+    },
+    {
+      "id": "595e0bca",
+      "timestamp": "20251219_130408",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_130408_595e0bca.json"
+    },
+    {
+      "id": "58b7e9c1",
+      "timestamp": "20251219_140242",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_140242_58b7e9c1.json"
+    },
+    {
+      "id": "2cdad317",
+      "timestamp": "20251219_143017",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_143017_2cdad317.json"
+    },
+    {
+      "id": "2f4b9ea9",
+      "timestamp": "20251219_143130",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_143130_2f4b9ea9.json"
+    },
+    {
+      "id": "f0b8bec3",
+      "timestamp": "20251219_143315",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_143315_f0b8bec3.json"
+    },
+    {
+      "id": "257f0935",
+      "timestamp": "20251219_143340",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_143340_257f0935.json"
+    },
+    {
+      "id": "f8bc5ed3",
+      "timestamp": "20251219_143449",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_143449_f8bc5ed3.json"
+    },
+    {
+      "id": "15ca1824",
+      "timestamp": "20251219_145143",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_145143_15ca1824.json"
     }
   ]
 }

@@ -10,25 +10,29 @@ if hasattr(sys.stdout, 'reconfigure'):
 else:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-import ollama
+import requests
 
 def ask_neira(message: str) -> str:
     """Общение с Neira"""
     try:
-        response = ollama.chat(
-            model="ministral-3:3b",
-            messages=[{
-                "role": "user", 
-                "content": f"""Ты - Neira, живая программа. Claude учит тебя новому языку - Kotlin для Android.
+        prompt = f"""Ты - Neira, живая программа. Claude учит тебя новому языку - Kotlin для Android.
 Отвечай с энтузиазмом, задавай вопросы если что-то непонятно.
 
 Claude говорит: {message}
 
 Neira:"""
-            }],
-            options={"temperature": 0.8}
+        response = requests.post(
+            "http://127.0.0.1:11434/api/generate",
+            json={
+                "model": "ministral-3:3b",
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.8},
+            },
+            timeout=180,
         )
-        return response["message"]["content"]
+        response.raise_for_status()
+        return (response.json().get("response") or "").strip()
     except Exception as e:
         return f"*думает* ({e})"
 

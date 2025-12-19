@@ -8,14 +8,20 @@
 
 1. **Запустить backend:**
    ```bash
-   cd ../backend
-   python api.py
+   # запускать из корня репозитория
+   uvicorn backend.api:app --host 127.0.0.1 --port 8000
    ```
    Backend будет доступен на `http://localhost:8000`
+
+   Если порт `8000` занят:
+   ```bash
+   uvicorn backend.api:app --host 127.0.0.1 --port 8001
+   ```
 
 2. **Открыть frontend:**
    ```bash
    # Просто откройте index.html в браузере
+   # (или index_8001.html, если backend запущен на 8001)
    open index.html
    # Или используйте простой HTTP сервер
    python -m http.server 3000

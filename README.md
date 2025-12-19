@@ -450,13 +450,15 @@ ollama pull llava:7b
 - [x] **MemorySystem v2.2** — семантический поиск, decay, противоречия
 
 ### Реализовано в v0.6 ✅
-- [x] **Desktop UI для Neira** — Web UI с FastAPI backend
+- [x] **Desktop UI для Neira** — Web UI с ASGI backend (Starlette + Uvicorn)
   - ✅ Backend API с REST endpoints и WebSocket (`backend/`)
   - ✅ Simple HTML frontend для развёртывания на Vercel/Netlify (`frontend/`)
   - ✅ Real-time стриминг через WebSocket
   - ✅ Панель статистики моделей и VRAM
   - ✅ Тёмная тема, адаптивный дизайн
+  - ✅ Keepalive и автореконнект для стабильности
   - 📚 Документация: `backend/README.md`, `frontend/README.md`
+  - 🔧 Устранение проблем: [DESKTOP_UI_TROUBLESHOOTING.md](DESKTOP_UI_TROUBLESHOOTING.md)
 
 ### Нервная система — улучшения
 - [ ] **Предиктивные алерты** — предсказание проблем по трендам

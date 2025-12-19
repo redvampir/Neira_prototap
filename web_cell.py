@@ -38,7 +38,14 @@ class WebSearchCell(Cell):
     
     def __init__(self, memory: Optional[MemoryCell] = None):
         super().__init__(memory)
-        self.ddgs = DDGS() if DDGS_AVAILABLE else None
+        self.ddgs = None
+        if DDGS_AVAILABLE:
+            try:
+                # DDGS может падать на импорте зависимостей (например lxml).
+                self.ddgs = DDGS()
+            except Exception as e:
+                self.ddgs = None
+                print(f"⚠️ WebSearchCell: DDGS недоступен ({e})")
     
     def search(self, query: str, max_results: int = 5) -> List[SearchResult]:
         """Поиск в DuckDuckGo"""

@@ -1,22 +1,32 @@
-"""
-Neira Backend API v0.6
-FastAPI server with REST endpoints, WebSocket support and optional auth
+"""Neira Backend API.
+
+Причина: FastAPI требует Pydantic, а в текущем окружении Python 3.14
+у Pydantic (и v1, и v2) есть несовместимости (v2 требует бинарный
+`pydantic-core`, v1 ломается на новых изменениях typing).
+
+Чтобы Desktop UI стабильно запускался, этот backend реализован на Starlette
+(ASGI), без Pydantic.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel
-from typing import Optional, List
-import json
+from __future__ import annotations
+
 import asyncio
+import base64
+import json
 import os
 import secrets
 import hashlib
 from datetime import datetime
+from typing import Any, Dict, Optional
 
-from neira_wrapper import NeiraWrapper, StreamChunk
+from starlette.applications import Starlette
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket, WebSocketDisconnect
+
+from .neira_wrapper import NeiraWrapper
 
 # === ЗАЩИЩЁННЫЙ ПРОФИЛЬ АДМИНИСТРАТОРА ===
 # Захардкожен для защиты от несанкционированного доступа
@@ -38,370 +48,333 @@ AUTH_ENABLED = os.getenv("NEIRA_AUTH_ENABLED", "false").lower() == "true"
 AUTH_USERNAME = os.getenv("NEIRA_USERNAME", "neira")
 AUTH_PASSWORD = os.getenv("NEIRA_PASSWORD", "")  # Пустой = отключено
 
-security = HTTPBasic()
 
-
-def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
-    """Проверка Basic Auth с приоритетом захардкоженного админа"""
-    if not AUTH_ENABLED:
-        return {"user": "anonymous", "is_admin": False}
-    
-    # Сначала проверяем захардкоженного админа
-    if _verify_admin(credentials.username, credentials.password):
-        return {"user": _ADMIN_LOGIN, "is_admin": True}
-    
-    # Затем проверяем обычные учётные данные
-    if AUTH_PASSWORD:
-        correct_username = secrets.compare_digest(credentials.username, AUTH_USERNAME)
-        correct_password = secrets.compare_digest(credentials.password, AUTH_PASSWORD)
-        
-        if correct_username and correct_password:
-            return {"user": credentials.username, "is_admin": False}
-    
-    raise HTTPException(
+def _unauthorized() -> Response:
+    return JSONResponse(
+        {"detail": "Неверные учётные данные"},
         status_code=401,
-        detail="Неверные учётные данные",
         headers={"WWW-Authenticate": "Basic"},
     )
 
 
-def optional_auth(authorization: Optional[str] = Header(None)):
-    """Опциональная проверка (для открытых endpoints)"""
-    if not AUTH_ENABLED or not AUTH_PASSWORD:
-        return True
-    # Для endpoints где auth опционален
-    return True
+def _parse_basic_auth(authorization_header: Optional[str]) -> Optional[tuple[str, str]]:
+    if not authorization_header:
+        return None
+    if not authorization_header.startswith("Basic "):
+        return None
+    token = authorization_header[len("Basic ") :].strip()
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+    except Exception:
+        return None
+    if ":" not in decoded:
+        return None
+    username, password = decoded.split(":", 1)
+    return username, password
 
 
-# === FastAPI App ===
-app = FastAPI(
-    title="Neira API",
-    description="Backend API for Neira AI Assistant (v0.6 with remote access)",
-    version="0.6.0"
-)
+def verify_credentials_from_headers(headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """Проверка Basic Auth.
 
-# CORS для frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # В продакшене ограничить до конкретных доменов
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    Возвращает payload пользователя при успехе, иначе None.
+    """
+    if not AUTH_ENABLED:
+        return {"user": "anonymous", "is_admin": False}
 
-# Глобальный экземпляр Neira
+    creds = _parse_basic_auth(headers.get("authorization"))
+    if not creds:
+        return None
+    username, password = creds
+
+    # Сначала проверяем захардкоженного админа
+    if _verify_admin(username, password):
+        return {"user": _ADMIN_LOGIN, "is_admin": True}
+
+    if AUTH_PASSWORD:
+        correct_username = secrets.compare_digest(username, AUTH_USERNAME)
+        correct_password = secrets.compare_digest(password, AUTH_PASSWORD)
+        if correct_username and correct_password:
+            return {"user": username, "is_admin": False}
+
+    return None
+
+
 neira_wrapper = NeiraWrapper(verbose=False)
 
-# === Models ===
-class ChatRequest(BaseModel):
-    message: str
-    stream: bool = False
+
+async def root(request: Request) -> Response:
+    return JSONResponse(
+        {
+            "status": "ok",
+            "service": "Neira API",
+            "version": "0.6.0",
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
 
-class ChatResponse(BaseModel):
-    response: str
-    timestamp: str
-    model: Optional[str] = None
-
-
-class CommandRequest(BaseModel):
-    command: str
-    args: Optional[List[str]] = []
-
-
-# === REST Endpoints ===
-
-@app.get("/")
-async def root():
-    """Health check"""
-    return {
-        "status": "ok",
-        "service": "Neira API",
-        "version": "0.5.0",
-        "timestamp": datetime.now().isoformat()
-    }
-
-
-@app.get("/api/health")
-async def health():
-    """Detailed health check"""
+async def health(request: Request) -> Response:
     stats = neira_wrapper.get_stats()
-    return {
-        "alive": True,
-        "status": "healthy",
-        "is_processing": stats.get("is_processing", False),
-        "models_ready": stats.get("models", {}),
-        "components": {
-            "memory": True,
-            "ollama": True,
-            "experience": True
-        },
-        "uptime": 0,  # TODO: вычислить
-        "errors": [],
-        "timestamp": datetime.now().isoformat()
-    }
+    return JSONResponse(
+        {
+            "alive": True,
+            "status": "healthy",
+            "is_processing": stats.get("is_processing", False),
+            "models_ready": stats.get("models", {}),
+            "components": {"memory": True, "ollama": True, "experience": True},
+            "uptime": 0,
+            "errors": [],
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
 
-@app.get("/api/status")
-async def status():
-    """Neira status for mobile app"""
+async def status(request: Request) -> Response:
     stats = neira_wrapper.get_stats()
     models = stats.get("models", {})
     active_models = [k for k, v in models.items() if v]
-    
-    # Получаем количество записей в памяти
+
     memory_count = 0
     try:
         memory = neira_wrapper.neira.memory if neira_wrapper.neira else None
-        if memory and hasattr(memory, 'memories'):
+        if memory and hasattr(memory, "memories"):
             memory_count = len(memory.memories)
-    except:
+    except Exception:
         pass
-    
-    return {
-        "online": True,
-        "version": "0.8",
-        "mood": "curious",
-        "memory_count": memory_count,
-        # Дополнительно для совместимости
-        "isOnline": True,
-        "lastSeen": datetime.now().timestamp() * 1000,
-        "memoryUsage": memory_count / 100 if memory_count < 100 else 1.0,
-        "activeModels": active_models
-    }
+
+    return JSONResponse(
+        {
+            "online": True,
+            "version": "0.8",
+            "mood": "curious",
+            "memory_count": memory_count,
+            "isOnline": True,
+            "lastSeen": datetime.now().timestamp() * 1000,
+            "memoryUsage": memory_count / 100 if memory_count < 100 else 1.0,
+            "activeModels": active_models,
+        }
+    )
 
 
-@app.get("/api/curiosity")
-async def curiosity():
-    """Get curiosity question from Neira"""
+async def curiosity(request: Request) -> Response:
     try:
-        # Попробуем получить вопрос от CuriosityCell
         from cells import maybe_ask_question, CURIOSITY_AVAILABLE
+
         if CURIOSITY_AVAILABLE:
             question = maybe_ask_question("мобильный пользователь", "проверка связи")
             if question:
-                return {"question": question}
-        return {"question": None}
-    except:
-        return {"question": None}
+                return JSONResponse({"question": question})
+        return JSONResponse({"question": None})
+    except Exception:
+        return JSONResponse({"question": None})
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """
-    Process chat message (non-streaming)
-
-    For streaming, use WebSocket at /ws/chat
-    """
+async def chat(request: Request) -> Response:
     try:
-        response = await neira_wrapper.process(request.message)
-        return ChatResponse(
-            response=response,
-            timestamp=datetime.now().isoformat(),
-            model=neira_wrapper.neira.model_manager.current_model
-                  if neira_wrapper.neira.model_manager else None
+        payload = await request.json()
+        message = (payload.get("message") or "").strip()
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    if not message:
+        return JSONResponse({"detail": "Empty message"}, status_code=400)
+
+    try:
+        response_text = await neira_wrapper.process(message)
+        model = None
+        try:
+            if neira_wrapper.neira and neira_wrapper.neira.model_manager:
+                model = neira_wrapper.neira.model_manager.current_model
+        except Exception:
+            model = None
+
+        return JSONResponse(
+            {
+                "response": response_text,
+                "timestamp": datetime.now().isoformat(),
+                "model": model,
+            }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse({"detail": str(e)}, status_code=500)
 
 
-@app.get("/api/stats")
-async def get_stats():
-    """Get system statistics"""
-    return neira_wrapper.get_stats()
+async def get_stats(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.get_stats())
 
 
-@app.get("/api/memory")
-async def get_memory(limit: int = 10):
-    """
-    Get recent memory entries
-
-    Args:
-        limit: Number of recent entries (default 10)
-    """
-    return neira_wrapper.get_memory(limit=limit)
+async def get_memory(request: Request) -> Response:
+    try:
+        limit = int(request.query_params.get("limit", "10"))
+    except ValueError:
+        return JSONResponse({"detail": "Invalid limit"}, status_code=400)
+    return JSONResponse(neira_wrapper.get_memory(limit=limit))
 
 
-@app.get("/api/experience")
-async def get_experience():
-    """Get experience and personality data"""
-    return neira_wrapper.get_experience()
+async def get_experience(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.get_experience())
 
 
-@app.post("/api/memory/clear")
-async def clear_memory():
-    """Clear all memory"""
-    return neira_wrapper.clear_memory()
+async def clear_memory(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.clear_memory())
 
 
 # === Самосознание и Органы (v0.6) ===
 
-@app.get("/api/self")
-async def get_self():
-    """Получить информацию о себе (самосознание Нейры)"""
-    return neira_wrapper.get_self_description()
+async def get_self(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.get_self_description())
 
 
-@app.get("/api/organs")
-async def get_organs():
-    """Получить список всех органов (клеток) Нейры"""
-    return neira_wrapper.get_organs()
+async def get_organs(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.get_organs())
 
 
-@app.get("/api/organs/{organ_name}")
-async def get_organ_details(organ_name: str):
-    """Получить детали конкретного органа"""
-    return neira_wrapper.get_organ_details(organ_name)
+async def get_organ_details(request: Request) -> Response:
+    organ_name = request.path_params.get("organ_name", "")
+    return JSONResponse(neira_wrapper.get_organ_details(organ_name))
 
 
-@app.get("/api/growth")
-async def get_growth_info():
-    """Информация о возможностях роста"""
-    return neira_wrapper.get_growth_capabilities()
+async def get_growth_info(request: Request) -> Response:
+    return JSONResponse(neira_wrapper.get_growth_capabilities())
 
 
-@app.post("/api/command")
-async def execute_command(request: CommandRequest):
-    """
-    Execute Neira command (like /stats, /memory, etc.)
+async def execute_command(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
 
-    Args:
-        command: Command name without / (e.g., "stats", "memory")
-        args: Optional command arguments
-    """
-    cmd = request.command.lower()
+    cmd = (payload.get("command") or "").strip().lower()
+    if not cmd:
+        return JSONResponse({"detail": "Empty command"}, status_code=400)
 
     if cmd == "stats":
-        return {"result": neira_wrapper.get_stats()}
-    elif cmd == "memory":
-        return {"result": neira_wrapper.get_memory()}
-    elif cmd == "experience":
-        return {"result": neira_wrapper.get_experience()}
-    elif cmd == "clear":
-        return {"result": neira_wrapper.clear_memory()}
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown command: {cmd}")
+        return JSONResponse({"result": neira_wrapper.get_stats()})
+    if cmd == "memory":
+        return JSONResponse({"result": neira_wrapper.get_memory()})
+    if cmd == "experience":
+        return JSONResponse({"result": neira_wrapper.get_experience()})
+    if cmd == "clear":
+        return JSONResponse({"result": neira_wrapper.clear_memory()})
+
+    return JSONResponse({"detail": f"Unknown command: {cmd}"}, status_code=400)
 
 
-# === WebSocket Endpoint ===
+async def websocket_chat(websocket: WebSocket) -> None:
+    """WebSocket endpoint с keepalive и улучшенной обработкой ошибок."""
+    import logging
+    logger = logging.getLogger("neira.websocket")
+    
+    await websocket.accept()
+    logger.info("WebSocket connected")
 
-class ConnectionManager:
-    """Manages WebSocket connections"""
-
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def send_json(self, websocket: WebSocket, data: dict):
-        await websocket.send_json(data)
-
-
-manager = ConnectionManager()
-
-
-@app.websocket("/ws/chat")
-async def websocket_chat(websocket: WebSocket):
-    """
-    WebSocket endpoint for streaming chat
-
-    Client sends: {"message": "user input"}
-    Server sends: {"type": "stage"|"content"|"error"|"done", ...}
-    """
-    await manager.connect(websocket)
-
+    # Для keepalive: последний ping
+    last_ping = asyncio.get_event_loop().time()
+    
     try:
         while True:
-            # Получаем сообщение от клиента
-            data = await websocket.receive_json()
-            message = data.get("message", "")
+            # Keepalive: отправляем ping каждые 30 секунд
+            current_time = asyncio.get_event_loop().time()
+            if current_time - last_ping > 30:
+                try:
+                    await websocket.send_json({"type": "ping"})
+                    last_ping = current_time
+                except Exception as ping_err:
+                    logger.warning(f"Ping failed: {ping_err}")
+                    break
+            
+            # Получаем сообщение с timeout 1 сек (чтобы ping не блокировался)
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue  # Timeout — идём на следующую итерацию (для ping)
+            
+            message = (data.get("message") or "").strip()
 
             if not message:
-                await manager.send_json(websocket, {
-                    "type": "error",
-                    "content": "Empty message"
-                })
+                await websocket.send_json({"type": "error", "content": "Empty message"})
                 continue
 
-            # Стримим ответ
-            async for chunk in neira_wrapper.process_stream(message):
-                await manager.send_json(websocket, {
-                    "type": chunk.type,
-                    "stage": chunk.stage,
-                    "content": chunk.content,
-                    "metadata": chunk.metadata
-                })
+            # Обрабатываем запрос через стриминг
+            try:
+                async for chunk in neira_wrapper.process_stream(message):
+                    await websocket.send_json(
+                        {
+                            "type": chunk.type,
+                            "stage": chunk.stage,
+                            "content": chunk.content,
+                            "metadata": chunk.metadata,
+                        }
+                    )
+            except Exception as process_err:
+                logger.error(f"Error processing message: {process_err}", exc_info=True)
+                await websocket.send_json(
+                    {"type": "error", "content": f"Ошибка обработки: {str(process_err)}"}
+                )
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        print(f"Client disconnected")
+        logger.info("WebSocket disconnected by client")
+        return
     except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
         try:
-            await manager.send_json(websocket, {
-                "type": "error",
-                "content": f"Server error: {str(e)}"
-            })
-        except:
+            await websocket.send_json({"type": "error", "content": f"Server error: {str(e)}"})
+        except Exception:
             pass
-        manager.disconnect(websocket)
 
 
 # === Server Sent Events (альтернатива WebSocket) ===
 
-@app.get("/api/chat/stream")
-async def chat_stream(message: str):
-    """
-    Server-Sent Events endpoint for streaming (альтернатива WebSocket)
+async def chat_stream(request: Request) -> Response:
+    message = (request.query_params.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"detail": "Empty message"}, status_code=400)
 
-    Usage: GET /api/chat/stream?message=hello
-    """
     async def event_generator():
         async for chunk in neira_wrapper.process_stream(message):
-            # SSE format: "data: {json}\n\n"
-            yield f"data: {json.dumps({
-                'type': chunk.type,
-                'stage': chunk.stage,
-                'content': chunk.content,
-                'metadata': chunk.metadata
-            })}\n\n"
+            yield "data: " + json.dumps(
+                {
+                    "type": chunk.type,
+                    "stage": chunk.stage,
+                    "content": chunk.content,
+                    "metadata": chunk.metadata,
+                },
+                ensure_ascii=False,
+            ) + "\n\n"
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream"
-    )
-
-
-# === Startup/Shutdown Events ===
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    print("=" * 60)
-    print("  Neira Backend API v0.5 Starting...")
-    print("=" * 60)
-    print(f"  Docs: http://localhost:8000/docs")
-    print(f"  WebSocket: ws://localhost:8000/ws/chat")
-    print("=" * 60)
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    print("Shutting down Neira API...")
+routes = [
+    Route("/", root, methods=["GET"]),
+    Route("/api/health", health, methods=["GET"]),
+    Route("/api/status", status, methods=["GET"]),
+    Route("/api/curiosity", curiosity, methods=["GET"]),
+    Route("/api/chat", chat, methods=["POST"]),
+    Route("/api/chat/stream", chat_stream, methods=["GET"]),
+    Route("/api/stats", get_stats, methods=["GET"]),
+    Route("/api/memory", get_memory, methods=["GET"]),
+    Route("/api/experience", get_experience, methods=["GET"]),
+    Route("/api/memory/clear", clear_memory, methods=["POST"]),
+    Route("/api/self", get_self, methods=["GET"]),
+    Route("/api/organs", get_organs, methods=["GET"]),
+    Route("/api/organs/{organ_name}", get_organ_details, methods=["GET"]),
+    Route("/api/growth", get_growth_info, methods=["GET"]),
+    Route("/api/command", execute_command, methods=["POST"]),
+    WebSocketRoute("/ws/chat", websocket_chat),
+]
+
+app = Starlette(routes=routes)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"] ,
+    allow_headers=["*"],
+)
 
 
-# === Run Server ===
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "api:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,  # Auto-reload при изменении кода
-        log_level="info"
-    )
+
+    uvicorn.run("api:app", host="127.0.0.1", port=8000, log_level="info")

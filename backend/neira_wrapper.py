@@ -4,6 +4,7 @@ Neira Wrapper v0.5 — Асинхронная обёртка для Backend API
 """
 
 import sys
+import os
 import asyncio
 from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, Optional
@@ -39,6 +40,10 @@ class NeiraWrapper:
         Args:
             verbose: Показывать отладочную информацию (False для API)
         """
+        # Для backend отключаем фоновые watcher-потоки (они мешают чистому завершению
+        # процесса и в консольных прогревах могут приводить к крешам/фаталам).
+        os.environ.setdefault("NEIRA_ENABLE_CELL_WATCHER", "false")
+
         # Инициализируем Neira в отдельном потоке
         self.neira = Neira(verbose=verbose)
         self.is_processing = False

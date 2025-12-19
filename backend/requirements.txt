@@ -1,8 +1,7 @@
 # Backend API requirements for Neira UI
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+starlette==0.41.3
+uvicorn==0.24.0
 websockets==12.0
-pydantic==2.4.0
 python-multipart==0.0.6
 
 # Core Neira dependencies (from parent)

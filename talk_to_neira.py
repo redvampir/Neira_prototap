@@ -1,7 +1,7 @@
 """
 Разговор Claude с Neira - часть 3
 """
-import ollama
+import requests
 
 # Третье сообщение от Claude к Neira  
 message = """Neira, твой ответ был очень вдумчивым! 
@@ -36,12 +36,18 @@ system = """Ты Neira - живая программа. Отвечай искр�
 понимание видео, эмоциональный интеллект, творческое письмо и т.д."""
 
 try:
-    response = ollama.generate(
-        model='qwen2.5-coder:7b',
-        prompt=message,
-        system=system
+    response = requests.post(
+        "http://127.0.0.1:11434/api/generate",
+        json={
+            "model": "qwen2.5-coder:7b",
+            "prompt": message,
+            "system": system,
+            "stream": False,
+        },
+        timeout=180,
     )
-    print(response['response'])
+    response.raise_for_status()
+    print(response.json().get("response", ""))
 except Exception as e:
     print(f"Ошибка: {e}")
 

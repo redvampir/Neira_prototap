@@ -15,6 +15,7 @@ Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 
 import sys
 import re
+import os
 from typing import Optional, Tuple
 
 try:
@@ -179,7 +180,8 @@ class Neira:
             self.introspection = None
         
         # Автономный наблюдатель за клетками (v0.8)
-        if CELL_WATCHER_AVAILABLE:
+        enable_watcher = os.getenv("NEIRA_ENABLE_CELL_WATCHER", "true").lower() == "true"
+        if CELL_WATCHER_AVAILABLE and enable_watcher:
             self.cell_watcher = start_cell_watcher()
             if verbose:
                 print("👁️ CellWatcher запущен — новые органы загружаются автоматически")

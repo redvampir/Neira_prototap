@@ -1,0 +1,12 @@
+{
+  "id": "101acf4c",
+  "timestamp": "20251219_132955",
+  "message": "Auto-snapshot before cleanup",
+  "stats": {
+    "total_memories": 0,
+    "avg_confidence": 0,
+    "by_category": {},
+    "by_validation": {}
+  },
+  "data": []
+}
