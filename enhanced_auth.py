@@ -147,6 +147,22 @@ class EnhancedAuthSystem:
         else:
             return False, "❌ Пользователь не найден в списке авторизованных"
     
+    def remove_user_by_identifier(self, identifier: str) -> tuple[bool, str]:
+        """Удаляет пользователя по user_id/@username/t.me/username."""
+        username, user_id = self.parse_user_identifier(identifier)
+        if user_id is not None:
+            return self.remove_user(user_id)
+
+        if username is None:
+            return False, "❌ Неверный формат идентификатора"
+
+        normalized = username.lower()
+        for stored_id, user in list(self.authorized_users.items()):
+            if user.username and user.username.lower() == normalized:
+                return self.remove_user(stored_id)
+
+        return False, "❌ Пользователь не найден в списке авторизованных"
+    
     def is_authorized(self, user_id: int, username: Optional[str] = None) -> bool:
         """Проверяет авторизован ли пользователь"""
         # Проверка по user_id

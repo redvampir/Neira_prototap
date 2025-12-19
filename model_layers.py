@@ -191,7 +191,7 @@ class ModelLayersRegistry:
             return
 
         mtime = self._path.stat().st_mtime
-        if self._last_mtime is None or mtime > self._last_mtime:
+        if self._last_mtime is None or mtime != self._last_mtime:
             self._load()
 
     def save(self) -> None:
@@ -352,4 +352,3 @@ class ModelLayersRegistry:
                 entry.active_layer_id = None
 
         return {"removed": removed_total, "by_model": per_model}
-

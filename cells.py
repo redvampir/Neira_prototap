@@ -23,6 +23,13 @@ from dataclasses import dataclass
 from datetime import datetime
 import numpy as np
 
+try:
+    from model_layers import ModelLayersRegistry
+
+    _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
+except Exception:
+    _MODEL_LAYERS = None
+
 # Импорт новой системы памяти с защитой от галлюцинаций
 try:
     from memory_system import (
@@ -411,6 +418,11 @@ class Cell:
         
         # Выбор модели
         model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_REASON
+        options: Dict[str, Any] = {"temperature": temperature, "num_predict": 2048}
+        if _MODEL_LAYERS is not None:
+            adapter = _MODEL_LAYERS.get_active_adapter(model)
+            if adapter:
+                options["adapter"] = adapter
         
         try:
             response = requests.post(
@@ -420,7 +432,7 @@ class Cell:
                     "prompt": prompt,
                     "system": self.system_prompt,
                     "stream": False,
-                    "options": {"temperature": temperature, "num_predict": 2048}
+                    "options": options
                 },
                 timeout=TIMEOUT
             )

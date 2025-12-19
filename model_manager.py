@@ -1,6 +1,8 @@
 """
-Model Manager v0.5 — VRAM management and model switching
-Manages 3 local models + 1 Ollama cloud model for complex tasks
+Model Manager v0.6 - управление VRAM, переключение моделей и поддержка слоёв (адаптеров)
+
+Слой (layer) — это LoRA/адаптер Ollama, подключаемый через `options.adapter`.
+Управление слоями: `manage_model_layers.py` и `model_layers.json`.
 """
 
 import requests
@@ -38,12 +40,20 @@ MODELS = {
 class ModelManager:
     """Manages model loading/unloading to stay within VRAM limits"""
 
-    def __init__(self, max_vram_gb: float = 8.0, verbose: bool = True):
+    def __init__(self, max_vram_gb: float = 8.0, verbose: bool = True, layers_config_path: str = "model_layers.json"):
         self.max_vram = max_vram_gb
         self.current_model: Optional[str] = None
         self.switch_count = 0
         self.verbose = verbose
         self.cloud_models_available = self._check_cloud_models()
+
+        self._layers_registry = None
+        try:
+            from model_layers import ModelLayersRegistry
+
+            self._layers_registry = ModelLayersRegistry(layers_config_path)
+        except Exception as e:
+            self.log(f"⚠️ Слои моделей отключены: {e}")
 
     def log(self, message: str):
         if self.verbose:
@@ -98,15 +108,22 @@ class ModelManager:
             self.log(f"🔄 Loading: {model_name}...")
             start = time.time()
 
+            payload: Dict[str, Any] = {
+                "model": model_name,
+                "prompt": "init",
+                "stream": False,
+                "keep_alive": "10m",
+            }
+
+            if self._layers_registry is not None:
+                adapter = self._layers_registry.get_active_adapter(model_name)
+                if adapter:
+                    payload["options"] = {"adapter": adapter}
+
             resp = requests.post(
                 f"{OLLAMA_API}/generate",
-                json={
-                    "model": model_name,
-                    "prompt": "init",
-                    "stream": False,
-                    "keep_alive": "10m"
-                },
-                timeout=60
+                json=payload,
+                timeout=60,
             )
 
             if resp.status_code == 200:
@@ -173,13 +190,17 @@ class ModelManager:
     def get_stats(self) -> Dict[str, Any]:
         """Get manager statistics"""
         model_info = MODELS.get(self.current_model) if self.current_model else None
+        active_adapter = None
+        if model_info and model_info.type == "local" and self._layers_registry is not None:
+            active_adapter = self._layers_registry.get_active_adapter(model_info.name)
         return {
             "current_model": self.current_model,
             "current_model_info": model_info,
             "switches": self.switch_count,
             "loaded_models": self.get_loaded_models(),
             "cloud_models_available": self.cloud_models_available,
-            "max_vram_gb": self.max_vram
+            "max_vram_gb": self.max_vram,
+            "active_adapter": active_adapter,
         }
 
     def get_model_name(self, key: str) -> str:

@@ -226,6 +226,28 @@
         }
       },
       "filepath": "memory_snapshots\\snapshot_20251217_053816_394bec06.json"
+    },
+    {
+      "id": "8e335954",
+      "timestamp": "20251217_122222",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 163,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 37,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 54,
+          "preference": 29,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 163
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251217_122222_8e335954.json"
     }
   ]
 }

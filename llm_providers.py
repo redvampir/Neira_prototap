@@ -14,6 +14,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+try:
+    from model_layers import ModelLayersRegistry
+
+    _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
+except Exception as exc:
+    _MODEL_LAYERS = None
+    logger.info("Слои моделей отключены: %s", exc)
+
 
 class ProviderType(Enum):
     """Типы провайдеров"""
@@ -110,6 +118,12 @@ class OllamaProvider(LLMProvider):
     ) -> LLMResponse:
         """Генерация через Ollama"""
         try:
+            options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+            if _MODEL_LAYERS is not None:
+                adapter = _MODEL_LAYERS.get_active_adapter(self.model)
+                if adapter:
+                    options["adapter"] = adapter
+
             response = requests.post(
                 self.url,
                 json={
@@ -117,10 +131,7 @@ class OllamaProvider(LLMProvider):
                     "prompt": prompt,
                     "system": system_prompt,
                     "stream": False,
-                    "options": {
-                        "temperature": temperature,
-                        "num_predict": max_tokens
-                    }
+                    "options": options
                 },
                 timeout=self.timeout
             )

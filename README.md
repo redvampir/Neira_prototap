@@ -1,5 +1,16 @@
 # NEIRA v0.8.2 — Автономная Эволюционирующая Программа
 
+## 🌿 Neira Web (Next.js, v2 MVP)
+
+- [ ] `cd neira-app`
+- [ ] `npm install`
+- [ ] `npm run dev`
+- [ ] открыть `http://localhost:3000`
+- [ ] `npm run check`
+- [ ] `npm run build`
+
+Код: `neira-app/organism` → `neira-app/manifestation` → `neira-app/ritual`.
+
 ## 🌐 Что нового в v0.8.2
 
 ### 🛡️ Защита памяти v3.0!
@@ -151,9 +162,9 @@ Neira теперь может **самостоятельно совершенс�
 
 ### LoRA-адаптеры
 
-ModelManager умеет подгружать адаптеры поверх базовых моделей:
-- **executor-dialogue-lora** (база: **mistral:7b-instruct**, +~0.8 ГБ VRAM) — диалоговая настройка исполнителя
-- **code-assistant-lora** (база: **qwen2.5-coder:7b**, +~0.6 ГБ VRAM) — усиление для задач с кодом
+ModelManager умеет подгружать адаптеры поверх базовых моделей через `options.adapter` (Ollama API):
+- **executor-dialogue-lora** (база: **mistral:7b-instruct**, +~0.8 ГБ VRAM) - диалоговая настройка исполнителя
+- **code-assistant-lora** (база: **qwen2.5-coder:7b**, +~0.6 ГБ VRAM) - усиление для задач с кодом
 
 Пример загрузки через Ollama (фактический код вызывает `generate` с `options.adapter`):
 ```bash
@@ -167,7 +178,20 @@ ollama run qwen2.5-coder:7b --adapter code-assistant-lora --prompt "init"
 
 Если используете llama.cpp напрямую, подключайте соответствующий GGUF-файл через `--lora <путь_к_adapter.gguf>` над базовой моделью (VRAM = размер базы + размер адаптера из списка выше).
 
-### ModelManager — управление VRAM
+#### Управление слоями (CRUD)
+
+Слои (адаптеры) хранятся в `model_layers.json`. Редактирование:
+
+```bash
+python manage_model_layers.py list
+python manage_model_layers.py add --model qwen2.5-coder:7b --id code-assistant-lora --activate --description "Усиление кода"
+python manage_model_layers.py activate --model qwen2.5-coder:7b --id code-assistant-lora
+python manage_model_layers.py update --model qwen2.5-coder:7b --id code-assistant-lora --description "Новая версия"
+python manage_model_layers.py delete --model qwen2.5-coder:7b --id code-assistant-lora
+python manage_model_layers.py dedupe
+```
+
+### ModelManager - управление VRAM
 Автоматическое переключение моделей для работы на RTX 3060 Ti (8GB VRAM):
 - Динамическая загрузка/выгрузка моделей
 - Предзагрузка на основе типа задачи

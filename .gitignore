@@ -25,6 +25,9 @@ neira_prompt_tests.json
 neira_cell_registry.json
 neira_ab_tests.json
 neira_model_versions.json
+neira_authorized_users.json
+neira_tg_settings.json
+neira_user_profiles.json
 backups/
 training_data/
 models/
@@ -37,3 +40,8 @@ generated/
 .DS_Store
 Thumbs.db
 .env
+
+# Node / Next.js
+node_modules/
+.next/
+out/

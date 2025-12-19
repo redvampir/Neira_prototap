@@ -42,10 +42,9 @@ from backend.neira_wrapper import NeiraWrapper
 from cell_factory import CellFactory
 from parallel_thinking import parallel_mind
 from enhanced_auth import auth_system
+from telegram_settings import TelegramSettings, load_telegram_settings, save_telegram_settings
 from memory_system import EMBED_MODEL
 from autonomous_learning import AutonomousLearningSystem
-from emoji_feedback import EmojiFeedbackSystem, EmojiMap
-from emoji_feedback import EmojiFeedbackSystem, EmojiMap
 from emoji_feedback import EmojiFeedbackSystem, EmojiMap
 
 # 🧠 Neira Cortex v2.0 - Автономная когнитивная система
@@ -117,7 +116,7 @@ class _SensitiveDataFilter(logging.Filter):
 
 def _install_log_redaction_filter() -> None:
     secrets: List[str] = [BOT_TOKEN] if BOT_TOKEN else []
-    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY"):
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "NEIRA_ADMIN_PASSWORD"):
         value = os.getenv(key)
         if value:
             secrets.append(value)
@@ -135,38 +134,59 @@ _install_log_redaction_filter()
 # Хеш пароля администратора (из переменной окружения или по умолчанию)
 # ВАЖНО: Измените NEIRA_ADMIN_PASSWORD в .env!
 _ADMIN_PASSWORD = os.getenv("NEIRA_ADMIN_PASSWORD", "change_me_please")
+_ALLOW_DEFAULT_ADMIN_PASSWORD = os.getenv("NEIRA_ALLOW_DEFAULT_ADMIN_PASSWORD", "false").lower() == "true"
+
+if _ADMIN_PASSWORD == "change_me_please" and not _ALLOW_DEFAULT_ADMIN_PASSWORD:
+    raise RuntimeError(
+        "NEIRA_ADMIN_PASSWORD не задан или оставлен по умолчанию (change_me_please). "
+        "Задайте сильный пароль в `.env` или (только для локальной разработки) установите "
+        "NEIRA_ALLOW_DEFAULT_ADMIN_PASSWORD=true."
+    )
+
+if len(_ADMIN_PASSWORD) < 10 and not _ALLOW_DEFAULT_ADMIN_PASSWORD:
+    raise RuntimeError(
+        "NEIRA_ADMIN_PASSWORD слишком короткий (минимум 10 символов). "
+        "Используйте уникальный пароль или (только для локальной разработки) установите "
+        "NEIRA_ALLOW_DEFAULT_ADMIN_PASSWORD=true."
+    )
+
+if _ALLOW_DEFAULT_ADMIN_PASSWORD:
+    logging.warning("NEIRA_ALLOW_DEFAULT_ADMIN_PASSWORD=true: режим небезопасен, используйте только локально.")
 _ADMIN_HASH = hashlib.sha256(_ADMIN_PASSWORD.encode()).hexdigest()
 _ADMIN_ID: Optional[int] = None  # Будет установлен при первой авторизации
 
-# Авторизованные пользователи (Telegram user_id)
-AUTHORIZED_USERS: Set[int] = set()
+# Авторизация пользователей хранится в enhanced_auth.py (файл neira_authorized_users.json).
+
+TG_SETTINGS_FILE = Path(os.getenv("NEIRA_TG_SETTINGS_FILE", "neira_tg_settings.json"))
+
+try:
+    _tg_settings = load_telegram_settings(TG_SETTINGS_FILE)
+except Exception as exc:
+    logging.warning("Не удалось загрузить настройки Telegram (%s): %s", TG_SETTINGS_FILE, exc)
+    _tg_settings = TelegramSettings()
 
 # Режим доступа: "open" (все), "whitelist" (только авторизованные), "admin_only"
-ACCESS_MODE = os.getenv("NEIRA_TG_ACCESS", "whitelist")
+ACCESS_MODE = _tg_settings.access_mode
 
-# ID каналов/групп где бот отвечает без авторизации (через запятую)
-# Например: NEIRA_TG_CHANNELS=-1001234567890,-1009876543210
-ALLOWED_CHANNELS: Set[int] = set()
-_channels_env = os.getenv("NEIRA_TG_CHANNELS", "")
-if _channels_env:
-    for ch in _channels_env.split(","):
-        try:
-            ALLOWED_CHANNELS.add(int(ch.strip()))
-        except ValueError:
-            pass
+# ID каналов/групп где бот отвечает без авторизации
+ALLOWED_CHANNELS: Set[int] = _tg_settings.allowed_channels
 
 # Отвечать только на упоминания бота в группах/каналах?
-MENTION_ONLY = os.getenv("NEIRA_TG_MENTION_ONLY", "true").lower() == "true"
+MENTION_ONLY = _tg_settings.mention_only
+
+def _persist_tg_settings() -> None:
+    try:
+        _tg_settings.access_mode = ACCESS_MODE
+        _tg_settings.mention_only = MENTION_ONLY
+        save_telegram_settings(TG_SETTINGS_FILE, _tg_settings)
+    except Exception as exc:
+        logging.warning("Не удалось сохранить настройки Telegram (%s): %s", TG_SETTINGS_FILE, exc)
 
 neira_wrapper = NeiraWrapper(verbose=False)
 processing_lock = asyncio.Lock()
 
 # === Система автономного обучения ===
 autonomous_learning_system: Optional[AutonomousLearningSystem] = None
-
-# === 📝 Обучение через эмодзи-реакции ===
-emoji_feedback = EmojiFeedbackSystem()
-last_messages = {}  # {user_id: {"query": "", "response": "", "context": {}}}
 
 # === 📝 Обучение через эмодзи-реакции ===
 emoji_feedback = EmojiFeedbackSystem()
@@ -245,18 +265,21 @@ def require_auth(func):
         if ACCESS_MODE == "open":
             return await func(update, context, *args, **kwargs)
         
-        if ACCESS_MODE == "admin_only" and user_id != _ADMIN_ID:
+        if ACCESS_MODE == "admin_only" and not is_admin(user_id):
             if chat_type == "private":
                 await update.message.reply_text("⛔ Доступ только для администратора.")
             return
         
-        if user_id in AUTHORIZED_USERS or user_id == _ADMIN_ID:
+        if is_admin(user_id) or auth_system.is_authorized(user_id, username):
             return await func(update, context, *args, **kwargs)
         
         if chat_type == "private":
             await update.message.reply_text(
-                "🔐 Требуется авторизация.\n"
-                "Используй /auth <логин> <пароль>"
+                "🔐 Требуется доступ.\n\n"
+                f"Твой user_id: `{user_id}`\n\n"
+                "Если ты администратор: `/auth 0 <пароль>`\n"
+                "Если нет — попроси администратора добавить тебя: `/admin add <user_id|@username>`",
+                parse_mode=ParseMode.MARKDOWN,
             )
     return wrapper
 
@@ -483,7 +506,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     saved_name = get_user_name(user_id)
     greeting_name = saved_name if saved_name else user_name
     
-    is_authorized = user_id in AUTHORIZED_USERS or user_id == _ADMIN_ID or ACCESS_MODE == "open"
+    is_authorized = (
+        ACCESS_MODE == "open"
+        or is_admin(user_id)
+        or auth_system.is_authorized(user_id, update.effective_user.username)
+    )
     
     if is_authorized:
         text = (
@@ -1194,42 +1221,117 @@ async def learn_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 # === Команды авторизации ===
+def _get_int_env(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+_AUTH_MAX_ATTEMPTS = max(1, _get_int_env("NEIRA_TG_AUTH_MAX_ATTEMPTS", 5))
+_AUTH_WINDOW_SECONDS = max(10, _get_int_env("NEIRA_TG_AUTH_WINDOW_SECONDS", 300))
+_AUTH_BLOCK_SECONDS = max(10, _get_int_env("NEIRA_TG_AUTH_BLOCK_SECONDS", 900))
+
+_auth_failures: dict[int, list[float]] = {}
+_auth_blocked_until: dict[int, float] = {}
+
+
+def _auth_get_block_remaining_seconds(user_id: int) -> int:
+    now = time.monotonic()
+    until = float(_auth_blocked_until.get(user_id, 0.0) or 0.0)
+    if now >= until:
+        return 0
+    return int(until - now) + 1
+
+
+def _auth_register_failure(user_id: int) -> int:
+    now = time.monotonic()
+    timestamps = _auth_failures.setdefault(user_id, [])
+
+    window_start = now - _AUTH_WINDOW_SECONDS
+    kept: list[float] = []
+    for ts in timestamps:
+        if ts >= window_start:
+            kept.append(ts)
+    kept.append(now)
+    _auth_failures[user_id] = kept
+
+    if len(kept) >= _AUTH_MAX_ATTEMPTS:
+        _auth_blocked_until[user_id] = now + _AUTH_BLOCK_SECONDS
+        _auth_failures.pop(user_id, None)
+        return _auth_get_block_remaining_seconds(user_id)
+
+    return 0
+
+
+def _auth_reset_failures(user_id: int) -> None:
+    _auth_failures.pop(user_id, None)
+    _auth_blocked_until.pop(user_id, None)
+
+
 async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Авторизация пользователя."""
     global _ADMIN_ID
     
-    if not context.args or len(context.args) < 2:
-        await update.message.reply_text("🔐 Использование: /auth 0 <пароль>")
+    message = update.message
+    if not message:
         return
-    
+
+    chat_type = update.effective_chat.type
+    user_id = update.effective_user.id
+
+    if chat_type != "private":
+        await message.reply_text("🔒 Команда /auth доступна только в личном чате с ботом.")
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        return
+
+    remaining = _auth_get_block_remaining_seconds(user_id)
+    if remaining > 0:
+        await message.reply_text(f"⏳ Слишком много попыток. Подожди {remaining} сек и попробуй снова.")
+        return
+
+    if not context.args or len(context.args) < 2:
+        await message.reply_text("🔐 Использование: /auth 0 <пароль>")
+        return
+
     login = context.args[0]
     password = context.args[1]
-    user_id = update.effective_user.id
-    
-    # Проверяем логин "0" и пароль из .env
-    if login == "0":
+
+    try:
+        if login != "0":
+            blocked_for = _auth_register_failure(user_id)
+            await message.reply_text("❌ Неверный логин.")
+            if blocked_for > 0:
+                await message.reply_text(f"⏳ Блокировка на {blocked_for} сек из-за частых попыток.")
+            logging.warning("Failed auth attempt with wrong login: user_id=%s login=%s", user_id, login)
+            return
+
         attempt_hash = hashlib.sha256(password.encode()).hexdigest()
-        
         if secrets.compare_digest(attempt_hash, _ADMIN_HASH):
             _ADMIN_ID = user_id
-            AUTHORIZED_USERS.add(user_id)
-            await update.message.reply_text(
+            _auth_reset_failures(user_id)
+            await message.reply_text(
                 "👑 Добро пожаловать, Администратор!\n"
                 "Ты получил полный доступ к Нейре.\n\n"
-                "Используй /admin для управления."
+                "Используй /admin для управления.\n"
+                "Рекомендация: удали своё сообщение с паролем из чата.",
             )
-            # Удаляем сообщение с паролем для безопасности
-            try:
-                await update.message.delete()
-            except:
-                pass
-            logging.info(f"Admin authorized: user_id={user_id}")
-        else:
-            await update.message.reply_text("❌ Неверный пароль.")
-            logging.warning(f"Failed auth attempt from user_id={user_id}")
-    else:
-        await update.message.reply_text("❌ Неверный логин.")
-        logging.warning(f"Failed auth attempt with wrong login: {login}")
+            logging.info("Admin authorized: user_id=%s", user_id)
+            return
+
+        blocked_for = _auth_register_failure(user_id)
+        await message.reply_text("❌ Неверный пароль.")
+        if blocked_for > 0:
+            await message.reply_text(f"⏳ Блокировка на {blocked_for} сек из-за частых попыток.")
+        logging.warning("Failed auth attempt: user_id=%s", user_id)
+    finally:
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
 
 def escape_markdown(text: str) -> str:
@@ -1350,10 +1452,28 @@ async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text(f"📁 {result}")
         
         elif action == "read" and len(context.args) > 1:
-            filename = context.args[1]
-            result = neira_wrapper.neira.cmd_code("read", filename)
-            for chunk in split_message(result, limit=4000):
-                await update.message.reply_text(f"```\n{chunk}\n```", parse_mode=ParseMode.MARKDOWN)
+            filename_arg = context.args[1]
+            result = neira_wrapper.neira.cmd_code("read", filename_arg)
+
+            if not result.startswith("📄"):
+                for chunk in split_message(result, limit=4000):
+                    await update.message.reply_text(chunk)
+                return
+
+            header, content = (result.split("\n\n", 1) + [""])[:2]
+            safe_name = Path(filename_arg).name or "code.txt"
+            safe_name = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1F]', "_", safe_name)[:120]
+
+            match = re.match(r"^📄\\s+(.+?)\\s+\\((\\d+)\\s+байт\\):", header)
+            if match:
+                from_header = Path(match.group(1)).name
+                if from_header:
+                    safe_name = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1F]', "_", from_header)[:120]
+
+            payload = content.encode("utf-8", errors="replace")
+            buf = io.BytesIO(payload)
+            buf.name = safe_name
+            await update.message.reply_document(document=buf, caption=header)
         
         else:
             await update.message.reply_text("❌ Неизвестная команда")
@@ -1515,7 +1635,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             f"👑 *Админ-панель*\n\n"
             f"Режим доступа: `{ACCESS_MODE}`\n"
-            f"Авторизовано: {len(AUTHORIZED_USERS)} пользователей\n"
+            f"Авторизовано: {len(auth_system.authorized_users)} пользователей\n"
             f"Каналов/групп: {len(ALLOWED_CHANNELS)}",
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
@@ -1525,22 +1645,25 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     action = context.args[0].lower()
     
     if action == "users":
-        # Показываем обе системы авторизации
-        old_users_list = "\n".join(f"  • `{uid}` (старая система)" for uid in AUTHORIZED_USERS) if AUTHORIZED_USERS else ""
-        new_users = auth_system.get_all_users()
-        new_users_list = "\n".join(
-            f"  • `{u.user_id}`{' @' + u.username if u.username else ''} — {u.name or 'без имени'}"
-            for u in new_users
-        ) if new_users else ""
-        
-        combined = f"{old_users_list}\n{new_users_list}".strip()
-        if combined:
-            await update.message.reply_text(
-                f"👥 *Авторизованные пользователи:*\n{combined}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
+        users = auth_system.get_all_users()
+        if not users:
             await update.message.reply_text("📭 Нет авторизованных пользователей.")
+            return
+
+        lines = ["👥 Авторизованные пользователи:"]
+        for u in users:
+            user_id_value = u.get("user_id", "-")
+            username_value = u.get("username", "-")
+            name_value = u.get("name", "-")
+            authorized_at_value = u.get("authorized_at", "-")
+            note_value = u.get("note", "-")
+            note_part = f" — {note_value}" if note_value and note_value != "-" else ""
+            lines.append(
+                f"• {user_id_value} {username_value} — {name_value} ({authorized_at_value}){note_part}"
+            )
+
+        for chunk in split_message("\n".join(lines), limit=4000):
+            await update.message.reply_text(chunk)
     
     elif action == "channels":
         if ALLOWED_CHANNELS:
@@ -1553,51 +1676,30 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await update.message.reply_text("📭 Нет разрешённых каналов.")
     
     elif action == "add" and len(context.args) > 1:
-        # Используем улучшенную систему авторизации
-        identifier = " ".join(context.args[1:])
-        try:
-            user = auth_system.parse_user_identifier(identifier)
-            if user:
-                auth_system.add_user(user.user_id, user.username, user.name)
-                username_part = f" (@{user.username})" if user.username else ""
-                await update.message.reply_text(
-                    f"✅ Пользователь `{user.user_id}`{username_part} добавлен.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            else:
-                # Fallback на старую систему (числовой user_id)
-                new_user_id = int(context.args[1])
-                AUTHORIZED_USERS.add(new_user_id)
-                await update.message.reply_text(
-                    f"✅ Пользователь `{new_user_id}` добавлен (старая система).",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-        except (ValueError, Exception) as e:
-            await update.message.reply_text(
-                f"❌ Не удалось добавить пользователя: {str(e)}\n"
-                f"Используйте: user_id, @username или t.me/username"
-            )
+        identifier = context.args[1].strip()
+        note = " ".join(context.args[2:]).strip() if len(context.args) > 2 else ""
+        success, msg = auth_system.add_user(identifier, authorized_by=user_id, note=note)
+        await update.message.reply_text(msg)
     
     elif action == "addchannel" and len(context.args) > 1:
         try:
             channel_id = int(context.args[1])
             ALLOWED_CHANNELS.add(channel_id)
+            _persist_tg_settings()
             await update.message.reply_text(f"✅ Канал/группа `{channel_id}` добавлен.", parse_mode=ParseMode.MARKDOWN)
         except ValueError:
             await update.message.reply_text("❌ ID должен быть числом (с минусом для групп).")
     
     elif action == "remove" and len(context.args) > 1:
-        try:
-            remove_id = int(context.args[1])
-            AUTHORIZED_USERS.discard(remove_id)
-            await update.message.reply_text(f"🗑️ Пользователь `{remove_id}` удалён.", parse_mode=ParseMode.MARKDOWN)
-        except ValueError:
-            await update.message.reply_text("❌ user_id должен быть числом.")
+        identifier = context.args[1].strip()
+        success, msg = auth_system.remove_user_by_identifier(identifier)
+        await update.message.reply_text(msg)
     
     elif action == "removechannel" and len(context.args) > 1:
         try:
             channel_id = int(context.args[1])
             ALLOWED_CHANNELS.discard(channel_id)
+            _persist_tg_settings()
             await update.message.reply_text(f"🗑️ Канал/группа `{channel_id}` удалён.", parse_mode=ParseMode.MARKDOWN)
         except ValueError:
             await update.message.reply_text("❌ ID должен быть числом.")
@@ -1607,6 +1709,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_type = update.effective_chat.type
         if chat_type in ("group", "supergroup", "channel"):
             ALLOWED_CHANNELS.add(chat_id)
+            _persist_tg_settings()
             await update.message.reply_text(
                 f"✅ Этот чат добавлен в разрешённые!\n"
                 f"ID: `{chat_id}`",
@@ -1619,6 +1722,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         new_mode = context.args[1].lower()
         if new_mode in ("open", "whitelist", "admin_only"):
             ACCESS_MODE = new_mode
+            _persist_tg_settings()
             await update.message.reply_text(f"✅ Режим доступа: `{ACCESS_MODE}`", parse_mode=ParseMode.MARKDOWN)
         else:
             await update.message.reply_text("❌ Режим: open, whitelist или admin_only")
@@ -1675,12 +1779,20 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     data = query.data
     
     if data == "admin_users":
-        if AUTHORIZED_USERS:
-            users_list = "\n".join(f"  • `{uid}`" for uid in AUTHORIZED_USERS)
-            text = f"👥 *Авторизованные:*\n{users_list}"
+        users = auth_system.get_all_users()
+        if users:
+            lines = ["👥 Авторизованные пользователи:"]
+            for u in users[:50]:
+                user_id_value = u.get("user_id", "-")
+                username_value = u.get("username", "-")
+                name_value = u.get("name", "-")
+                lines.append(f"• {user_id_value} {username_value} — {name_value}")
+            if len(users) > 50:
+                lines.append(f"… и ещё {len(users) - 50}")
+            text = "\n".join(lines)
         else:
             text = "📭 Нет авторизованных пользователей."
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+        await query.edit_message_text(text)
     
     elif data == "admin_channels":
         if ALLOWED_CHANNELS:
@@ -1693,6 +1805,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data.startswith("admin_mode_"):
         new_mode = data.replace("admin_mode_", "")
         ACCESS_MODE = new_mode
+        _persist_tg_settings()
         await query.edit_message_text(
             f"✅ Режим доступа изменён: `{ACCESS_MODE}`",
             parse_mode=ParseMode.MARKDOWN
@@ -1986,7 +2099,7 @@ async def chat_handler(
     )
     
     # Обновляем информацию пользователя в auth_system если авторизован
-    if user_id in AUTHORIZED_USERS or auth_system.is_authorized(user_id, update.effective_user.username):
+    if auth_system.is_authorized(user_id, update.effective_user.username):
         auth_system.update_user_info(user_id, update.effective_user.first_name)
     
     # Сохраняем сообщение пользователя в контекст
