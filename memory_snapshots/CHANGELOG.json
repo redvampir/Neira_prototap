@@ -270,6 +270,28 @@
         }
       },
       "filepath": "memory_snapshots\\snapshot_20251219_071009_c4b06106.json"
+    },
+    {
+      "id": "6155426b",
+      "timestamp": "20251219_075250",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 167,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 38,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 56,
+          "preference": 30,
+          "technique": 2
+        },
+        "by_validation": {
+          "pending": 167
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251219_075250_6155426b.json"
     }
   ]
 }

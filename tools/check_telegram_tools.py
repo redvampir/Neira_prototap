@@ -5,6 +5,7 @@
 Проверяет:
 - загрузку/сохранение telegram_settings.py (с приоритетом env)
 - базовые операции enhanced_auth.py (add/remove/remove_by_identifier)
+- парсинг telegram_network.py (таймауты/прокси/ретраи)
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from enhanced_auth import EnhancedAuthSystem
 from telegram_settings import TelegramSettings, load_telegram_settings, save_telegram_settings
+from telegram_network import compute_backoff_seconds, load_telegram_network_config
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -82,9 +84,49 @@ def check_auth_system() -> None:
         _assert(not system.is_authorized(123), "is_authorized(123) должен быть False после удаления")
 
 
+def check_network_config() -> None:
+    cfg = load_telegram_network_config(
+        env={
+            "NEIRA_TG_CONNECT_TIMEOUT": "12.5",
+            "NEIRA_TG_READ_TIMEOUT": "45",
+            "NEIRA_TG_WRITE_TIMEOUT": "46",
+            "NEIRA_TG_POOL_TIMEOUT": "47",
+            "NEIRA_TG_POLLING_TIMEOUT": "20",
+            "NEIRA_TG_POLLING_BOOTSTRAP_RETRIES": "-1",
+            "NEIRA_TG_STARTUP_RETRIES": "3",
+            "NEIRA_TG_STARTUP_BACKOFF_BASE_SECONDS": "2",
+            "NEIRA_TG_STARTUP_BACKOFF_MAX_SECONDS": "10",
+            "NEIRA_TG_PROXY_URL": "http://127.0.0.1:8080",
+            "NEIRA_TG_BASE_URL": "https://api.telegram.org",
+        }
+    )
+    _assert(cfg.connect_timeout == 12.5, "connect_timeout должен читаться из env")
+    _assert(cfg.read_timeout == 45.0, "read_timeout должен читаться из env")
+    _assert(cfg.write_timeout == 46.0, "write_timeout должен читаться из env")
+    _assert(cfg.pool_timeout == 47.0, "pool_timeout должен читаться из env")
+    _assert(cfg.polling_timeout == 20, "polling_timeout должен читаться из env")
+    _assert(cfg.polling_bootstrap_retries == -1, "polling_bootstrap_retries должен читаться из env")
+    _assert(cfg.startup_retries == 3, "startup_retries должен читаться из env")
+    _assert(cfg.proxy_url == "http://127.0.0.1:8080", "proxy_url должен читаться из env")
+    _assert(cfg.base_url == "https://api.telegram.org", "base_url должен читаться из env")
+
+    _assert(compute_backoff_seconds(0, base_seconds=2.0, max_seconds=60.0) == 2.0, "backoff(0) должен быть base")
+    _assert(compute_backoff_seconds(1, base_seconds=2.0, max_seconds=60.0) == 4.0, "backoff(1) должен быть base*2")
+    _assert(
+        compute_backoff_seconds(10, base_seconds=2.0, max_seconds=60.0) == 60.0, "backoff должен ограничиваться max"
+    )
+
+    try:
+        load_telegram_network_config(env={"NEIRA_TG_CONNECT_TIMEOUT": "0"})
+        raise AssertionError("ожидался ValueError для NEIRA_TG_CONNECT_TIMEOUT=0")
+    except ValueError:
+        pass
+
+
 def main() -> int:
     check_telegram_settings()
     check_auth_system()
+    check_network_config()
     print("OK: telegram инструменты прошли самопроверку")
     return 0
 

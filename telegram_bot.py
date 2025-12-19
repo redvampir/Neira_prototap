@@ -26,7 +26,7 @@ import aiohttp
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.constants import ChatAction, ParseMode
-from telegram.error import TimedOut, NetworkError
+from telegram.error import TimedOut, NetworkError, InvalidToken
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -43,6 +43,12 @@ from cell_factory import CellFactory
 from parallel_thinking import parallel_mind
 from enhanced_auth import auth_system
 from telegram_settings import TelegramSettings, load_telegram_settings, save_telegram_settings
+from telegram_network import (
+    TelegramNetworkConfig,
+    compute_backoff_seconds,
+    load_telegram_network_config,
+    sanitize_url_for_log,
+)
 from memory_system import EMBED_MODEL
 from autonomous_learning import AutonomousLearningSystem
 from emoji_feedback import EmojiFeedbackSystem, EmojiMap
@@ -116,7 +122,7 @@ class _SensitiveDataFilter(logging.Filter):
 
 def _install_log_redaction_filter() -> None:
     secrets: List[str] = [BOT_TOKEN] if BOT_TOKEN else []
-    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "NEIRA_ADMIN_PASSWORD"):
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "NEIRA_ADMIN_PASSWORD", "NEIRA_TG_PROXY_URL"):
         value = os.getenv(key)
         if value:
             secrets.append(value)
@@ -275,10 +281,20 @@ def require_auth(func):
         
         if chat_type == "private":
             await update.message.reply_text(
-                "🔐 Требуется доступ.\n\n"
+                "🔐 *Требуется авторизация*\n\n"
                 f"Твой user_id: `{user_id}`\n\n"
-                "Если ты администратор: `/auth 0 <пароль>`\n"
-                "Если нет — попроси администратора добавить тебя: `/admin add <user_id|@username>`",
+                "📋 *Варианты доступа:*\n\n"
+                "👑 *Если ты администратор:*\n"
+                "`/auth 0 <пароль>`\n\n"
+                "👤 *Если обычный пользователь:*\n"
+                "Попроси администратора добавить тебя командой:\n"
+                "`/admin add <твой_user_id>`\n"
+                "или\n"
+                "`/admin add @<твой_username>`\n\n"
+                "💡 *После добавления ты сможешь:*\n"
+                "• Общаться с Нейрой\n"
+                "• Устанавливать своё имя: `/myname Твоё Имя`\n"
+                "• Использовать все команды бота",
                 parse_mode=ParseMode.MARKDOWN,
             )
     return wrapper
@@ -591,12 +607,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "*👑 АДМИН-КОМАНДЫ*\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "*🔐 Авторизация:*\n"
-            "/auth <пароль> — авторизовать пользователя\n"
-            "/admin users — список пользователей\n"
-            "/admin add <@username|id> — добавить\n"
-            "/admin remove <id> — удалить\n"
-            "/admin mode <open|whitelist|admin\\_only>\n"
+            "*🔐 Авторизация и пользователи:*\n"
+            "/auth 0 <пароль> — авторизоваться как админ\n"
+            "/admin users — список авторизованных\n"
+            "/admin add <user_id> — добавить по ID\n"
+            "/admin add @username — добавить по username\n"
+            "/admin add https://t.me/username — по ссылке\n"
+            "/admin remove <identifier> — удалить пользователя\n"
+            "/admin mode open — открыть доступ всем\n"
+            "/admin mode whitelist — только авторизованные\n"
+            "/admin mode admin_only — только админ\n\n"
             "/admin stats — статистика системы\n\n"
             "*🧠 Cortex v2.0:*\n"
             "/cortex — общая статистика\n"
@@ -2703,20 +2723,36 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # === Bootstrap ===
-def build_application() -> Application:
+def build_application(network: TelegramNetworkConfig | None = None) -> Application:
     """Настраивает Telegram-приложение."""
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN не установлен в переменных окружения")
-    
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
+
+    if network is None:
+        network = load_telegram_network_config()
+
+    builder = Application.builder().token(BOT_TOKEN)
+
+    if network.base_url:
+        builder = builder.base_url(network.base_url)
+    if network.proxy_url:
+        builder = builder.proxy_url(network.proxy_url).get_updates_proxy_url(network.proxy_url)
+
+    builder = (
+        builder
         # устойчивость к сетевым лагам/разрывам
-        .connect_timeout(15)
-        .read_timeout(30)
-        .write_timeout(30)
-        .build()
+        .connect_timeout(network.connect_timeout)
+        .read_timeout(network.read_timeout)
+        .write_timeout(network.write_timeout)
+        .pool_timeout(network.pool_timeout)
+        # отдельные таймауты для getUpdates (polling)
+        .get_updates_connect_timeout(network.connect_timeout)
+        .get_updates_read_timeout(network.read_timeout)
+        .get_updates_write_timeout(network.write_timeout)
+        .get_updates_pool_timeout(network.pool_timeout)
     )
+
+    app = builder.build()
 
     # Базовые команды (доступны всем)
     app.add_handler(CommandHandler("start", start))
@@ -2770,6 +2806,81 @@ def build_application() -> Application:
     return app
 
 
+_URL_CREDENTIALS_RE = re.compile(r"(://)([^/@\\s]+@)")
+
+
+def _safe_exception_text(exc: Exception) -> str:
+    text = f"{exc.__class__.__name__}: {exc}"
+    return _URL_CREDENTIALS_RE.sub(r"\\1***@", text)
+
+
+def run_polling_with_startup_retry(*, drop_pending_updates: bool = True) -> None:
+    """
+    Запускает polling с ретраями на этапе bootstrap (bot.get_me / initialize).
+
+    Важно: это лечит ситуацию, когда сеть временно недоступна и PTB падает до
+    старта polling.
+    """
+
+    network = load_telegram_network_config()
+    proxy_info = sanitize_url_for_log(network.proxy_url) if network.proxy_url else "нет"
+    base_url_info = sanitize_url_for_log(network.base_url) if network.base_url else "по умолчанию"
+
+    logging.info(
+        "Telegram сеть: base_url=%s, proxy=%s, таймауты(connect/read/write/pool)=%.1f/%.1f/%.1f/%.1f, polling_timeout=%ss",
+        base_url_info,
+        proxy_info,
+        network.connect_timeout,
+        network.read_timeout,
+        network.write_timeout,
+        network.pool_timeout,
+        network.polling_timeout,
+    )
+
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            app = build_application(network)
+            app.run_polling(
+                drop_pending_updates=drop_pending_updates,
+                timeout=network.polling_timeout,
+                bootstrap_retries=network.polling_bootstrap_retries,
+                connect_timeout=network.connect_timeout,
+                read_timeout=network.read_timeout,
+                write_timeout=network.write_timeout,
+                pool_timeout=network.pool_timeout,
+                close_loop=False,
+            )
+            return
+        except InvalidToken as exc:
+            logging.error("Невалидный TELEGRAM_BOT_TOKEN (BotFather). %s", _safe_exception_text(exc))
+            raise
+        except (TimedOut, NetworkError) as exc:
+            retry_index = attempt - 1  # 0 для первого ретрая
+            if network.startup_retries >= 0 and retry_index >= network.startup_retries:
+                logging.error(
+                    "Telegram API недоступен после %s попыток. Последняя ошибка: %s",
+                    attempt,
+                    _safe_exception_text(exc),
+                )
+                raise
+
+            delay = compute_backoff_seconds(
+                retry_index,
+                base_seconds=network.startup_backoff_base_seconds,
+                max_seconds=network.startup_backoff_max_seconds,
+            )
+            logging.warning(
+                "Telegram API недоступен (попытка %s): %s. Повтор через %.1fs. "
+                "Если Telegram заблокирован в сети, укажите прокси через NEIRA_TG_PROXY_URL.",
+                attempt,
+                _safe_exception_text(exc),
+                delay,
+            )
+            time.sleep(delay)
+
+
 def main() -> None:
     """Точка входа: запуск бота в режиме long polling."""
     # PTB v21 ожидает текущий event loop; создаём и назначаем вручную.
@@ -2794,8 +2905,13 @@ def main() -> None:
             logging.warning("⚠️ Не удалось инициализировать Cortex: %s", e)
             neira_cortex = None
 
-    app = build_application()
-    app.run_polling(drop_pending_updates=True)
+    try:
+        run_polling_with_startup_retry(drop_pending_updates=True)
+    finally:
+        try:
+            loop.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
