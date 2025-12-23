@@ -92,10 +92,10 @@ except ImportError:
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 
-# МОДЕЛИ v0.9 — NVIDIA Nemotron Mini 9B (универсальная для всех задач)
-MODEL_CODE = "nemotron-mini"        # Кодогенерация и ответы
-MODEL_REASON = "nemotron-mini"      # Рассуждения и анализ
-MODEL_PERSONALITY = "nemotron-mini" # Личность Neira (9B параметров, 128K контекст)
+# МОДЕЛИ v0.9 — Fine-tuned + Qwen Coder
+MODEL_CODE = "qwen2.5-coder:7b"              # Кодогенерация (доступна локально)
+MODEL_REASON = "neira-cell-router:latest"     # Fine-tuned модель с Cell Router логикой
+MODEL_PERSONALITY = "ministral-3:3b"          # Личность Neira (3B параметров, легковесная)
 
 # Облачные модели (0 VRAM, удалённые вычисления)
 MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)
