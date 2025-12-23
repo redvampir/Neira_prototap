@@ -18,6 +18,12 @@ sys.path.insert(0, str(parent_dir))
 from main import Neira
 from cells import get_model_status
 
+# Импорт UI Code Cell
+try:
+    from ui_code_cell import UICodeCell
+except ImportError:
+    UICodeCell = None
+
 
 @dataclass
 class StreamChunk:
@@ -47,6 +53,15 @@ class NeiraWrapper:
         # Инициализируем Neira в отдельном потоке
         self.neira = Neira(verbose=verbose)
         self.is_processing = False
+        
+        # Инициализируем UI Code Cell если доступен
+        self.ui_code_cell = None
+        if UICodeCell:
+            try:
+                self.ui_code_cell = UICodeCell(self.neira)
+                self.neira.log("🎨 UICodeCell инициализирован")
+            except Exception as e:
+                self.neira.log(f"⚠️ Ошибка инициализации UICodeCell: {e}", level="warning")
 
     async def process_stream(self, user_input: str) -> AsyncGenerator[StreamChunk, None]:
         """

@@ -17,6 +17,16 @@ let isProcessing = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 20;  // Увеличено для большей надёжности
 
+// Control Panel Settings
+const settings = {
+    temperature: 0.7,
+    contextSize: 10,
+    maxTokens: 4096,
+    streamMode: true,
+    debugMode: false,
+    autoMemory: true,
+};
+
 // DOM elements
 const elements = {
     messages: document.getElementById('messages'),
@@ -29,6 +39,26 @@ const elements = {
     refreshStats: document.getElementById('refreshStats'),
     statsToggle: document.getElementById('statsToggle'),
     statsSidebar: document.querySelector('.stats-sidebar'),
+
+    // Control Panel
+    controlPanelToggle: document.getElementById('controlPanelToggle'),
+    controlPanel: document.getElementById('controlPanel'),
+    closeControlPanel: document.getElementById('closeControlPanel'),
+    temperatureSlider: document.getElementById('temperatureSlider'),
+    temperatureValue: document.getElementById('temperatureValue'),
+    contextSizeSlider: document.getElementById('contextSizeSlider'),
+    contextSizeValue: document.getElementById('contextSizeValue'),
+    maxTokensInput: document.getElementById('maxTokensInput'),
+    streamMode: document.getElementById('streamMode'),
+    debugMode: document.getElementById('debugMode'),
+    autoMemoryMode: document.getElementById('autoMemoryMode'),
+    clearContextBtn: document.getElementById('clearContextBtn'),
+    resetMemoryBtn: document.getElementById('resetMemoryBtn'),
+    exportSettingsBtn: document.getElementById('exportSettingsBtn'),
+    importSettingsBtn: document.getElementById('importSettingsBtn'),
+    logViewer: document.getElementById('logViewer'),
+    clearLogsBtn: document.getElementById('clearLogsBtn'),
+    mainModelSelect: document.getElementById('mainModelSelect'),
 
     // Stats
     currentModel: document.getElementById('currentModel'),
@@ -46,14 +76,31 @@ const elements = {
     cloudCode: document.getElementById('cloudCode'),
     cloudUniversal: document.getElementById('cloudUniversal'),
     cloudVision: document.getElementById('cloudVision'),
+
+    // Artifact Viewer
+    artifactToggle: document.getElementById('artifactToggle'),
+    artifactViewer: document.getElementById('artifactViewer'),
+    artifactFrame: document.getElementById('artifactFrame'),
+    artifactEmpty: document.getElementById('artifactEmpty'),
+    artifactInfo: document.getElementById('artifactInfo'),
+    templateName: document.getElementById('templateName'),
+    artifactId: document.getElementById('artifactId'),
+    artifactRefresh: document.getElementById('artifactRefresh'),
+    artifactExpand: document.getElementById('artifactExpand'),
+    artifactExport: document.getElementById('artifactExport'),
+    artifactClose: document.getElementById('artifactClose'),
 };
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     setupEventListeners();
+    setupControlPanel();
+    setupArtifactViewer();
     setupMobileUI();
     fetchStats();
+    loadSettings();
+    loadAvailableModels();
 
     // Auto-refresh stats
     setInterval(fetchStats, CONFIG.STATS_REFRESH_INTERVAL);
@@ -142,6 +189,212 @@ function setupEventListeners() {
     // Stats toggle for mobile
     if (elements.statsToggle) {
         elements.statsToggle.addEventListener('click', toggleStats);
+    }
+}
+
+// === Control Panel Setup ===
+function setupControlPanel() {
+    // Toggle control panel
+    if (elements.controlPanelToggle) {
+        elements.controlPanelToggle.addEventListener('click', () => {
+            elements.controlPanel.classList.toggle('visible');
+            addLog('Панель управления ' + (elements.controlPanel.classList.contains('visible') ? 'открыта' : 'закрыта'), 'info');
+        });
+    }
+
+    // Close control panel
+    if (elements.closeControlPanel) {
+        elements.closeControlPanel.addEventListener('click', () => {
+            elements.controlPanel.classList.remove('visible');
+            addLog('Панель управления закрыта', 'info');
+        });
+    }
+
+    // Temperature slider
+    if (elements.temperatureSlider) {
+        elements.temperatureSlider.addEventListener('input', (e) => {
+            settings.temperature = e.target.value / 10;
+            elements.temperatureValue.textContent = settings.temperature.toFixed(1);
+            addLog(`Температура установлена: ${settings.temperature}`, 'info');
+        });
+    }
+
+    // Context size slider
+    if (elements.contextSizeSlider) {
+        elements.contextSizeSlider.addEventListener('input', (e) => {
+            settings.contextSize = parseInt(e.target.value);
+            elements.contextSizeValue.textContent = settings.contextSize;
+            addLog(`Размер контекста: ${settings.contextSize}`, 'info');
+        });
+    }
+
+    // Max tokens input
+    if (elements.maxTokensInput) {
+        elements.maxTokensInput.addEventListener('change', (e) => {
+            settings.maxTokens = parseInt(e.target.value);
+            addLog(`Макс. токенов: ${settings.maxTokens}`, 'info');
+        });
+    }
+
+    // Checkboxes
+    if (elements.streamMode) {
+        elements.streamMode.addEventListener('change', (e) => {
+            settings.streamMode = e.target.checked;
+            addLog(`Streaming ${settings.streamMode ? 'включён' : 'выключен'}`, 'info');
+        });
+    }
+
+    if (elements.debugMode) {
+        elements.debugMode.addEventListener('change', (e) => {
+            settings.debugMode = e.target.checked;
+            addLog(`Debug режим ${settings.debugMode ? 'включён' : 'выключен'}`, settings.debugMode ? 'success' : 'info');
+        });
+    }
+
+    if (elements.autoMemoryMode) {
+        elements.autoMemoryMode.addEventListener('change', (e) => {
+            settings.autoMemory = e.target.checked;
+            addLog(`Авто-сохранение памяти ${settings.autoMemory ? 'включено' : 'выключено'}`, 'info');
+        });
+    }
+
+    // Action buttons
+    if (elements.clearContextBtn) {
+        elements.clearContextBtn.addEventListener('click', clearContext);
+    }
+
+    if (elements.resetMemoryBtn) {
+        elements.resetMemoryBtn.addEventListener('click', resetMemory);
+    }
+
+    if (elements.exportSettingsBtn) {
+        elements.exportSettingsBtn.addEventListener('click', exportSettings);
+    }
+
+    if (elements.importSettingsBtn) {
+        elements.importSettingsBtn.addEventListener('click', importSettings);
+    }
+
+    if (elements.clearLogsBtn) {
+        elements.clearLogsBtn.addEventListener('click', clearLogs);
+    }
+}
+
+// Load settings from localStorage
+function loadSettings() {
+    const saved = localStorage.getItem('neira_settings');
+    if (saved) {
+        try {
+            const loaded = JSON.parse(saved);
+            Object.assign(settings, loaded);
+            
+            // Update UI
+            if (elements.temperatureSlider) {
+                elements.temperatureSlider.value = settings.temperature * 10;
+                elements.temperatureValue.textContent = settings.temperature.toFixed(1);
+            }
+            if (elements.contextSizeSlider) {
+                elements.contextSizeSlider.value = settings.contextSize;
+                elements.contextSizeValue.textContent = settings.contextSize;
+            }
+            if (elements.maxTokensInput) elements.maxTokensInput.value = settings.maxTokens;
+            if (elements.streamMode) elements.streamMode.checked = settings.streamMode;
+            if (elements.debugMode) elements.debugMode.checked = settings.debugMode;
+            if (elements.autoMemoryMode) elements.autoMemoryMode.checked = settings.autoMemory;
+            
+            addLog('Настройки загружены', 'success');
+        } catch (error) {
+            addLog('Ошибка загрузки настроек', 'error');
+        }
+    }
+}
+
+// Save settings to localStorage
+function saveSettings() {
+    localStorage.setItem('neira_settings', JSON.stringify(settings));
+    addLog('Настройки сохранены', 'success');
+}
+
+// === Control Panel Actions ===
+function clearContext() {
+    if (confirm('Очистить контекст диалога?')) {
+        fetch(`${CONFIG.API_URL}/clear-context`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                addLog('Контекст очищен', 'success');
+                addMessage('system', 'Контекст диалога очищен');
+            })
+            .catch(error => {
+                addLog(`Ошибка очистки контекста: ${error.message}`, 'error');
+            });
+    }
+}
+
+function resetMemory() {
+    if (confirm('ВНИМАНИЕ: Это удалит всю память Neira! Продолжить?')) {
+        fetch(`${CONFIG.API_URL}/reset-memory`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                addLog('Память сброшена', 'success');
+                addMessage('system', '⚠️ Память системы сброшена');
+            })
+            .catch(error => {
+                addLog(`Ошибка сброса памяти: ${error.message}`, 'error');
+            });
+    }
+}
+
+function exportSettings() {
+    const dataStr = JSON.stringify(settings, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    const exportFileDefaultName = `neira_settings_${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    addLog('Настройки экспортированы', 'success');
+}
+
+function importSettings() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const imported = JSON.parse(event.target.result);
+                Object.assign(settings, imported);
+                saveSettings();
+                loadSettings();
+                addLog('Настройки импортированы', 'success');
+            } catch (error) {
+                addLog(`Ошибка импорта: ${error.message}`, 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+function clearLogs() {
+    elements.logViewer.innerHTML = '<div class="log-entry">Логи очищены</div>';
+}
+
+function addLog(message, type = 'info') {
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    const timestamp = new Date().toLocaleTimeString('ru-RU');
+    entry.textContent = `[${timestamp}] ${message}`;
+    elements.logViewer.appendChild(entry);
+    elements.logViewer.scrollTop = elements.logViewer.scrollHeight;
+    
+    // Save settings on important changes
+    if (type === 'success' && !message.includes('загружены') && !message.includes('импортированы')) {
+        saveSettings();
     }
 }
 
@@ -251,6 +504,18 @@ function handleMessage(data) {
     switch (type) {
         case 'stage':
             showStage(stage, content);
+            break;
+
+        case 'artifact':
+            // Artifact создан - показать в viewer
+            hideStage();
+            if (metadata && metadata.artifact) {
+                showArtifact(metadata.artifact);
+                addMessage('assistant', content, { artifact_id: metadata.artifact.id });
+            } else {
+                addMessage('assistant', content);
+            }
+            resetProcessingState();
             break;
 
         case 'content':
@@ -424,6 +689,159 @@ function updateModelIndicator(element, ready) {
     }
 }
 
+// Load available models from Ollama
+async function loadAvailableModels() {
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/available-models`);
+        const data = await response.json();
+        const models = data.models || [];
+        
+        if (elements.mainModelSelect && models.length > 0) {
+            // Clear existing options except "Auto"
+            elements.mainModelSelect.innerHTML = '<option value="auto">Auto (по умолчанию)</option>';
+            
+            // Add available models
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                elements.mainModelSelect.appendChild(option);
+            });
+            
+            addLog(`Загружено ${models.length} моделей`, 'success');
+        }
+    } catch (error) {
+        addLog(`Ошибка загрузки моделей: ${error.message}`, 'error');
+    }
+}
+
+// === Artifact Viewer Functions ===
+let currentArtifact = null;
+
+function setupArtifactViewer() {
+    // Toggle artifact viewer
+    if (elements.artifactToggle) {
+        elements.artifactToggle.addEventListener('click', toggleArtifactViewer);
+    }
+
+    // Close artifact viewer
+    if (elements.artifactClose) {
+        elements.artifactClose.addEventListener('click', () => {
+            elements.artifactViewer.classList.remove('visible');
+            addLog('Artifact viewer закрыт', 'info');
+        });
+    }
+
+    // Refresh artifact
+    if (elements.artifactRefresh) {
+        elements.artifactRefresh.addEventListener('click', () => {
+            if (currentArtifact) {
+                renderArtifact(currentArtifact);
+                addLog('Артефакт обновлён', 'info');
+            }
+        });
+    }
+
+    // Expand artifact (fullscreen)
+    if (elements.artifactExpand) {
+        elements.artifactExpand.addEventListener('click', () => {
+            if (currentArtifact) {
+                const htmlFile = `${window.location.origin}/artifacts/${currentArtifact.id}.html`;
+                window.open(htmlFile, '_blank');
+            }
+        });
+    }
+
+    // Export artifact
+    if (elements.artifactExport) {
+        elements.artifactExport.addEventListener('click', exportArtifact);
+    }
+}
+
+function toggleArtifactViewer() {
+    const isVisible = elements.artifactViewer.classList.toggle('visible');
+    addLog('Artifact viewer ' + (isVisible ? 'открыт' : 'закрыт'), 'info');
+}
+
+function showArtifact(artifact) {
+    currentArtifact = artifact;
+    
+    // Show viewer
+    elements.artifactViewer.classList.add('visible');
+    
+    // Update info
+    elements.templateName.textContent = artifact.template_used || 'Custom';
+    elements.artifactId.textContent = artifact.id;
+    
+    // Render in iframe
+    renderArtifact(artifact);
+    
+    // Hide empty state
+    elements.artifactEmpty.style.display = 'none';
+    
+    addLog(`Артефакт ${artifact.id} загружен`, 'success');
+}
+
+function renderArtifact(artifact) {
+    const html = buildArtifactHTML(artifact);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    elements.artifactFrame.src = url;
+    
+    // Clean up old blob URL
+    elements.artifactFrame.addEventListener('load', () => {
+        URL.revokeObjectURL(url);
+    }, { once: true });
+}
+
+function buildArtifactHTML(artifact) {
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neira Artifact - ${artifact.id}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    ${artifact.css}
+  </style>
+</head>
+<body>
+  ${artifact.html}
+  <script>
+    ${artifact.js}
+  </script>
+</body>
+</html>`;
+}
+
+function exportArtifact() {
+    if (!currentArtifact) return;
+    
+    const html = buildArtifactHTML(currentArtifact);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `neira_artifact_${currentArtifact.id}.html`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    addLog(`Артефакт экспортирован: ${a.download}`, 'success');
+}
+
 // Export for debugging
 window.NeiraDebug = {
     sendTestMessage: (msg) => {
@@ -431,7 +849,11 @@ window.NeiraDebug = {
         sendMessage();
     },
     getStats: fetchStats,
-    reconnect: connectWebSocket
+    reconnect: connectWebSocket,
+    settings: settings,
+    reloadModels: loadAvailableModels,
+    showArtifact: showArtifact,
+    currentArtifact: () => currentArtifact,
 };
 
 console.log('🧠 Neira Frontend loaded');

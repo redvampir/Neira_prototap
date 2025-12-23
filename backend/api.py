@@ -295,6 +295,38 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "error", "content": "Empty message"})
                 continue
 
+            # Проверка на UI запрос
+            is_ui_request = any(keyword in message.lower() for keyword in [
+                "создай ui", "создай интерфейс", "сделай ui", 
+                "игровой интерфейс", "ui для", "интерфейс для"
+            ])
+
+            if is_ui_request and neira_wrapper.ui_code_cell:
+                # Генерируем артефакт
+                try:
+                    await websocket.send_json({
+                        "type": "stage",
+                        "stage": "generation",
+                        "content": "🎨 Создаю UI артефакт..."
+                    })
+                    
+                    artifact = await neira_wrapper.ui_code_cell.generate_ui(
+                        task_description=message
+                    )
+                    
+                    await websocket.send_json({
+                        "type": "artifact",
+                        "content": f"✅ Артефакт создан: {artifact['id']}",
+                        "metadata": {"artifact": artifact}
+                    })
+                    
+                    await websocket.send_json({"type": "done"})
+                    continue
+                    
+                except Exception as artifact_err:
+                    logger.error(f"Artifact generation failed: {artifact_err}", exc_info=True)
+                    # Fallback to normal processing
+
             # Обрабатываем запрос через стриминг
             try:
                 async for chunk in neira_wrapper.process_stream(message):
@@ -345,6 +377,126 @@ async def chat_stream(request: Request) -> Response:
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+# === Control Panel Actions ===
+
+async def clear_context(request: Request) -> Response:
+    """Очистить контекст диалога"""
+    try:
+        if neira_wrapper.neira and hasattr(neira_wrapper.neira, 'context'):
+            neira_wrapper.neira.context.clear()
+        return JSONResponse({"status": "ok", "message": "Контекст очищен"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+async def reset_memory(request: Request) -> Response:
+    """ВНИМАНИЕ: Полный сброс памяти"""
+    try:
+        if neira_wrapper.neira and hasattr(neira_wrapper.neira, 'memory'):
+            neira_wrapper.neira.memory.memories.clear()
+            neira_wrapper.neira.memory.save_to_file()
+        return JSONResponse({"status": "ok", "message": "Память сброшена"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+async def get_available_models(request: Request) -> Response:
+    """Получить список доступных моделей Ollama"""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get("http://127.0.0.1:11434/api/tags")
+            data = response.json()
+            models = [model["name"] for model in data.get("models", [])]
+            return JSONResponse({"models": models})
+    except Exception as e:
+        return JSONResponse({"models": [], "error": str(e)})
+
+
+# === Artifact Generation ===
+
+async def generate_artifact(request: Request) -> Response:
+    """Генерация UI артефакта через UICodeCell"""
+    try:
+        body = await request.json()
+        task = body.get("task", "")
+        template = body.get("template")
+        data = body.get("data")
+        
+        if not task:
+            return JSONResponse({"error": "Task description required"}, status_code=400)
+        
+        if not neira_wrapper.ui_code_cell:
+            return JSONResponse(
+                {"error": "UICodeCell not available"},
+                status_code=503
+            )
+        
+        artifact = await neira_wrapper.ui_code_cell.generate_ui(
+            task_description=task,
+            template_name=template,
+            data=data
+        )
+        
+        return JSONResponse(artifact)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Failed to generate artifact: {str(e)}"},
+            status_code=500
+        )
+
+
+async def list_artifacts(request: Request) -> Response:
+    """Список всех артефактов"""
+    try:
+        if not neira_wrapper.ui_code_cell:
+            return JSONResponse({"artifacts": []})
+        
+        artifacts = neira_wrapper.ui_code_cell.list_artifacts()
+        return JSONResponse({"artifacts": artifacts})
+    except Exception as e:
+        return JSONResponse({"artifacts": [], "error": str(e)})
+
+
+async def get_artifact(request: Request) -> Response:
+    """Получить артефакт по ID"""
+    try:
+        artifact_id = request.path_params.get("artifact_id")
+        
+        if not neira_wrapper.ui_code_cell:
+            return JSONResponse({"error": "UICodeCell not available"}, status_code=503)
+        
+        artifact = neira_wrapper.ui_code_cell.get_artifact(artifact_id)
+        
+        if not artifact:
+            return JSONResponse({"error": "Artifact not found"}, status_code=404)
+        
+        return JSONResponse(artifact)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def list_templates(request: Request) -> Response:
+    """Список доступных шаблонов"""
+    try:
+        if not neira_wrapper.ui_code_cell:
+            return JSONResponse({"templates": []})
+        
+        templates = [
+            {
+                "name": name,
+                "display_name": data.get("name"),
+                "category": data.get("category"),
+                "description": data.get("description")
+            }
+            for name, data in neira_wrapper.ui_code_cell.templates.items()
+        ]
+        
+        return JSONResponse({"templates": templates})
+    except Exception as e:
+        return JSONResponse({"templates": [], "error": str(e)})
+
+
 routes = [
     Route("/", root, methods=["GET"]),
     Route("/api/health", health, methods=["GET"]),
@@ -361,6 +513,18 @@ routes = [
     Route("/api/organs/{organ_name}", get_organ_details, methods=["GET"]),
     Route("/api/growth", get_growth_info, methods=["GET"]),
     Route("/api/command", execute_command, methods=["POST"]),
+    
+    # Control Panel endpoints
+    Route("/api/clear-context", clear_context, methods=["POST"]),
+    Route("/api/reset-memory", reset_memory, methods=["POST"]),
+    Route("/api/available-models", get_available_models, methods=["GET"]),
+    
+    # Artifact endpoints
+    Route("/api/artifacts/generate", generate_artifact, methods=["POST"]),
+    Route("/api/artifacts", list_artifacts, methods=["GET"]),
+    Route("/api/artifacts/{artifact_id}", get_artifact, methods=["GET"]),
+    Route("/api/templates", list_templates, methods=["GET"]),
+    
     WebSocketRoute("/ws/chat", websocket_chat),
 ]
 
