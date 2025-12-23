@@ -27,8 +27,8 @@ class ModelInfo:
 MODELS = {
     # Локальные модели
     "code": ModelInfo("qwen2.5-coder:7b", 5.0, "local", "Code generation and analysis"),
-    "reason": ModelInfo("ministral-3:3b", 3.0, "local", "Planning, reasoning, verification"),
-    "personality": ModelInfo("ministral-3:3b", 3.0, "local", "Dialogue with personality (using ministral until custom model trained)"),
+    "reason": ModelInfo("neira-cell-router:latest", 3.0, "local", "Planning, reasoning, verification with cell routing"),
+    "personality": ModelInfo("neira-cell-router:latest", 3.0, "local", "Dialogue with personality (cell-router enhanced)"),
 
     # Облачные модели (0 VRAM, удалённые вычисления)
     "cloud_code": ModelInfo("qwen3-coder:480b-cloud", 0, "cloud", "Complex code tasks (480B params)"),

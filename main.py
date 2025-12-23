@@ -36,7 +36,7 @@ except ImportError:
         OLLAMA_URL
     )
     MODEL_CODE = "qwen2.5-coder:7b"
-    MODEL_REASON = "ministral-3:3b"
+    MODEL_REASON = "neira-cell-router:latest"  # Fine-tuned модель с Cell Router
     MODEL_ROUTING = {}
     TIMEOUT = 180
     MAX_RETRIES = 2

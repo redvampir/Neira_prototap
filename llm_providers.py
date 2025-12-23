@@ -586,7 +586,7 @@ class LLMManager:
         if providers is None:
             # Дефолтная конфигурация - используем более мощные модели
             self.providers = [
-                OllamaProvider(model="ministral-3:3b"),
+                OllamaProvider(model="neira-cell-router:latest"),  # Fine-tuned модель
                 GroqProvider(model="llama-3.1-8b-instant"),
                 OpenAIProvider(model="gpt-3.5-turbo"),
                 ClaudeProvider(model="claude-3-haiku-20240307")
