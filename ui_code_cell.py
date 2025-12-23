@@ -391,6 +391,10 @@ renderBoard();"""
         """
         self.neira.log(f"🎨 UICodeCell: Генерация UI для '{task_description}'")
         
+        # 🫀 Resonance-based Generation: читаем heart.resonance
+        resonance_level = self._get_resonance()
+        self.neira.log(f"🎵 Resonance level: {resonance_level:.2f} (0=консервативно, 1=экспериментально)")
+        
         # Выбрать шаблон
         if template_name and template_name in self.templates:
             template = self.templates[template_name]
@@ -405,6 +409,9 @@ renderBoard();"""
         html = template.get("html", "")
         css = template.get("css", "")
         js = template.get("js", "")
+        
+        # Применить стиль на основе резонанса
+        css = self._apply_resonance_style(css, resonance_level)
         
         # LLM адаптирует под задачу (если есть специфика)
         if data or "создай" in task_description.lower():
@@ -459,6 +466,37 @@ renderBoard();"""
             "css": template.get("css", ""),
             "js": template.get("js", "")
         }
+    
+    def _get_resonance(self) -> float:
+        """Получить текущий уровень резонанса из heart (0-1)."""
+        try:
+            if hasattr(self.neira, 'heart') and hasattr(self.neira.heart, 'resonance'):
+                return self.neira.heart.resonance
+        except Exception as e:
+            self.neira.log(f"⚠️ Не удалось прочитать heart.resonance: {e}", level="warning")
+        return 0.5  # Дефолт: средний резонанс
+    
+    def _apply_resonance_style(self, css: str, resonance: float) -> str:
+        """Адаптировать CSS стиль на основе резонанса.
+        
+        Логика:
+        - resonance < 0.3 (низкий): консервативные цвета (серый, синий)
+        - resonance 0.3-0.7 (средний): сбалансированная палитра
+        - resonance > 0.7 (высокий): яркие, экспериментальные цвета (золотой, фиолетовый)
+        """
+        if resonance < 0.3:
+            # Консервативный стиль
+            css = css.replace("#ffd700", "#7f8c8d")  # Золотой → Серый
+            css = css.replace("#ff4444", "#3498db")  # Красный → Синий
+        elif resonance > 0.7:
+            # Экспериментальный стиль
+            css = css.replace("#7f8c8d", "#9b59b6")  # Серый → Фиолетовый
+            css = css.replace("#3498db", "#e74c3c")  # Синий → Красный
+            # Добавить pulsating анимацию
+            if "@keyframes" not in css:
+                css += "\n@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }"
+        
+        return css
     
     def _generate_artifact_id(self, task: str) -> str:
         """Генерация уникального ID артефакта."""
@@ -531,10 +569,109 @@ renderBoard();"""
                 return json.load(f)
         return None
     
-    async def execute(self, query: str, context: dict) -> dict:
-        """BaseCell метод для интеграции в Neira."""
-        if "создай интерфейс" in query.lower() or "ui для" in query.lower():
-            result = await self.generate_ui(query)
+    def extract_components_from_artifact(self, artifact_id: str) -> List[Dict[str, Any]]:
+        """Извлечь переиспользуемые компоненты из артефакта.
+        
+        Критерии для автоэкстракции:
+        - Артефакт имеет рейтинг 5 звёзд
+        - Код содержит CSS классы с уникальными паттернами
+        - Есть JS функции с чёткой ответственностью
+        - Анимации (@keyframes)
+        
+        Returns:
+            List[Dict]: Список компонентов [{name, html, css, js, tags}]
+        """
+        artifact = self.get_artifact(artifact_id)
+        if not artifact:
+            return []
+        
+        # Проверка рейтинга
+        rating = artifact.get("metadata", {}).get("rating", 0)
+        if rating < 5:
+            return []
+        
+        components = []
+        html = artifact.get("html", "")
+        css = artifact.get("css", "")
+        js = artifact.get("js", "")
+        
+        # Паттерн 1: CSS классы с уникальными именами
+        import re
+        css_classes = re.findall(r'\.([\w-]+)\s*\{([^}]+)\}', css)
+        for class_name, class_body in css_classes:
+            if len(class_body.strip()) > 30:  # Минимум 30 символов
+                components.append({
+                    "name": f"css_{class_name}",
+                    "type": "css",
+                    "code": f".{class_name} {{{class_body}}}",
+                    "tags": [artifact.get("template_used", "unknown"), "css"],
+                    "extracted_from": artifact_id,
+                    "rating": rating
+                })
+        
+        # Паттерн 2: JS функции
+        js_functions = re.findall(r'function\s+(\w+)\s*\([^)]*\)\s*\{', js)
+        for func_name in js_functions:
+            # Извлечь полное тело функции (упрощённо)
+            func_start = js.find(f"function {func_name}")
+            if func_start != -1:
+                components.append({
+                    "name": f"js_{func_name}",
+                    "type": "js",
+                    "code": f"function {func_name}(...) {{ /* см. артефакт {artifact_id} */ }}",
+                    "tags": [artifact.get("template_used", "unknown"), "js", "function"],
+                    "extracted_from": artifact_id,
+                    "rating": rating
+                })
+        
+        # Паттерн 3: Keyframe анимации
+        keyframes = re.findall(r'@keyframes\s+([\w-]+)\s*\{([^}]+)\}', css)
+        for kf_name, kf_body in keyframes:
+            components.append({
+                "name": f"anim_{kf_name}",
+                "type": "animation",
+                "code": f"@keyframes {kf_name} {{{kf_body}}}",
+                "tags": ["animation", artifact.get("template_used", "unknown")],
+                "extracted_from": artifact_id,
+                "rating": rating
+            })
+        
+        return components
+    
+    def save_components_to_library(self, components: List[Dict[str, Any]]):
+        """Сохранить компоненты в библиотеку (neira_ui_components.json)."""
+        library_file = Path("neira_ui_components.json")
+        
+        if library_file.exists():
+            with open(library_file, 'r', encoding='utf-8') as f:
+                library = json.load(f)
+        else:
+            library = {
+                "components": [],
+                "metadata": {
+                    "version": "1.0",
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+        
+        # Добавить новые компоненты (избегая дубликатов по name)
+        existing_names = {c["name"] for c in library["components"]}
+        for comp in components:
+            if comp["name"] not in existing_names:
+                library["components"].append(comp)
+                existing_names.add(comp["name"])
+        
+        # Сортировка по рейтингу (лучшие — первыми)
+        library["components"].sort(key=lambda x: x.get("rating", 0), reverse=True)
+        
+        library["metadata"]["last_updated"] = datetime.now().isoformat()
+        library["metadata"]["total_components"] = len(library["components"])
+        
+        with open(library_file, 'w', encoding='utf-8') as f:
+            json.dump(library, f, ensure_ascii=False, indent=2)
+        
+        self.neira.log(f"📚 Добавлено {len(components)} компонентов в библиотеку", level="info")
+    
             return {
                 "response": f"🎨 Создан артефакт: {result.get('id')}",
                 "artifact": result

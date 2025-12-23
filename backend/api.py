@@ -476,6 +476,77 @@ async def get_artifact(request: Request) -> Response:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+async def rate_artifact(request: Request) -> Response:
+    """Оценить артефакт (1-5 звёзд)"""
+    try:
+        artifact_id = request.path_params.get("artifact_id")
+        
+        if not neira_wrapper.ui_code_cell:
+            return JSONResponse({"error": "UICodeCell not available"}, status_code=503)
+        
+        # Получить рейтинг из тела запроса
+        body = await request.json()
+        rating = body.get("rating")
+        
+        if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+            return JSONResponse({"error": "Rating must be integer 1-5"}, status_code=400)
+        
+        # Загрузить артефакт
+        artifact = neira_wrapper.ui_code_cell.get_artifact(artifact_id)
+        if not artifact:
+            return JSONResponse({"error": "Artifact not found"}, status_code=404)
+        
+        # Обновить рейтинг
+        artifact["metadata"]["rating"] = rating
+        artifact["metadata"]["rated_at"] = datetime.now().isoformat()
+        
+        # Сохранить обратно
+        artifacts_dir = os.path.join(os.path.dirname(__file__), "..", "artifacts")
+        json_path = os.path.join(artifacts_dir, f"{artifact_id}.json")
+        
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(artifact, f, ensure_ascii=False, indent=2)
+        
+        # Интеграция с experience.py
+        try:
+            if hasattr(neira_wrapper.neira, 'experience'):
+                context = {
+                    "type": "artifact_rating",
+                    "artifact_id": artifact_id,
+                    "template": artifact.get("template_used"),
+                    "rating": rating,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # Добавить опыт: чем выше оценка, тем больше reward
+                neira_wrapper.neira.experience.add_experience(
+                    action_type="ui_generation",
+                    success=rating >= 4,  # 4-5 звёзд = успех
+                    reward=rating,  # 1-5 баллов
+                    context=context
+                )
+        except Exception as exp_err:
+            print(f"[WARNING] Experience.py integration failed: {exp_err}")
+        
+        # Автоэкстракция компонентов для 5⭐ артефактов
+        if rating == 5:
+            try:
+                components = neira_wrapper.ui_code_cell.extract_components_from_artifact(artifact_id)
+                if components:
+                    neira_wrapper.ui_code_cell.save_components_to_library(components)
+                    print(f"[INFO] Extracted {len(components)} components from 5⭐ artifact {artifact_id}")
+            except Exception as comp_err:
+                print(f"[WARNING] Component extraction failed: {comp_err}")
+        
+        return JSONResponse({
+            "success": True,
+            "artifact_id": artifact_id,
+            "rating": rating
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 async def list_templates(request: Request) -> Response:
     """Список доступных шаблонов"""
     try:
@@ -523,6 +594,7 @@ routes = [
     Route("/api/artifacts/generate", generate_artifact, methods=["POST"]),
     Route("/api/artifacts", list_artifacts, methods=["GET"]),
     Route("/api/artifacts/{artifact_id}", get_artifact, methods=["GET"]),
+    Route("/api/artifacts/{artifact_id}/rate", rate_artifact, methods=["POST"]),
     Route("/api/templates", list_templates, methods=["GET"]),
     
     WebSocketRoute("/ws/chat", websocket_chat),

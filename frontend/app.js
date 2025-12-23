@@ -89,6 +89,9 @@ const elements = {
     artifactExpand: document.getElementById('artifactExpand'),
     artifactExport: document.getElementById('artifactExport'),
     artifactClose: document.getElementById('artifactClose'),
+    artifactRating: document.getElementById('artifactRating'),
+    starsContainer: document.getElementById('starsContainer'),
+    ratingValue: document.getElementById('ratingValue'),
 };
 
 // Initialize
@@ -756,6 +759,11 @@ function setupArtifactViewer() {
     if (elements.artifactExport) {
         elements.artifactExport.addEventListener('click', exportArtifact);
     }
+
+    // Rating stars
+    if (elements.starsContainer) {
+        setupRatingStars();
+    }
 }
 
 function toggleArtifactViewer() {
@@ -772,6 +780,14 @@ function showArtifact(artifact) {
     // Update info
     elements.templateName.textContent = artifact.template_used || 'Custom';
     elements.artifactId.textContent = artifact.id;
+    
+    // Show rating
+    if (elements.artifactRating) {
+        elements.artifactRating.style.display = 'flex';
+        const rating = artifact.metadata.rating || 0;
+        highlightStars(rating);
+        elements.ratingValue.textContent = rating > 0 ? rating : '—';
+    }
     
     // Render in iframe
     renderArtifact(artifact);
@@ -840,6 +856,78 @@ function exportArtifact() {
     
     URL.revokeObjectURL(url);
     addLog(`Артефакт экспортирован: ${a.download}`, 'success');
+}
+
+// Setup rating system
+function setupRatingStars() {
+    const stars = elements.starsContainer.querySelectorAll('.star');
+    
+    // Hover preview
+    stars.forEach((star, index) => {
+        star.addEventListener('mouseenter', () => {
+            highlightStars(index + 1);
+        });
+    });
+    
+    // Reset on leave
+    elements.starsContainer.addEventListener('mouseleave', () => {
+        if (currentArtifact && currentArtifact.metadata.rating) {
+            highlightStars(currentArtifact.metadata.rating);
+        } else {
+            highlightStars(0);
+        }
+    });
+    
+    // Click to rate
+    stars.forEach((star, index) => {
+        star.addEventListener('click', async () => {
+            if (!currentArtifact) return;
+            
+            const rating = index + 1;
+            await rateArtifact(currentArtifact.id, rating);
+        });
+    });
+}
+
+function highlightStars(count) {
+    const stars = elements.starsContainer.querySelectorAll('.star');
+    stars.forEach((star, index) => {
+        if (index < count) {
+            star.classList.add('filled');
+            star.textContent = '★';
+        } else {
+            star.classList.remove('filled');
+            star.textContent = '☆';
+        }
+    });
+}
+
+async function rateArtifact(artifactId, rating) {
+    try {
+        const response = await fetch(`http://localhost:8001/api/artifacts/${artifactId}/rate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating })
+        });
+        
+        if (!response.ok) throw new Error('Rating failed');
+        
+        const data = await response.json();
+        
+        // Update UI
+        highlightStars(rating);
+        elements.ratingValue.textContent = rating;
+        
+        // Update current artifact
+        if (currentArtifact) {
+            currentArtifact.metadata.rating = rating;
+        }
+        
+        addLog(`Артефакт оценён: ${rating}⭐`, 'success');
+    } catch (error) {
+        console.error('Rating error:', error);
+        addLog(`Ошибка оценки: ${error.message}`, 'error');
+    }
 }
 
 // Export for debugging

@@ -287,26 +287,61 @@ Content-Security-Policy: default-src 'self'; script-src 'unsafe-inline';
 - [x] WebSocket integration
 - [x] File persistence
 
-### Phase 2: 🚧 Self-Learning
-- [ ] Rating system (user feedback)
-- [ ] Quality metrics (автоанализ)
-- [ ] Pattern extraction
-- [ ] Knowledge base integration
-- [ ] Template evolution
+### Phase 2: ✅ Self-Learning (ЗАВЕРШЕНО)
+#### Приоритет 1: Feedback Loop
+- [x] Rating system UI (⭐ 1-5 stars)
+- [x] Backend endpoint `/api/artifacts/{id}/rate`
+- [x] Experience.py integration
+- [x] Hover effects + visual feedback
+- [ ] Статистика рейтингов в UI
+- [ ] Автоматическое улучшение низкорейтинговых артефактов
+
+#### Приоритет 2: Component Library
+- [x] `neira_ui_components.json` для переиспользуемых частей
+- [x] Автоматическая экстракция компонентов из 5⭐ артефактов
+- [x] Deduplication + sorting по рейтингу
+- [x] Regex паттерны: CSS classes, JS functions, @keyframes
+- [ ] Использование компонентов при генерации (TODO: template injection)
+- [ ] UI для просмотра библиотеки компонентов
+- [ ] Manual component добавление через UI
+
+#### Приоритет 3: Resonance-based Generation
+- [x] Интеграция с `neira.heart.resonance` (fallback 0.5)
+- [x] Адаптивный стиль генерации (experimental/safe)
+- [x] CSS color transformations по уровню резонанса
+- [x] Pulse animation для high resonance (>0.7)
+- [ ] Влияние настроения Neira на дизайн (mood → color mapping)
+- [ ] Визуализация resonance в artifact viewer
+
+#### Дополнительно:
+- [ ] Pattern extraction (успешные паттерны → knowledge base)
+- [ ] Quality metrics (CSS validity, performance)
+- [ ] Template evolution (автогенерация новых шаблонов)
+
+**Итого Phase 2:** 11/22 задач (50%) — core функционал готов, UI/UX refinement остаётся для Phase 2.1
 
 ### Phase 3: 💭 Advanced Generation
-- [ ] LLM-powered adaptation
-- [ ] Multi-file artifacts
-- [ ] Asset management (images, fonts)
-- [ ] Live editing mode
-- [ ] Collaborative artifacts
+- [ ] LLM-powered adaptation (через модель для кастомизации)
+- [ ] Multi-file artifacts (сложные проекты)
+- [ ] Asset management (загрузка images/fonts)
+- [ ] Live editing mode (редактирование в реальном времени)
+- [ ] Версионирование артефактов (v1, v2, diff)
+- [ ] Collaborative artifacts (multi-user)
 
 ### Phase 4: 🌐 Sharing & Export
-- [ ] Artifact gallery
-- [ ] Public sharing (optional)
+- [ ] Artifact gallery (публичная коллекция)
+- [ ] Public sharing links (опционально)
 - [ ] Embed code generation
 - [ ] npm package export
-- [ ] GitHub integration
+- [ ] GitHub integration (commit artifacts)
+
+### Phase 5: 🧠 Advanced Intelligence
+- [ ] Artifact-driven dialogue (UI подсказывает вопросы)
+- [ ] Neira experiments (ночная эволюция артефактов)
+- [ ] Cross-artifact learning (перенос паттернов)
+- [ ] Artifact as organ (temporary organ с lifespan)
+- [ ] Birth ceremonies для артефактов (ritual)
+- [ ] Preview thumbnails (миниатюры в списке)
 
 ---
 

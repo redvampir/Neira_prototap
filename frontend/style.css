@@ -929,6 +929,50 @@ body {
     opacity: 0.7;
 }
 
+/* Rating System */
+.artifact-rating {
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.rating-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.stars {
+    display: flex;
+    gap: 4px;
+}
+
+.star {
+    font-size: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.star:hover,
+.star.hover {
+    color: #ffd700;
+    transform: scale(1.2);
+}
+
+.star.filled {
+    color: #ffd700;
+}
+
+.rating-value {
+    font-size: 0.9rem;
+    color: var(--accent-blue);
+    min-width: 60px;
+}
+
 /* Состояние с фокусом на input (клавиатура открыта) */
 body.input-focused .stats-sidebar {
     display: none !important;
