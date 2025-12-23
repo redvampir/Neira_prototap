@@ -352,6 +352,188 @@ function resetPuzzle() {
 }
 
 renderBoard();"""
+            },
+            
+            "tictactoe": {
+                "name": "Tic-Tac-Toe",
+                "category": "game",
+                "description": "Интерфейс для крестиков-ноликов 3x3",
+                "html": """
+<div class="tictactoe-game">
+  <div class="game-header">
+    <h2>🎮 Крестики-Нолики</h2>
+    <div class="status" id="status">Ход: X</div>
+  </div>
+  <div class="board" id="board"></div>
+  <button class="reset-btn" onclick="resetGame()">🔄 Новая игра</button>
+</div>""",
+                "css": """
+.tictactoe-game {
+  width: 360px;
+  margin: 20px auto;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  font-family: 'Arial', sans-serif;
+}
+.game-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.game-header h2 {
+  margin: 0 0 12px 0;
+  color: #fff;
+  font-size: 28px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+.status {
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  display: inline-block;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.cell {
+  width: 100px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 12px;
+  font-size: 48px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+.cell:hover:not(.taken) {
+  background: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+.cell.taken {
+  cursor: not-allowed;
+}
+.cell.x {
+  color: #e74c3c;
+}
+.cell.o {
+  color: #3498db;
+}
+.reset-btn {
+  width: 100%;
+  padding: 14px;
+  background: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+.reset-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+.winner {
+  animation: pulse 0.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}""",
+                "js": """
+let board = ['', '', '', '', '', '', '', '', ''];
+let currentPlayer = 'X';
+let gameActive = true;
+
+const winConditions = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+  [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+  [0, 4, 8], [2, 4, 6]             // Diagonals
+];
+
+function initBoard() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('button');
+    cell.className = 'cell';
+    cell.onclick = () => handleCellClick(i);
+    cell.id = `cell-${i}`;
+    boardEl.appendChild(cell);
+  }
+  
+  updateStatus();
+}
+
+function handleCellClick(index) {
+  if (!gameActive || board[index] !== '') return;
+  
+  board[index] = currentPlayer;
+  const cell = document.getElementById(`cell-${index}`);
+  cell.textContent = currentPlayer;
+  cell.classList.add('taken', currentPlayer.toLowerCase());
+  
+  if (checkWinner()) {
+    document.getElementById('status').textContent = `🎉 Победил: ${currentPlayer}`;
+    gameActive = false;
+    highlightWinner();
+    return;
+  }
+  
+  if (board.every(cell => cell !== '')) {
+    document.getElementById('status').textContent = '🤝 Ничья!';
+    gameActive = false;
+    return;
+  }
+  
+  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+  updateStatus();
+}
+
+function checkWinner() {
+  return winConditions.some(condition => {
+    const [a, b, c] = condition;
+    return board[a] && board[a] === board[b] && board[a] === board[c];
+  });
+}
+
+function highlightWinner() {
+  winConditions.forEach(condition => {
+    const [a, b, c] = condition;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      [a, b, c].forEach(i => {
+        document.getElementById(`cell-${i}`).classList.add('winner');
+      });
+    }
+  });
+}
+
+function updateStatus() {
+  if (gameActive) {
+    document.getElementById('status').textContent = `Ход: ${currentPlayer}`;
+  }
+}
+
+function resetGame() {
+  board = ['', '', '', '', '', '', '', '', ''];
+  currentPlayer = 'X';
+  gameActive = true;
+  initBoard();
+}
+
+initBoard();"""
             }
         }
         
@@ -443,7 +625,9 @@ renderBoard();"""
         # Простой keyword-based подход (можно заменить на LLM)
         task_lower = task.lower()
         
-        if any(word in task_lower for word in ["инвентарь", "inventory", "предметы"]):
+        if any(word in task_lower for word in ["крестики", "нолики", "tictactoe", "tic-tac-toe", "3x3"]):
+            return self.templates.get("tictactoe")
+        elif any(word in task_lower for word in ["инвентарь", "inventory", "предметы"]):
             return self.templates.get("rpg_inventory")
         elif any(word in task_lower for word in ["hud", "жизни", "здоровье", "монеты"]):
             return self.templates.get("platformer_hud")
