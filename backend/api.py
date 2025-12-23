@@ -478,8 +478,10 @@ async def get_artifact(request: Request) -> Response:
 
 async def rate_artifact(request: Request) -> Response:
     """Оценить артефакт (1-5 звёзд)"""
+    print(f"[DEBUG] rate_artifact called! Path: {request.url.path}, Method: {request.method}")
     try:
         artifact_id = request.path_params.get("artifact_id")
+        print(f"[DEBUG] artifact_id: {artifact_id}")
         
         if not neira_wrapper.ui_code_cell:
             return JSONResponse({"error": "UICodeCell not available"}, status_code=503)
@@ -592,9 +594,9 @@ routes = [
     
     # Artifact endpoints
     Route("/api/artifacts/generate", generate_artifact, methods=["POST"]),
-    Route("/api/artifacts", list_artifacts, methods=["GET"]),
-    Route("/api/artifacts/{artifact_id}", get_artifact, methods=["GET"]),
     Route("/api/artifacts/{artifact_id}/rate", rate_artifact, methods=["POST"]),
+    Route("/api/artifacts/{artifact_id}", get_artifact, methods=["GET"]),
+    Route("/api/artifacts", list_artifacts, methods=["GET"]),
     Route("/api/templates", list_templates, methods=["GET"]),
     
     WebSocketRoute("/ws/chat", websocket_chat),
@@ -613,4 +615,4 @@ app.add_middleware(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api:app", host="127.0.0.1", port=8000, log_level="info")
+    uvicorn.run("backend.api:app", host="0.0.0.0", port=8001, log_level="info")

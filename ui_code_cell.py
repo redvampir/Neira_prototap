@@ -672,6 +672,10 @@ renderBoard();"""
         
         self.neira.log(f"📚 Добавлено {len(components)} компонентов в библиотеку", level="info")
     
+    async def execute(self, query: str, context: dict) -> dict:
+        """BaseCell метод для интеграции в Neira."""
+        if "создай интерфейс" in query.lower() or "ui для" in query.lower():
+            result = await self.generate_ui(query)
             return {
                 "response": f"🎨 Создан артефакт: {result.get('id')}",
                 "artifact": result

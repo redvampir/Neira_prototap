@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neira Artifact - dcaf8a5110c6</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    
+.rpg-inventory {
+  width: 400px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 2px solid #8b7355;
+  border-radius: 8px;
+  padding: 20px;
+  color: #f0e6d2;
+  font-family: 'Cinzel', serif;
+}
+.inventory-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #8b7355;
+  padding-bottom: 10px;
+}
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.item-slot {
+  width: 60px;
+  height: 60px;
+  background: #0f0f0f;
+  border: 2px solid #4a4a4a;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.item-slot:hover {
+  border-color: #c9aa71;
+  transform: scale(1.05);
+}
+.item-slot.filled {
+  background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+  border-color: #8b7355;
+}
+.item-icon {
+  font-size: 32px;
+}
+.item-count {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 1px 1px 2px #000;
+}
+  </style>
+</head>
+<body>
+  
+<div class="rpg-inventory">
+  <div class="inventory-header">
+    <h2>⚔️ Инвентарь</h2>
+    <div class="gold">💰 <span id="gold">100</span></div>
+  </div>
+  <div class="inventory-grid" id="inventoryGrid"></div>
+</div>
+  <script>
+    
+const items = [
+  { icon: '⚔️', name: 'Меч', count: 1 },
+  { icon: '🛡️', name: 'Щит', count: 1 },
+  { icon: '🧪', name: 'Зелье', count: 5 },
+  { icon: '🔑', name: 'Ключ', count: 1 }
+];
+
+function renderInventory() {
+  const grid = document.getElementById('inventoryGrid');
+  grid.innerHTML = '';
+  
+  for (let i = 0; i < 20; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'item-slot';
+    
+    if (items[i]) {
+      slot.classList.add('filled');
+      slot.innerHTML = `
+        <span class="item-icon">${items[i].icon}</span>
+        ${items[i].count > 1 ? `<span class="item-count">${items[i].count}</span>` : ''}
+      `;
+      slot.title = items[i].name;
+    }
+    
+    grid.appendChild(slot);
+  }
+}
+
+renderInventory();
+  </script>
+</body>
+</html>
