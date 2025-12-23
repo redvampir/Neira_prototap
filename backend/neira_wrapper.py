@@ -15,14 +15,28 @@ from datetime import datetime
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
+print(f"🔍 Parent dir: {parent_dir}")
+print(f"🔍 __file__: {__file__}")
+print(f"🔍 sys.path[0]: {sys.path[0]}")
+
 from main import Neira
 from cells import get_model_status
 
 # Импорт UI Code Cell
 try:
     from ui_code_cell import UICodeCell
-except ImportError:
+    print(f"✅ UICodeCell импортирован: {UICodeCell}")
+except ImportError as e:
     UICodeCell = None
+    print(f"⚠️ UICodeCell не найден: {e}")
+
+# Импорт Cell Router
+try:
+    from cell_router import get_router
+    print(f"✅ CellRouter импортирован: {get_router}")
+except ImportError as e:
+    get_router = None
+    print(f"⚠️ CellRouter не найден: {e}")
 
 
 @dataclass
@@ -46,22 +60,44 @@ class NeiraWrapper:
         Args:
             verbose: Показывать отладочную информацию (False для API)
         """
+        print(f"[NeiraWrapper.__init__] START (verbose={verbose})")
+        
         # Для backend отключаем фоновые watcher-потоки (они мешают чистому завершению
         # процесса и в консольных прогревах могут приводить к крешам/фаталам).
         os.environ.setdefault("NEIRA_ENABLE_CELL_WATCHER", "false")
 
         # Инициализируем Neira в отдельном потоке
+        print("[NeiraWrapper.__init__] Creating Neira...")
         self.neira = Neira(verbose=verbose)
+        print("[NeiraWrapper.__init__] Neira created")
         self.is_processing = False
         
+        # Инициализируем Cell Router
+        print("[NeiraWrapper.__init__] Creating Cell Router...")
+        self.router = get_router() if get_router else None
+        print(f"[NeiraWrapper.__init__] Cell Router: {self.router}")
+        
+        # Добавляем контекст о клетках в system prompt
+        if self.router:
+            cell_context = self.router.get_system_prompt_extension()
+            # TODO: Добавить в personality или system prompt Neira
+            print("🧬 Cell Router инициализирован")
+        
         # Инициализируем UI Code Cell если доступен
+        print(f"[NeiraWrapper.__init__] UICodeCell available: {UICodeCell is not None}")
         self.ui_code_cell = None
         if UICodeCell:
             try:
+                print("[NeiraWrapper.__init__] Creating UICodeCell...")
                 self.ui_code_cell = UICodeCell(self.neira)
-                self.neira.log("🎨 UICodeCell инициализирован")
+                print("🎨 UICodeCell инициализирован")
+                print(f"   Templates loaded: {list(self.ui_code_cell.templates.keys())}")
             except Exception as e:
-                self.neira.log(f"⚠️ Ошибка инициализации UICodeCell: {e}", level="warning")
+                print(f"⚠️ Ошибка инициализации UICodeCell: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print("[NeiraWrapper.__init__] DONE")
 
     async def process_stream(self, user_input: str) -> AsyncGenerator[StreamChunk, None]:
         """
@@ -80,12 +116,30 @@ class NeiraWrapper:
         self.is_processing = True
 
         try:
+            # Этап 0: Cell Detection
+            selected_cell = None
+            cell_reasoning = ""
+            
+            if self.router:
+                use_cell, cell_name, reasoning = self.router.should_use_cell(user_input)
+                if use_cell:
+                    selected_cell = cell_name
+                    cell_reasoning = reasoning
+                    print(f"🎯 [Router] Выбрана клетка: {cell_name}")
+                    print(f"   [Router] Обоснование: {reasoning}")
+                else:
+                    print(f"ℹ️ [Router] Клетка не требуется: {reasoning}")
+            
             # Этап 1: Анализ
             yield StreamChunk(
                 type="stage",
                 stage="analysis",
                 content="Анализирую запрос...",
-                metadata={"timestamp": datetime.now().isoformat()}
+                metadata={
+                    "timestamp": datetime.now().isoformat(),
+                    "selected_cell": selected_cell,
+                    "reasoning": cell_reasoning
+                }
             )
 
             # Запускаем в executor для неблокирующего выполнения
@@ -109,7 +163,35 @@ class NeiraWrapper:
                 content="Выполняю задачу..."
             )
 
-            # Основная обработка в отдельном потоке
+            # НОВАЯ ЛОГИКА: Если выбрана клетка ui_code_cell — вызываем её напрямую
+            if selected_cell == "ui_code_cell" and self.ui_code_cell:
+                print(f"🎨 [Execution] Вызываю UICodeCell.generate_ui() для: {user_input}")
+                
+                # Генерируем UI артефакт
+                artifact = await loop.run_in_executor(
+                    None,
+                    self.ui_code_cell.generate_ui,
+                    user_input
+                )
+                
+                print(f"✅ [Execution] Артефакт создан: {artifact['id']}, template={artifact['template_used']}")
+                
+                # Возвращаем результат с артефактом
+                yield StreamChunk(
+                    type="artifact",
+                    content=f"✅ Создан UI артефакт: {artifact['id']}",
+                    metadata={
+                        "artifact": artifact,
+                        "cell_used": "ui_code_cell"
+                    }
+                )
+                
+                # Завершаем обработку
+                yield StreamChunk(type="done", content="Готово")
+                self.is_processing = False
+                return
+            
+            # Основная обработка в отдельном потоке (для обычных запросов)
             response = await loop.run_in_executor(
                 None,
                 self.neira.process,
