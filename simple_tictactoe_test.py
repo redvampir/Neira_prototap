@@ -1,9 +1,16 @@
-"""Простой WebSocket клиент для тестирования без импорта backend модулей."""
+"""Изолированный WebSocket клиент (ZERO backend imports!)"""
 import asyncio
 import json
-import websockets
+import sys
 import webbrowser
 from pathlib import Path
+
+# Импортируем только websockets (внешняя библиотека)
+try:
+    import websockets
+except ImportError:
+    print("❌ pip install websockets")
+    sys.exit(1)
 
 
 async def test_tictactoe():

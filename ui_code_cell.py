@@ -577,12 +577,20 @@ initBoard();"""
         resonance_level = self._get_resonance()
         self.neira.log(f"🎵 Resonance level: {resonance_level:.2f} (0=консервативно, 1=экспериментально)")
         
+        # DEBUG: Показываем входной task
+        print(f"[UICodeCell.generate_ui] task_description = {task_description[:100]}...")
+        print(f"[UICodeCell.generate_ui] template_name = {template_name}")
+        print(f"[UICodeCell.generate_ui] available templates = {list(self.templates.keys())}")
+        
         # Выбрать шаблон
         if template_name and template_name in self.templates:
             template = self.templates[template_name]
+            print(f"[UICodeCell] Указан template_name: {template_name}")
         else:
             # LLM выбирает подходящий шаблон
+            print(f"[UICodeCell] Вызываю _select_template()...")
             template = await self._select_template(task_description)
+            print(f"[UICodeCell] _select_template() returned: {template.get('name') if template else None}")
         
         if not template:
             return {"error": "Не найден подходящий шаблон"}
@@ -625,17 +633,26 @@ initBoard();"""
         # Простой keyword-based подход (можно заменить на LLM)
         task_lower = task.lower()
         
+        print(f"[_select_template] task_lower = {task_lower[:100]}...")
+        
         if any(word in task_lower for word in ["крестики", "нолики", "tictactoe", "tic-tac-toe", "3x3"]):
-            return self.templates.get("tictactoe")
+            result = self.templates.get("tictactoe")
+            print(f"[_select_template] Найдены ключевые слова для tictactoe! Returning: {result.get('name') if result else None}")
+            return result
         elif any(word in task_lower for word in ["инвентарь", "inventory", "предметы"]):
+            print(f"[_select_template] Найдены ключевые слова для inventory")
             return self.templates.get("rpg_inventory")
         elif any(word in task_lower for word in ["hud", "жизни", "здоровье", "монеты"]):
+            print(f"[_select_template] Найдены ключевые слова для hud")
             return self.templates.get("platformer_hud")
         elif any(word in task_lower for word in ["головоломка", "puzzle", "сетка"]):
+            print(f"[_select_template] Найдены ключевые слова для puzzle")
             return self.templates.get("puzzle_board")
         
         # Дефолтный шаблон
-        return list(self.templates.values())[0] if self.templates else None
+        default = list(self.templates.values())[0] if self.templates else None
+        print(f"[_select_template] Ключевые слова не найдены, возвращаю default: {default.get('name') if default else None}")
+        return default
     
     async def _adapt_template(
         self,
