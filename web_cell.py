@@ -7,7 +7,7 @@ pip install ddgs
 """
 
 import requests
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 # Попробуем импортировать duckduckgo
@@ -18,7 +18,36 @@ except ImportError:
     DDGS_AVAILABLE = False
     print("⚠️ ddgs не установлен. Выполни: pip install ddgs")
 
-from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_REASON, TIMEOUT
+from cells import (
+    DEFAULT_MAX_RESPONSE_TOKENS,
+    OLLAMA_NUM_CTX,
+    Cell,
+    CellResult,
+    MemoryCell,
+    MODEL_REASON,
+    OLLAMA_URL,
+    TIMEOUT,
+    _MODEL_LAYERS,
+    _merge_system_prompt,
+)
+
+
+def _build_ollama_options(temperature: float, max_tokens: int) -> Dict[str, Any]:
+    options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+    if OLLAMA_NUM_CTX:
+        options["num_ctx"] = OLLAMA_NUM_CTX
+    if _MODEL_LAYERS is not None:
+        adapter = _MODEL_LAYERS.get_active_adapter(MODEL_REASON)
+        if adapter:
+            options["adapter"] = adapter
+    return options
+
+
+def _merge_layer_system_prompt(base_prompt: str) -> str:
+    if _MODEL_LAYERS is None:
+        return base_prompt
+    layer_prompt = _MODEL_LAYERS.get_active_prompt(MODEL_REASON)
+    return _merge_system_prompt(base_prompt, layer_prompt)
 
 
 @dataclass
@@ -98,9 +127,9 @@ class WebSearchCell(Cell):
             json={
                 "model": MODEL_REASON,
                 "prompt": prompt,
-                "system": self.system_prompt,
+                "system": _merge_layer_system_prompt(self.system_prompt),
                 "stream": False,
-                "options": {"temperature": 0.5, "num_predict": 2048}
+                "options": _build_ollama_options(0.5, min(DEFAULT_MAX_RESPONSE_TOKENS, 2048))
             },
             timeout=TIMEOUT
         )
@@ -151,9 +180,9 @@ class WebSearchCell(Cell):
             json={
                 "model": MODEL_REASON,
                 "prompt": prompt,
-                "system": "Ты — экстрактор знаний. Извлекай точные факты.",
+                "system": _merge_layer_system_prompt("Ты — экстрактор знаний. Извлекай точные факты."),
                 "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 1024}
+                "options": _build_ollama_options(0.3, min(DEFAULT_MAX_RESPONSE_TOKENS, 1024))
             },
             timeout=TIMEOUT
         )

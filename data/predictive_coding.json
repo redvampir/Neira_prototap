@@ -1,0 +1,191 @@
+{
+  "predictions": [
+    {
+      "prediction_id": "67d18f4b87d3",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-02T15:24:54.415862",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "f31218ee3edc",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4339622641509434,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-02T15:24:54.418363",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "84febd6a1d7e",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4339622641509434,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-02T15:25:38.127557",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "b424055f6fb0",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4642857142857143,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-02T15:25:38.129049",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "a3e10fbbb931",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4642857142857143,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-02T15:25:57.385941",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "e5344927e28f",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-02T15:25:57.388229",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "92a4e973a90c",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Помоги мне написать функцию на Python",
+      "created_at": "2026-01-02T15:25:57.445578",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "4fcf70abafde",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Помоги мне написать функцию на Python",
+      "created_at": "2026-01-02T15:25:57.446271",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "b92fde0db360",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-02T15:27:56.388993",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "fced53322384",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5161290322580646,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-02T15:27:56.392721",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "ebdef1b6bdea",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5161290322580646,
+      "context": "Помоги мне написать функцию на Python",
+      "created_at": "2026-01-02T15:27:56.457297",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "2cd2f434f05f",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5161290322580646,
+      "context": "Помоги мне написать функцию на Python",
+      "created_at": "2026-01-02T15:27:56.458053",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    }
+  ],
+  "patterns": {
+    "greeting_followup": {
+      "pattern_id": "greeting_followup",
+      "trigger": "greeting",
+      "prediction_type": "follow_up",
+      "likely_outcomes": {
+        "how_are_you": 0.5161290322580646,
+        "help_request": 0.24193548387096775,
+        "small_talk": 0.16129032258064518,
+        "direct_question": 0.08064516129032259
+      },
+      "success_count": 4,
+      "total_count": 4
+    },
+    "technical_clarification": {
+      "pattern_id": "technical_clarification",
+      "trigger": "technical_question",
+      "prediction_type": "follow_up",
+      "likely_outcomes": {
+        "clarification": 0.4,
+        "example_request": 0.3,
+        "thanks": 0.2,
+        "new_question": 0.1
+      },
+      "success_count": 4,
+      "total_count": 4
+    },
+    "emotional_support": {
+      "pattern_id": "emotional_support",
+      "trigger": "emotional_message",
+      "prediction_type": "user_intent",
+      "likely_outcomes": {
+        "needs_support": 0.5,
+        "venting": 0.3,
+        "advice_seeking": 0.2
+      },
+      "success_count": 0,
+      "total_count": 0
+    },
+    "why_question": {
+      "pattern_id": "why_question",
+      "trigger": "why_question",
+      "prediction_type": "response_type",
+      "likely_outcomes": {
+        "explanation": 0.6,
+        "reasoning": 0.3,
+        "example": 0.1
+      },
+      "success_count": 0,
+      "total_count": 0
+    }
+  },
+  "total_predictions": 12,
+  "successful_predictions": 4,
+  "avg_prediction_error": 0.40725312499999994
+}

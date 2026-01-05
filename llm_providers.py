@@ -15,12 +15,72 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 try:
+    from local_embeddings import get_local_embedding
+    LOCAL_EMBEDDINGS_AVAILABLE = True
+except Exception:
+    LOCAL_EMBEDDINGS_AVAILABLE = False
+
+try:
     from model_layers import ModelLayersRegistry
 
     _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
 except Exception as exc:
     _MODEL_LAYERS = None
     logger.info("Слои моделей отключены: %s", exc)
+
+
+def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    if value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
+
+
+def _env_optional_int(name: str, min_value: int = 1, max_value: Optional[int] = None) -> Optional[int]:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return None
+    if value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
+DEFAULT_OLLAMA_NUM_CTX = _env_optional_int("NEIRA_OLLAMA_NUM_CTX", min_value=256)
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str]) -> str:
+    if not layer_prompt:
+        return base_prompt
+    if not base_prompt:
+        return layer_prompt
+    return f"{base_prompt}\n\n[Слой модели]\n{layer_prompt}"
 
 
 class ProviderType(Enum):
@@ -30,6 +90,49 @@ class ProviderType(Enum):
     CLAUDE = "claude"
     GROQ = "groq"
     GEMINI = "gemini"
+    LLAMACPP = "llamacpp"  # llama.cpp server
+    LMSTUDIO = "lmstudio"  # LM Studio
+
+
+def _normalize_provider_name(name: str) -> str:
+    return name.strip().lower().replace("-", "").replace("_", "").replace(".", "")
+
+
+_PROVIDER_NAME_MAP = {
+    "ollama": ProviderType.OLLAMA,
+    "openai": ProviderType.OPENAI,
+    "claude": ProviderType.CLAUDE,
+    "groq": ProviderType.GROQ,
+    "gemini": ProviderType.GEMINI,
+    "llamacpp": ProviderType.LLAMACPP,
+    "lmstudio": ProviderType.LMSTUDIO,
+}
+
+_DEFAULT_PROVIDER_PRIORITY = [
+    ProviderType.OLLAMA,
+    ProviderType.LMSTUDIO,
+    ProviderType.LLAMACPP,
+    ProviderType.GROQ,
+    ProviderType.OPENAI,
+    ProviderType.CLAUDE,
+]
+
+
+def _parse_provider_priority() -> List[ProviderType]:
+    raw = os.getenv("LLM_PROVIDER_PRIORITY", "")
+    if not raw.strip():
+        return list(_DEFAULT_PROVIDER_PRIORITY)
+    result: List[ProviderType] = []
+    seen = set()
+    for token in raw.split(","):
+        normalized = _normalize_provider_name(token)
+        if not normalized:
+            continue
+        provider = _PROVIDER_NAME_MAP.get(normalized)
+        if provider and provider not in seen:
+            seen.add(provider)
+            result.append(provider)
+    return result if result else list(_DEFAULT_PROVIDER_PRIORITY)
 
 
 @dataclass
@@ -64,7 +167,7 @@ class LLMProvider(ABC):
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
     ) -> LLMResponse:
         """Генерация ответа от LLM"""
         pass
@@ -114,11 +217,13 @@ class OllamaProvider(LLMProvider):
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
     ) -> LLMResponse:
         """Генерация через Ollama"""
         try:
             options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+            if DEFAULT_OLLAMA_NUM_CTX is not None:
+                options["num_ctx"] = DEFAULT_OLLAMA_NUM_CTX
             if _MODEL_LAYERS is not None:
                 adapter = _MODEL_LAYERS.get_active_adapter(self.model)
                 if adapter:
@@ -244,7 +349,7 @@ class OpenAIProvider(LLMProvider):
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
     ) -> LLMResponse:
         """Генерация через OpenAI"""
         if not self.available:
@@ -388,7 +493,7 @@ class ClaudeProvider(LLMProvider):
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
     ) -> LLMResponse:
         """Генерация через Claude"""
         if not self.available:
@@ -499,7 +604,7 @@ class GroqProvider(LLMProvider):
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
     ) -> LLMResponse:
         """Генерация через Groq"""
         if not self.available:
@@ -567,15 +672,268 @@ class GroqProvider(LLMProvider):
         return ProviderType.GROQ
 
 
+class LlamaCppProvider(LLMProvider):
+    """
+    Провайдер для llama.cpp server (OpenAI-совместимый API)
+    
+    Запуск сервера: ./server -m model.gguf --port 8080
+    Или: llama-server -m model.gguf --port 8080
+    """
+    
+    def __init__(
+        self,
+        model: str = "local-model",
+        url: str = "http://localhost:8080/v1/chat/completions",
+        timeout: int = 300
+    ):
+        self.url = url
+        self.base_url = url.replace("/v1/chat/completions", "")
+        super().__init__(model, timeout)
+    
+    def _check_availability(self) -> bool:
+        """Проверяем доступность llama.cpp сервера"""
+        try:
+            # Пробуем health endpoint
+            health_url = f"{self.base_url}/health"
+            response = requests.get(health_url, timeout=5)
+            if response.status_code == 200:
+                self.available = True
+                return True
+            
+            # Fallback: пробуем models endpoint
+            models_url = f"{self.base_url}/v1/models"
+            response = requests.get(models_url, timeout=5)
+            self.available = response.status_code == 200
+            return self.available
+        except Exception:
+            self.available = False
+            return False
+    
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
+    ) -> LLMResponse:
+        """Генерация через llama.cpp server"""
+        if not self.available:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.LLAMACPP,
+                model=self.model,
+                success=False,
+                error="llama.cpp server not available"
+            )
+        
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = requests.post(
+                self.url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": False
+                },
+                timeout=self.timeout
+            )
+            
+            if response.status_code != 200:
+                return LLMResponse(
+                    content="",
+                    provider=ProviderType.LLAMACPP,
+                    model=self.model,
+                    success=False,
+                    error=f"HTTP {response.status_code}: {response.text}"
+                )
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            tokens = data.get("usage", {}).get("total_tokens", 0)
+            
+            return LLMResponse(
+                content=content,
+                provider=ProviderType.LLAMACPP,
+                model=self.model,
+                success=True,
+                tokens_used=tokens,
+                cost=0.0  # Локальная модель — бесплатно
+            )
+            
+        except Exception as e:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.LLAMACPP,
+                model=self.model,
+                success=False,
+                error=str(e)
+            )
+    
+    def get_provider_type(self) -> ProviderType:
+        return ProviderType.LLAMACPP
+
+
+class LMStudioProvider(LLMProvider):
+    """
+    Провайдер для LM Studio (OpenAI-совместимый локальный сервер)
+    
+    В LM Studio: Local Server → Start Server (порт 1234 по умолчанию)
+    """
+    
+    def __init__(
+        self,
+        model: str = "local-model",
+        url: str = "http://localhost:1234/v1/chat/completions",
+        timeout: int = 300
+    ):
+        self.url = url
+        self.base_url = url.replace("/v1/chat/completions", "")
+        super().__init__(model, timeout)
+    
+    def _check_availability(self) -> bool:
+        """Проверяем доступность LM Studio"""
+        try:
+            models_url = f"{self.base_url}/v1/models"
+            response = requests.get(models_url, timeout=5)
+            if response.status_code == 200:
+                self.available = True
+                # Пробуем получить имя модели
+                data = response.json()
+                if data.get("data"):
+                    self.model = data["data"][0].get("id", self.model)
+                return True
+            self.available = False
+            return False
+        except Exception:
+            self.available = False
+            return False
+    
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS
+    ) -> LLMResponse:
+        """Генерация через LM Studio"""
+        if not self.available:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.LMSTUDIO,
+                model=self.model,
+                success=False,
+                error="LM Studio server not available"
+            )
+        
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = requests.post(
+                self.url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": False,
+                    # Предотвращаем дублирование текста
+                    "frequency_penalty": 0.3,  # Штраф за повторение токенов
+                    "presence_penalty": 0.2,   # Штраф за повторение тем
+                    "repeat_penalty": 1.1      # Общий штраф (если поддерживается)
+                },
+                timeout=self.timeout
+            )
+            
+            if response.status_code != 200:
+                return LLMResponse(
+                    content="",
+                    provider=ProviderType.LMSTUDIO,
+                    model=self.model,
+                    success=False,
+                    error=f"HTTP {response.status_code}: {response.text}"
+                )
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            tokens = data.get("usage", {}).get("total_tokens", 0)
+            
+            return LLMResponse(
+                content=content,
+                provider=ProviderType.LMSTUDIO,
+                model=self.model,
+                success=True,
+                tokens_used=tokens,
+                cost=0.0  # Локальная модель — бесплатно
+            )
+            
+        except Exception as e:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.LMSTUDIO,
+                model=self.model,
+                success=False,
+                error=str(e)
+            )
+    
+    def get_provider_type(self) -> ProviderType:
+        return ProviderType.LMSTUDIO
+
+
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
+
+
+def _build_default_providers() -> List[LLMProvider]:
+    providers: List[LLMProvider] = []
+    priority = _parse_provider_priority()
+    ollama_disabled = _env_bool("NEIRA_DISABLE_OLLAMA", False)
+
+    for provider_type in priority:
+        if provider_type == ProviderType.OLLAMA:
+            if ollama_disabled:
+                continue
+            model = os.getenv("NEIRA_OLLAMA_MODEL", "nemotron-mini")
+            providers.append(OllamaProvider(model=model))
+        elif provider_type == ProviderType.LMSTUDIO:
+            url = os.getenv("NEIRA_LMSTUDIO_URL", "http://localhost:1234/v1/chat/completions")
+            model = os.getenv("NEIRA_LMSTUDIO_MODEL", "local-model")
+            providers.append(LMStudioProvider(model=model, url=url))
+        elif provider_type == ProviderType.LLAMACPP:
+            url = os.getenv("NEIRA_LLAMACPP_URL", "http://localhost:8080/v1/chat/completions")
+            model = os.getenv("NEIRA_LLAMACPP_MODEL", "local-model")
+            providers.append(LlamaCppProvider(model=model, url=url))
+        elif provider_type == ProviderType.GROQ:
+            model = os.getenv("NEIRA_GROQ_MODEL", "llama-3.1-8b-instant")
+            providers.append(GroqProvider(model=model))
+        elif provider_type == ProviderType.OPENAI:
+            model = os.getenv("NEIRA_OPENAI_MODEL", "gpt-3.5-turbo")
+            providers.append(OpenAIProvider(model=model))
+        elif provider_type == ProviderType.CLAUDE:
+            model = os.getenv("NEIRA_CLAUDE_MODEL", "claude-3-haiku-20240307")
+            providers.append(ClaudeProvider(model=model))
+
+    return providers
+
+
 class LLMManager:
     """
     Менеджер LLM провайдеров с автоматическим fallback
     
-    Приоритет:
-    1. Ollama (бесплатно, приватно) - для простых задач
-    2. Groq (бесплатно, быстро) - для средних задач
-    3. OpenAI GPT-3.5 (дешево) - для сложных задач
-    4. Claude Haiku (дешево) - для очень сложных задач
+    Приоритет локальных провайдеров:
+    1. Ollama (самый популярный)
+    2. LM Studio (удобный GUI)
+    3. llama.cpp server (легковесный)
+    4. Groq (бесплатно, быстро, облако)
+    5. OpenAI, Claude (платные облачные)
     """
     
     def __init__(self, providers: Optional[List[LLMProvider]] = None):
@@ -584,15 +942,15 @@ class LLMManager:
             providers: Список провайдеров в порядке приоритета
         """
         if providers is None:
-            # Дефолтная конфигурация - используем более мощные модели
-            self.providers = [
-                OllamaProvider(model="neira-cell-router:latest"),  # Fine-tuned модель
-                GroqProvider(model="llama-3.1-8b-instant"),
-                OpenAIProvider(model="gpt-3.5-turbo"),
-                ClaudeProvider(model="claude-3-haiku-20240307")
-            ]
+            self.providers = _build_default_providers()
         else:
-            self.providers = providers
+            if OLLAMA_DISABLED:
+                self.providers = [
+                    p for p in providers
+                    if p.get_provider_type() != ProviderType.OLLAMA
+                ]
+            else:
+                self.providers = providers
         
         # Фильтруем только доступные провайдеры
         self.available_providers = [p for p in self.providers if p.available]
@@ -606,7 +964,7 @@ class LLMManager:
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 2048,
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS,
         preferred_provider: Optional[ProviderType] = None
     ) -> LLMResponse:
         """
@@ -623,8 +981,18 @@ class LLMManager:
             LLMResponse с результатом
         """
         if not self.available_providers:
+            if OLLAMA_DISABLED:
+                message = (
+                    "Ни один LLM провайдер не доступен. Запусти LM Studio/llama.cpp "
+                    "или добавь API ключи (OPENAI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY)."
+                )
+            else:
+                message = (
+                    "Ни один LLM провайдер не доступен. Настрой Ollama или добавь API ключи "
+                    "(OPENAI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY)."
+                )
             return LLMResponse(
-                content="Ни один LLM провайдер не доступен. Настрой Ollama или добавь API ключи (OPENAI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY).",
+                content=message,
                 provider=ProviderType.OLLAMA,
                 model="none",
                 success=False,
@@ -643,10 +1011,11 @@ class LLMManager:
         
         for provider in providers_to_try:
             logger.info(f"Trying {provider.get_provider_type().value} ({provider.model})...")
-            
+            layer_prompt = _MODEL_LAYERS.get_active_prompt(provider.model) if _MODEL_LAYERS else None
+            effective_system_prompt = _merge_system_prompt(system_prompt, layer_prompt)
             response = provider.generate(
                 prompt=prompt,
-                system_prompt=system_prompt,
+                system_prompt=effective_system_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
@@ -680,6 +1049,16 @@ class LLMManager:
         Returns:
             Вектор чисел или None при ошибке всех провайдеров
         """
+        if not text or not text.strip():
+            return None
+        if LOCAL_EMBEDDINGS_AVAILABLE:
+            try:
+                local_embedding = get_local_embedding(text)
+                if local_embedding:
+                    logger.info("✓ Embedding from local")
+                    return local_embedding
+            except Exception as e:
+                logger.warning(f"Local embedding error: {e}")
         if not self.available_providers:
             logger.warning("No providers available for embeddings")
             return None
@@ -733,10 +1112,21 @@ def create_default_manager() -> LLMManager:
     return LLMManager()
 
 
+def create_local_only_manager() -> LLMManager:
+    """
+    Менеджер только с локальными провайдерами (без облака)
+    Полностью приватно, работает офлайн
+    """
+    return LLMManager([
+        OllamaProvider(model="nemotron-mini"),
+    ])
+
+
 def create_fast_manager() -> LLMManager:
     """Менеджер для быстрых ответов (приоритет на скорость)"""
     return LLMManager([
         GroqProvider(model="llama-3.1-8b-instant"),
+        LMStudioProvider(model="local-model"),
         OllamaProvider(model="ministral-3:3b"),
         OpenAIProvider(model="gpt-3.5-turbo")
     ])
@@ -756,6 +1146,8 @@ def create_free_manager() -> LLMManager:
     """Менеджер только с бесплатными провайдерами"""
     return LLMManager([
         OllamaProvider(model="ministral-3:3b"),
+        LMStudioProvider(model="local-model"),
+        LlamaCppProvider(model="local-model"),
         GroqProvider(model="llama-3.1-8b-instant")
     ])
 

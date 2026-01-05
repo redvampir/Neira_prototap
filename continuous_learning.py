@@ -13,13 +13,21 @@ Neira Continuous Learning System v0.6
 import os
 import json
 import shutil
-from typing import List, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import requests
 
 # Импорты
-from cells import OLLAMA_URL, MODEL_REASON, TIMEOUT
+from cells import (
+    DEFAULT_MAX_RESPONSE_TOKENS,
+    OLLAMA_NUM_CTX,
+    OLLAMA_URL,
+    MODEL_REASON,
+    TIMEOUT,
+    _MODEL_LAYERS,
+    _merge_system_prompt,
+)
 from experience import ExperienceSystem, ExperienceEntry
 
 # Конфигурация
@@ -28,6 +36,24 @@ CODE_BACKUP_DIR = "backups/code_evolution"
 MODIFIABLE_FILES = ["cells.py", "main.py", "code_cell.py", "web_cell.py", "experience.py"]
 MIN_FAILURES_TO_TRIGGER = 3  # Минимум неудач для автоисправления
 MIN_SCORE_THRESHOLD = 6      # Оценка ниже которой считается провалом
+
+
+def _build_ollama_options(temperature: float, max_tokens: int) -> Dict[str, Any]:
+    options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+    if OLLAMA_NUM_CTX:
+        options["num_ctx"] = OLLAMA_NUM_CTX
+    if _MODEL_LAYERS is not None:
+        adapter = _MODEL_LAYERS.get_active_adapter(MODEL_REASON)
+        if adapter:
+            options["adapter"] = adapter
+    return options
+
+
+def _merge_layer_system_prompt(system_prompt: str) -> str:
+    if _MODEL_LAYERS is None:
+        return system_prompt
+    layer_prompt = _MODEL_LAYERS.get_active_prompt(MODEL_REASON)
+    return _merge_system_prompt(system_prompt, layer_prompt)
 
 
 @dataclass
@@ -145,14 +171,16 @@ class ContinuousLearningSystem:
 ТОЛЬКО JSON:"""
 
         try:
+            system_prompt = _merge_layer_system_prompt("Ты - аналитик. Выводи только JSON без пояснений.")
+            options = _build_ollama_options(0.3, min(DEFAULT_MAX_RESPONSE_TOKENS, 1024))
             response = requests.post(
                 OLLAMA_URL,
                 json={
                     "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": "Ты — аналитик. Выводи только JSON без пояснений.",
+                    "system": system_prompt,
                     "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": 1024}
+                    "options": options
                 },
                 timeout=TIMEOUT
             )
@@ -247,14 +275,16 @@ class ContinuousLearningSystem:
 УЛУЧШЕННЫЙ ПРОМПТ:"""
 
         try:
+            system_prompt = _merge_layer_system_prompt("Ты - редактор промптов. Выводи только текст промпта.")
+            options = _build_ollama_options(0.4, min(DEFAULT_MAX_RESPONSE_TOKENS, 2048))
             response = requests.post(
                 OLLAMA_URL,
                 json={
                     "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": "Ты — редактор промптов. Выводи только текст промпта.",
+                    "system": system_prompt,
                     "stream": False,
-                    "options": {"temperature": 0.4, "num_predict": 2048}
+                    "options": options
                 },
                 timeout=TIMEOUT
             )

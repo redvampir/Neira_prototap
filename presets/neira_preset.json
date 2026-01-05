@@ -1,0 +1,8 @@
+{
+  "temperature": 0.7,
+  "contextSize": 10,
+  "maxTokens": 4096,
+  "streamMode": true,
+  "debugMode": false,
+  "autoMemory": true
+}

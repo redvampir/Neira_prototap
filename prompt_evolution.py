@@ -13,12 +13,20 @@ Neira Prompt Evolution System v0.6
 import os
 import json
 import random
-from typing import List, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import requests
 
-from cells import OLLAMA_URL, MODEL_REASON, TIMEOUT
+from cells import (
+    DEFAULT_MAX_RESPONSE_TOKENS,
+    OLLAMA_NUM_CTX,
+    OLLAMA_URL,
+    MODEL_REASON,
+    TIMEOUT,
+    _MODEL_LAYERS,
+    _merge_system_prompt,
+)
 
 
 # Конфигурация
@@ -26,6 +34,24 @@ PROMPTS_HISTORY_FILE = "neira_prompts_history.json"
 MIN_TESTS_PER_VARIANT = 5    # Минимум тестов для оценки варианта
 MUTATION_STRENGTH = 0.3       # Сила мутации (0.0-1.0)
 CROSSOVER_RATE = 0.5         # Вероятность кроссовера
+
+
+def _build_ollama_options(temperature: float, max_tokens: int) -> Dict[str, Any]:
+    options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+    if OLLAMA_NUM_CTX:
+        options["num_ctx"] = OLLAMA_NUM_CTX
+    if _MODEL_LAYERS is not None:
+        adapter = _MODEL_LAYERS.get_active_adapter(MODEL_REASON)
+        if adapter:
+            options["adapter"] = adapter
+    return options
+
+
+def _merge_layer_system_prompt(base_prompt: str) -> str:
+    if _MODEL_LAYERS is None:
+        return base_prompt
+    layer_prompt = _MODEL_LAYERS.get_active_prompt(MODEL_REASON)
+    return _merge_system_prompt(base_prompt, layer_prompt)
 
 
 @dataclass
@@ -224,9 +250,9 @@ class PromptEvolutionSystem:
                 json={
                     "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": "Ты — редактор промптов. Выводи только текст промпта.",
+                    "system": _merge_layer_system_prompt("Ты — редактор промптов. Выводи только текст промпта."),
                     "stream": False,
-                    "options": {"temperature": 0.5 + strength * 0.3, "num_predict": 2048}
+                    "options": _build_ollama_options(0.5 + strength * 0.3, min(DEFAULT_MAX_RESPONSE_TOKENS, 2048))
                 },
                 timeout=TIMEOUT
             )
@@ -264,9 +290,9 @@ class PromptEvolutionSystem:
                 json={
                     "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": "Ты — создатель гибридов. Выводи только текст промпта.",
+                    "system": _merge_layer_system_prompt("Ты — создатель гибридов. Выводи только текст промпта."),
                     "stream": False,
-                    "options": {"temperature": 0.6, "num_predict": 2048}
+                    "options": _build_ollama_options(0.6, min(DEFAULT_MAX_RESPONSE_TOKENS, 2048))
                 },
                 timeout=TIMEOUT
             )

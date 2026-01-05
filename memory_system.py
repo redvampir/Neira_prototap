@@ -32,6 +32,18 @@ import json
 import os
 import math
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
 try:
     import numpy as np  # type: ignore
     _NUMPY_AVAILABLE = True
@@ -52,6 +64,14 @@ try:
 except ImportError:
     LLM_MANAGER_AVAILABLE = False
     print("⚠️ LLMManager недоступен, используем legacy Ollama embeddings")
+
+try:
+    from local_embeddings import get_local_embedding
+    LOCAL_EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    LOCAL_EMBEDDINGS_AVAILABLE = False
+
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
 
 # Импорт защитных модулей v3.0
 try:
@@ -207,6 +227,15 @@ class SemanticSearch:
     def get_embedding(text: str) -> Optional[List[float]]:
         """Получает эмбеддинг текста через LLM Manager (или fallback на Ollama)"""
         # Сначала пробуем через LLM Manager
+        if not text or not text.strip():
+            return None
+        if LOCAL_EMBEDDINGS_AVAILABLE:
+            try:
+                local_embedding = get_local_embedding(text)
+                if local_embedding:
+                    return local_embedding
+            except Exception as e:
+                print(f"Local embedding error: {e}")
         manager = SemanticSearch._get_manager()
         if manager:
             try:
@@ -216,6 +245,8 @@ class SemanticSearch:
             except Exception as e:
                 print(f"⚠️ LLMManager embedding error: {e}, trying legacy Ollama")
         
+        if OLLAMA_DISABLED:
+            return None
         # Fallback на прямой вызов Ollama
         try:
             import requests

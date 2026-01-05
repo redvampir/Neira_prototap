@@ -16,7 +16,103 @@ Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 import sys
 import re
 import os
-from typing import Optional, Tuple
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, Optional, Set, Tuple
+
+
+def _configure_io_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_configure_io_encoding()
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, min_value: int = 0) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    return parsed if parsed >= min_value else min_value
+
+
+def _env_csv_set(name: str, default: Iterable[str]) -> Set[str]:
+    value = os.getenv(name)
+    if value is None:
+        return set(default)
+    tokens = {token.strip().lower() for token in value.split(",") if token.strip()}
+    return tokens if tokens else set(default)
+
+
+# Импорт общей функции для удаления дубликатов
+from text_utils import remove_duplicate_paragraphs as _remove_duplicate_paragraphs
+
+
+DRY_RUN_ENABLED = _env_flag("NEIRA_DRY_RUN", False)
+DRY_RUN_PATH = Path(os.getenv("NEIRA_DRY_RUN_PATH", "artifacts/neira_dry_run_queue.jsonl"))
+
+
+def _queue_item(text: str) -> Dict[str, str]:
+    return {"timestamp": datetime.now().isoformat(), "input": text}
+
+
+def _append_queue(path: Path, item: Dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def _load_queue(path: Path) -> Tuple[list[Dict[str, str]], int]:
+    if not path.exists():
+        return [], 0
+    items: list[Dict[str, str]] = []
+    skipped = 0
+    with path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                skipped += 1
+                continue
+            if not isinstance(payload, dict):
+                skipped += 1
+                continue
+            text = payload.get("input")
+            if not isinstance(text, str):
+                skipped += 1
+                continue
+            items.append({"timestamp": str(payload.get("timestamp", "")), "input": text})
+    return items, skipped
+
+
+def _save_queue(path: Path, items: list[Dict[str, str]]) -> None:
+    if not items:
+        if path.exists():
+            path.unlink()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for item in items:
+            handle.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 try:
     from cells import (
@@ -35,8 +131,8 @@ except ImportError:
         ensure_models_installed,
         OLLAMA_URL
     )
-    MODEL_CODE = "qwen2.5-coder:7b"
-    MODEL_REASON = "neira-cell-router:latest"  # Fine-tuned модель с Cell Router
+    MODEL_CODE = "nemotron-mini"
+    MODEL_REASON = "nemotron-mini"
     MODEL_ROUTING = {}
     TIMEOUT = 180
     MAX_RETRIES = 2
@@ -96,6 +192,16 @@ except ImportError as e:
     CELL_WATCHER_AVAILABLE = False
     print(f"⚠️ CellWatcher недоступен: {e}")
 
+# Cell Router для маршрутизации запросов к клеткам
+try:
+    from cell_router import get_router
+    CELL_ROUTER_AVAILABLE = True
+    cell_router = get_router()
+except ImportError as e:
+    CELL_ROUTER_AVAILABLE = False
+    cell_router = None
+    print(f"⚠️ Cell Router недоступен: {e}")
+
 
 class Neira:
     """Главный класс — связывает все клетки"""
@@ -129,10 +235,40 @@ class Neira:
         self.verifier = VerifierCell(self.memory)
         self.fact_extractor = FactExtractorCell(self.memory)
         
-        # Обновляем системный промпт исполнителя с учётом личности
+        # Обновляем системный промпт исполнителя с учётом личности и памяти
+        base_executor_prompt = """
+Ты — Нейра, ИИ с системой клеток и органов. У тебя есть память и опыт.
+
+## 🧬 СИСТЕМА КЛЕТОК:
+- MemoryCell — твоя память и воспоминания
+- AnalyzerCell — анализ запросов
+- PlannerCell — планирование действий
+- ExecutorCell — выполнение задач (ты сейчас в этой роли)
+- VerifierCell — проверка результатов
+- FactExtractorCell — извлечение фактов
+- WebSearchCell — поиск в интернете
+- CodeCell — работа с кодом
+- IntrospectionCell — самосознание
+
+## 🧠 ПАМЯТЬ:
+Используй информацию из памяти для контекста. Если знаешь что-то релевантное — упомяни.
+
+## 🫀 ОРГАНЫ:
+- Нервная система следит за твоим состоянием
+- Иммунная система защищает от угроз
+- Система любопытства задаёт вопросы
+- Система эволюции улучшает способности
+
+ПРАВИЛА:
+- Отвечай естественно, как живой собеседник
+- Используй память для непрерывности разговора
+- Активируй клетки при необходимости сложных задач
+- Сохраняй важную информацию в память
+- Будь полезной и дружелюбной"""
+
         if self.experience:
             personality_prompt = self.experience.get_personality_prompt()
-            self.executor.system_prompt = personality_prompt + """
+            self.executor.system_prompt = personality_prompt + base_executor_prompt + """
 Выполни задачу по плану. В разговоре ты — участник диалога.
 Если тебя спрашивают — отвечай о себе, от первого лица.
 Используй контекст из памяти и свой опыт.
@@ -147,46 +283,114 @@ class Neira:
 - Если СУБЪЕКТ: Нейра — значит ТЫ должна действовать
 - Не перекладывай работу на пользователя
 - Давай конкретные результаты, а не описания планов"""
+        else:
+            self.executor.system_prompt = base_executor_prompt
         
         # Веб-клетки
-        if WEB_AVAILABLE:
+        self._lazy_modules = _env_flag("NEIRA_LAZY_MODULES", True)
+        self._enable_web = WEB_AVAILABLE and _env_flag("NEIRA_ENABLE_WEB", True)
+        self._enable_code = CODE_AVAILABLE and _env_flag("NEIRA_ENABLE_CODE", True)
+        self._enable_evolution = EVOLUTION_AVAILABLE and bool(self.experience) and _env_flag("NEIRA_ENABLE_EVOLUTION", True)
+        self._enable_introspection = INTROSPECTION_AVAILABLE and _env_flag("NEIRA_ENABLE_INTROSPECTION", True)
+        self._enable_cell_watcher = CELL_WATCHER_AVAILABLE and _env_flag("NEIRA_ENABLE_CELL_WATCHER", True)
+
+        self._web_error: Optional[str] = None
+        self._code_error: Optional[str] = None
+        self._evolution_error: Optional[str] = None
+        self._introspection_error: Optional[str] = None
+        self._watcher_error: Optional[str] = None
+
+        self.web_search = None
+        self.web_learner = None
+        self.code = None
+        self.self_modify = None
+        self.evolution = None
+        self.introspection = None
+        self.cell_watcher = None
+
+        if not self._lazy_modules:
+            self._ensure_web()
+            self._ensure_code()
+            self._ensure_evolution()
+            self._ensure_introspection()
+            self._ensure_cell_watcher()
+
+    def _ensure_web(self) -> bool:
+        if self.web_search or self.web_learner:
+            return True
+        if not self._enable_web or self._web_error:
+            return False
+        try:
             self.web_search = WebSearchCell(self.memory)
             self.web_learner = WebLearnerCell(self.memory)
-        else:
-            self.web_search = None
-            self.web_learner = None
-        
-        # Код-клетки
-        if CODE_AVAILABLE:
+            return True
+        except Exception as e:
+            self._web_error = str(e)
+            if self.verbose:
+                print(f"? ???-?????? ?? ????????????????: {e}")
+            return False
+
+    def _ensure_code(self) -> bool:
+        if self.code:
+            return True
+        if not self._enable_code or self._code_error:
+            return False
+        try:
             self.code = CodeCell(self.memory, work_dir=".")
             self.self_modify = SelfModifyCell(self.memory)
-        else:
-            self.code = None
-            self.self_modify = None
+            return True
+        except Exception as e:
+            self._code_error = str(e)
+            if self.verbose:
+                print(f"? ???-?????? ?? ????????????????: {e}")
+            return False
 
-        # Система эволюции (v0.6)
-        if EVOLUTION_AVAILABLE and self.experience:
-            self.evolution = EvolutionManager(self.experience, self.memory, verbose=verbose)
+    def _ensure_evolution(self) -> bool:
+        if self.evolution:
+            return True
+        if not self._enable_evolution or self._evolution_error:
+            return False
+        try:
+            self.evolution = EvolutionManager(self.experience, self.memory, verbose=self.verbose)
             self.evolution.initialize()
-        else:
-            self.evolution = None
-        
-        # Орган самосознания (v0.6)
-        if INTROSPECTION_AVAILABLE:
+            return True
+        except Exception as e:
+            self._evolution_error = str(e)
+            if self.verbose:
+                print(f"? ??????? ???????? ?? ????????????????: {e}")
+            return False
+
+    def _ensure_introspection(self) -> bool:
+        if self.introspection:
+            return True
+        if not self._enable_introspection or self._introspection_error:
+            return False
+        try:
             self.introspection = IntrospectionCell(self.memory)
-            if verbose:
-                print("🧬 Орган самосознания активирован")
-        else:
-            self.introspection = None
-        
-        # Автономный наблюдатель за клетками (v0.8)
-        enable_watcher = os.getenv("NEIRA_ENABLE_CELL_WATCHER", "true").lower() == "true"
-        if CELL_WATCHER_AVAILABLE and enable_watcher:
+            if self.verbose:
+                print("?? ????? ???????????? ???????????")
+            return True
+        except Exception as e:
+            self._introspection_error = str(e)
+            if self.verbose:
+                print(f"? ????? ???????????? ?? ???????????????: {e}")
+            return False
+
+    def _ensure_cell_watcher(self) -> bool:
+        if self.cell_watcher:
+            return True
+        if not self._enable_cell_watcher or self._watcher_error:
+            return False
+        try:
             self.cell_watcher = start_cell_watcher()
-            if verbose:
-                print("👁️ CellWatcher запущен — новые органы загружаются автоматически")
-        else:
-            self.cell_watcher = None
+            if self.verbose:
+                print("?? CellWatcher ??????? - ????? ?????? ??????????? ?????????????")
+            return True
+        except Exception as e:
+            self._watcher_error = str(e)
+            if self.verbose:
+                print(f"? CellWatcher ?? ???????????????: {e}")
+            return False
 
     def log(self, message: str):
         if self.verbose:
@@ -278,27 +482,85 @@ class Neira:
         needs_code = metadata.get("needs_code", False)
         needs_cell = metadata.get("needs_cell", False)
 
+        # 1.5. Проверка Cell Router (интеграция системы клеток)
+        cell_router_available = False
+        try:
+            from cell_router import get_router
+            cell_router = get_router()
+            use_cell, cell_name, reasoning = cell_router.should_use_cell(user_input)
+            if use_cell:
+                self.log(f"🧬 АКТИВАЦИЯ КЛЕТКИ: {cell_name}")
+                if self.verbose:
+                    print(f"Обоснование: {reasoning}")
+                # Здесь можно добавить логику активации конкретной клетки
+                needs_cell = True
+            cell_router_available = True
+        except ImportError:
+            if self.verbose:
+                print("⚠️ Cell Router недоступен")
+
+        fast_chat = False
+        fast_chat_skip_planning = False
+        fast_chat_skip_verify = False
+        fast_chat_skip_facts = False
+        max_retries = MAX_RETRIES
+
+        if _env_flag("NEIRA_FAST_CHAT", False):
+            fast_chat_types = _env_csv_set("NEIRA_FAST_CHAT_TYPES", ("разговор", "вопрос"))
+            if task_type in fast_chat_types and not needs_search and not needs_code and not needs_cell:
+                fast_chat = True
+
+        if fast_chat:
+            fast_chat_skip_planning = _env_flag("NEIRA_FAST_CHAT_SKIP_PLANNING", True)
+            fast_chat_skip_verify = _env_flag("NEIRA_FAST_CHAT_SKIP_VERIFY", True)
+            fast_chat_skip_facts = _env_flag("NEIRA_FAST_CHAT_SKIP_FACTS", True)
+            max_retries = _env_int("NEIRA_FAST_CHAT_MAX_RETRIES", 0)
+            if self.verbose:
+                skipped = []
+                if fast_chat_skip_planning:
+                    skipped.append("планирование")
+                if fast_chat_skip_verify:
+                    skipped.append("верификация")
+                if fast_chat_skip_facts:
+                    skipped.append("извлечение фактов")
+                if skipped:
+                    print(f"Быстрый чат: пропускаю {', '.join(skipped)}.")
+
         # NEW v0.6: Если нужно создать клетку — делаем это
-        if needs_cell and self.evolution:
-            self.log("🌱 СОЗДАНИЕ НОВОГО ОРГАНА")
-            # Извлекаем описание клетки из запроса
-            cell_description = user_input
-            for prefix in ["научись", "добавь", "создай", "отрасти"]:
-                if prefix in user_input.lower():
-                    idx = user_input.lower().find(prefix)
-                    cell_description = user_input[idx + len(prefix):].strip()
-                    break
+        # if needs_cell and self._ensure_evolution():
+        #     self.log("🌱 СОЗДАНИЕ НОВОГО ОРГАНА")
+        #     # Извлекаем описание клетки из запроса
+        #     cell_description = user_input
+        #     for prefix in ["научись", "добавь", "создай", "отрасти"]:
+        #         if prefix in user_input.lower():
+        #             idx = user_input.lower().find(prefix)
+        #             cell_description = user_input[idx + len(prefix):].strip()
+        #             break
+        #     
+        #     result = self.evolution.cmd_create_cell(cell_description)
+        #     print(f"🌱 {result}")
+        #     
+        #     # Если клетка создана успешно — активируем её
+        #     if "Клетка создана" in result:
+        #         cell_name = result.split(":")[1].split("\n")[0].strip()
+        #         self.evolution.cmd_activate_cell(cell_name)
+        #         return f"Готово! Я создала новый орган: {cell_name}. Теперь я могу {cell_description}."
+
+        # 🆕 Умное предложение создания органа в интерактивном режиме
+        try:
+            from cell_factory import get_organ_creation_manager
+            creation_manager = get_organ_creation_manager()
             
-            result = self.evolution.cmd_create_cell(cell_description)
-            print(f"🌱 {result}")
+            should_suggest, reason = creation_manager.should_create_automatically(user_input, "main_user")
             
-            # Если клетка создана успешно — активируем её
-            if "Клетка создана" in result:
-                cell_name = result.split(":")[1].split("\n")[0].strip()
-                self.evolution.cmd_activate_cell(cell_name)
-                return f"Готово! Я создала новый орган: {cell_name}. Теперь я могу {cell_description}."
-        needs_search = analysis.metadata.get("needs_search", False)
-        needs_code = analysis.metadata.get("needs_code", False)
+            if not should_suggest and "обсудим создание" in reason:
+                # Предлагаем перейти к интерактивному созданию
+                return f"🧬 Я заметила, что вы хотите, чтобы я развивалась!\n\n" \
+                       f"Давайте обсудим создание нового органа для: '{user_input[:100]}...'\n\n" \
+                       f"Используйте команду `/grow {user_input[:50]}...` в Telegram для интерактивного создания."
+        except Exception as e:
+            # Тихо игнорируем ошибки импорта/инициализации
+            pass
 
         # NEW v0.5: Маршрутизация модели (начальный выбор)
         if self.model_manager and MODEL_ROUTING:
@@ -316,6 +578,15 @@ class Neira:
                 if self.verbose:
                     print(f"\n📖 Применяю опыт: {lessons}")
         
+        # Получаем релевантную память
+        memory_context = ""
+        if hasattr(self.memory, 'recall_text'):
+            relevant_memories = self.memory.recall_text(user_input, top_k=3)
+            if relevant_memories:
+                memory_context = "\n[Из памяти]\n" + "\n".join(f"- {m}" for m in relevant_memories)
+                if self.verbose:
+                    print(f"\n💾 Вспомнил: {len(relevant_memories)} фактов")
+        
         extra_context = experience_context
         
         # Добавляем информацию о субъекте в контекст
@@ -323,7 +594,7 @@ class Neira:
             extra_context += "\n\n⚠️ СУБЪЕКТ ДЕЙСТВИЯ: ТЫ (Нейра). Ты должна выполнить действие, не пользователь!"
         
         # 2. Поиск в интернете
-        if needs_search and self.web_search:
+        if needs_search and self._ensure_web():
             self.log("🌐 ПОИСК В ИНТЕРНЕТЕ")
             search_result = self.web_search.process(user_input)
             if self.verbose:
@@ -331,7 +602,7 @@ class Neira:
             extra_context += f"\n[Результаты поиска]\n{search_result.content}\n"
         
         # 3. ПРИНУДИТЕЛЬНАЯ работа с кодом (НОВОЕ!)
-        if needs_code and self.code:
+        if needs_code and self._ensure_code():
             self.log("💻 РАБОТА С КОДОМ")
             
             # Если нужно читать код — читаем автоматически
@@ -363,10 +634,15 @@ class Neira:
                 extra_context += f"\n[Сгенерированный код]\n{code_result.content}\n"
         
         # 4. Планирование
-        self.log("📋 ПЛАНИРОВАНИЕ")
-        plan = self.planner.process(user_input, analysis.content)
-        if self.verbose:
-            print(plan.content)
+        if fast_chat and fast_chat_skip_planning:
+            self.log("📋 ПЛАНИРОВАНИЕ (пропущено)")
+            plan_content = "Ответь на сообщение пользователя кратко, по делу и без лишних отступлений."
+        else:
+            self.log("📋 ПЛАНИРОВАНИЕ")
+            plan = self.planner.process(user_input, analysis.content)
+            plan_content = plan.content
+            if self.verbose:
+                print(plan_content)
         
         # 5. Исполнение с RETRY-ЛОГИКОЙ (НОВОЕ!)
         final_result = None
@@ -374,7 +650,7 @@ class Neira:
         final_score = 0
         problems = ""
         
-        for attempt in range(MAX_RETRIES + 1):
+        for attempt in range(max_retries + 1):
             # NEW v0.5: Проверка, нужно ли переключиться на облачную модель
             if attempt > 0 and self.model_manager:
                 cloud_model = self._should_use_cloud(task_type, complexity, attempt)
@@ -385,13 +661,15 @@ class Neira:
                     if self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
 
-            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})")
+            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{max_retries + 1})")
 
-            # Передаём проблемы от предыдущей попытки
+            # Передаём проблемы от предыдущей попытки + контекст памяти
+            full_extra_context = extra_context + experience_context + memory_context
+            
             result = self.executor.process(
                 user_input,
-                plan.content,
-                extra_context,
+                plan_content,
+                full_extra_context,
                 problems=problems if attempt > 0 else ""
             )
             if self.verbose:
@@ -400,12 +678,18 @@ class Neira:
             # Защита от пустого результата ExecutorCell
             if not result.content or not result.content.strip():
                 print(f"⚠️ ExecutorCell вернул пустой результат на попытке {attempt + 1}")
-                if attempt < MAX_RETRIES:
+                if attempt < max_retries:
                     problems = "Предыдущая попытка не дала ответа. Сформулируй четкий и полный ответ."
                     continue
                 else:
-                    # Если все попытки исчерпаны — возвращаем дефолтный ответ
+                    # Если все попытки исчерпаны - возвращаем дефолтный ответ
                     return "Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос."
+
+            if fast_chat and fast_chat_skip_verify:
+                final_result = result
+                final_verdict = "ПРИНЯТ"
+                final_score = MIN_ACCEPTABLE_SCORE
+                break
 
             # 6. Верификация
             self.log("✅ ВЕРИФИКАЦИЯ")
@@ -428,7 +712,7 @@ class Neira:
                         active_model_key = cloud_model
                         print(f"🌩️ Облачная модель для повторной проверки: {cloud_model}")
 
-                if attempt < MAX_RETRIES:
+                if attempt < max_retries:
                     continue
                 break
 
@@ -445,7 +729,7 @@ class Neira:
                 break
 
             # Если оценка низкая и есть ещё попытки — продолжаем
-            if attempt < MAX_RETRIES:
+            if attempt < max_retries:
                 print(f"⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
             else:
                 print(f"⚠️ Достигнут лимит попыток. Возвращаю лучший результат.")
@@ -462,25 +746,31 @@ class Neira:
             )
         
         # 8. Извлечение фактов для памяти
-        self.log("💾 ПАМЯТЬ")
-        
         # Защита от None (хотя цикл всегда выполняется хотя бы раз)
         if final_result is None:
             return "Ошибка: не удалось сгенерировать ответ"
-        
+
         result_content = final_result.content
-        facts = self.fact_extractor.process(user_input, result_content)
-        for fact in facts:
-            if fact.get("importance", 0) >= 0.5:
-                self.memory.remember(
-                    text=fact["text"],
-                    importance=fact.get("importance", 0.5),
-                    category=fact.get("category", "general"),
-                    source=fact.get("source", "conversation")
-                )
         
-        if not facts:
-            print("Новых фактов не найдено")
+        # Удаляем дубли абзацев (LLM иногда повторяет ответ)
+        result_content = _remove_duplicate_paragraphs(result_content)
+        
+        if fast_chat and fast_chat_skip_facts:
+            self.log("💾 ПАМЯТЬ (пропущено)")
+        else:
+            self.log("💾 ПАМЯТЬ")
+            facts = self.fact_extractor.process(user_input, result_content)
+            for fact in facts:
+                if fact.get("importance", 0) >= 0.5:
+                    self.memory.remember(
+                        text=fact["text"],
+                        importance=fact.get("importance", 0.5),
+                        category=fact.get("category", "general"),
+                        source=fact.get("source", "conversation")
+                    )
+
+            if not facts:
+                print("Новых фактов не найдено")
         
         # Сохраняем ответ в контекст
         self.memory.add_to_session(f"Нейра: {result_content}")
@@ -535,13 +825,13 @@ class Neira:
     
     def cmd_learn(self, topic: str) -> str:
         """Изучить тему"""
-        if not self.web_learner:
+        if not self._ensure_web() or not self.web_learner:
             return "❌ Установи: pip install duckduckgo-search"
         return self.web_learner.learn(topic).content
     
     def cmd_code(self, action: str, *args) -> str:
         """Команды работы с кодом"""
-        if not self.code:
+        if not self._ensure_code() or not self.code:
             return "❌ Код-клетка недоступна"
         
         if action == "list":
@@ -569,7 +859,7 @@ class Neira:
     
     def cmd_self(self, args: Optional[list] = None) -> str:
         """Команда самосознания"""
-        if not self.introspection:
+        if not self._ensure_introspection() or not self.introspection:
             return "❌ Орган самосознания недоступен"
         
         if not args:
@@ -632,6 +922,9 @@ class Neira:
 Прочее:
   /stats               — статистика
   /models              — проверить модели
+  /queue status        — очередь отложенных сообщений
+  /queue send          — отправить очередь (если dry-run выключен)
+  /queue clear         — очистить очередь
   /help                — эта справка
   /exit                — выход
 
@@ -974,7 +1267,7 @@ class Neira:
 
     def cmd_watcher(self, subcmd: str = "status", *args) -> str:
         """Управление CellWatcher — автономным загрузчиком клеток"""
-        if not self.cell_watcher:
+        if not self._ensure_cell_watcher() or not self.cell_watcher:
             return "❌ CellWatcher недоступен"
         
         if subcmd == "status":
@@ -1026,10 +1319,14 @@ def main():
     print("=" * 60)
     
     # Проверяем модели
-    if not ensure_models_installed():
-        print("\n⚠️ Установи недостающие модели и перезапусти!")
-        print("   Ollama должна быть запущена: ollama serve")
-        return
+    if DRY_RUN_ENABLED:
+        print(f"\n🧪 DRY-RUN включен: запросы будут сохраняться в {DRY_RUN_PATH}")
+        print("   Чтобы отправить очередь, отключи NEIRA_DRY_RUN и используй /queue send")
+    else:
+        if not ensure_models_installed():
+            print("\n⚠️ Установи недостающие модели и перезапусти!")
+            print("   Ollama должна быть запущена: ollama serve")
+            return
     
     print("\nВведи /help для списка команд\n")
     
@@ -1063,7 +1360,7 @@ def main():
             elif cmd == "personality":
                 print(neira.cmd_personality())
             elif cmd == "evolution":
-                if neira.evolution:
+                if neira._ensure_evolution() and neira.evolution:
                     if not args:
                         print(neira.evolution.cmd_help_evolution())
                     elif args[0] == "stats":
@@ -1102,6 +1399,56 @@ def main():
                 print(neira.cmd_code(args[0] if args else "list", *args[1:]))
             elif cmd == "self":
                 print(neira.cmd_self(args if args else None))
+            elif cmd == "queue":
+                action = args[0].lower() if args else "status"
+                if action in {"status", "list"}:
+                    items, skipped = _load_queue(DRY_RUN_PATH)
+                    if not items:
+                        print("Очередь пуста.")
+                    else:
+                        print(f"Очередь: {len(items)} сообщений.")
+                        preview = items[:5]
+                        for idx, item in enumerate(preview, start=1):
+                            text = item["input"].replace("\n", " ")
+                            if len(text) > 120:
+                                text = text[:117] + "..."
+                            stamp = f" ({item.get('timestamp')})" if item.get("timestamp") else ""
+                            print(f"{idx}. {text}{stamp}")
+                        if len(items) > len(preview):
+                            print(f"... ещё {len(items) - len(preview)}")
+                    if skipped:
+                        print(f"Пропущено строк: {skipped}")
+                elif action == "clear":
+                    _save_queue(DRY_RUN_PATH, [])
+                    print("Очередь очищена.")
+                elif action == "send":
+                    if DRY_RUN_ENABLED:
+                        print("🧪 DRY-RUN включен: отправка очереди отключена. Отключи NEIRA_DRY_RUN.")
+                    else:
+                        items, skipped = _load_queue(DRY_RUN_PATH)
+                        if skipped:
+                            print(f"Пропущено строк: {skipped}")
+                        if not items:
+                            print("Очередь пуста.")
+                        else:
+                            remaining: list[Dict[str, str]] = []
+                            total = len(items)
+                            for idx, item in enumerate(items, start=1):
+                                text = item["input"]
+                                try:
+                                    response = neira.process(text)
+                                    print(f"\n{'='*50}")
+                                    print(f"[Очередь {idx}/{total}] {response}")
+                                except Exception as e:
+                                    remaining.append(item)
+                                    print(f"[Очередь {idx}/{total}] ❌ Ошибка: {e}")
+                            _save_queue(DRY_RUN_PATH, remaining)
+                            if remaining:
+                                print(f"В очереди осталось: {len(remaining)}")
+                            else:
+                                print("Очередь обработана полностью.")
+                else:
+                    print("Подкоманды: /queue status | /queue send | /queue clear")
             elif cmd == "stats":
                 print(neira.cmd_stats())
             elif cmd == "models":
@@ -1110,7 +1457,7 @@ def main():
                 print(f"Ollama: {'✅ запущена' if status['ollama_running'] else '❌ не запущена'}")
                 print(f"Модели: {', '.join(status['models'][:5])}")
             elif cmd == "vote-start":
-                if neira.evolution and len(args) >= 4:
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 4:
                     cell_name = args[0]
                     version_1 = args[1]
                     version_2 = args[2]
@@ -1119,7 +1466,7 @@ def main():
                 else:
                     print("❌ Использование: /vote-start <cell> <version1> <version2> <задача>")
             elif cmd == "vote-record":
-                if neira.evolution and len(args) >= 3:
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 3:
                     cell_name = args[0]
                     version_id = args[1]
                     try:
@@ -1131,7 +1478,7 @@ def main():
                 else:
                     print("❌ Использование: /vote-record <cell> <version> <оценка> [комментарий]")
             elif cmd == "vote-results":
-                if neira.evolution and len(args) >= 3:
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 3:
                     cell_name = args[0]
                     version_1 = args[1]
                     version_2 = args[2]
@@ -1140,7 +1487,7 @@ def main():
                     print("❌ Использование: /vote-results <cell> <version1> <version2>")
             elif cmd == "grow":
                 # Команда для создания нового органа (клетки)
-                if neira.evolution and args:
+                if neira._ensure_evolution() and neira.evolution and args:
                     description = " ".join(args)
                     print(f"🌱 Создаю новый орган: {description}")
                     result = neira.evolution.cmd_create_cell(description)
@@ -1150,7 +1497,7 @@ def main():
                     print("   Пример: /grow генератор картинок через FLUX API")
             elif cmd == "activate":
                 # Активация клетки
-                if neira.evolution and args:
+                if neira._ensure_evolution() and neira.evolution and args:
                     cell_name = args[0]
                     result = neira.evolution.cmd_activate_cell(cell_name)
                     print(result)
@@ -1158,7 +1505,7 @@ def main():
                     print("❌ Использование: /activate <имя_клетки>")
             elif cmd == "cells":
                 # Список клеток
-                if neira.evolution:
+                if neira._ensure_evolution() and neira.evolution:
                     print(neira.evolution.cmd_evolution_log("cells"))
                 else:
                     print("❌ Система эволюции недоступна")
@@ -1186,6 +1533,14 @@ def main():
                 print(f"❓ Неизвестная команда: {cmd}")
             continue
         
+        if DRY_RUN_ENABLED:
+            try:
+                _append_queue(DRY_RUN_PATH, _queue_item(user_input))
+                print(f"🧪 DRY-RUN: запрос сохранён ({DRY_RUN_PATH})")
+            except Exception as e:
+                print(f"❌ Не удалось сохранить запрос: {e}")
+            continue
+
         # Обычный запрос
         try:
             response = neira.process(user_input)

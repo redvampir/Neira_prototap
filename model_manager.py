@@ -26,9 +26,9 @@ class ModelInfo:
 # Model registry
 MODELS = {
     # Локальные модели
-    "code": ModelInfo("qwen2.5-coder:7b", 5.0, "local", "Code generation and analysis"),
-    "reason": ModelInfo("neira-cell-router:latest", 3.0, "local", "Planning, reasoning, verification with cell routing"),
-    "personality": ModelInfo("neira-cell-router:latest", 3.0, "local", "Dialogue with personality (cell-router enhanced)"),
+    "code": ModelInfo("nemotron-mini", 6.0, "local", "Universal base (code tasks)"),
+    "reason": ModelInfo("nemotron-mini", 6.0, "local", "Universal base (reasoning)"),
+    "personality": ModelInfo("nemotron-mini", 6.0, "local", "Universal base (dialogue)"),
 
     # Облачные модели (0 VRAM, удалённые вычисления)
     "cloud_code": ModelInfo("qwen3-coder:480b-cloud", 0, "cloud", "Complex code tasks (480B params)"),
@@ -170,6 +170,10 @@ class ModelManager:
             return True
 
         loaded = self.get_loaded_models()
+        current_info = MODELS.get(self.current_model) if self.current_model else None
+        if current_info and current_info.name == model_name and model_name in loaded:
+            self.current_model = target_key
+            return True
 
         # Unload other models if needed
         for model in loaded:

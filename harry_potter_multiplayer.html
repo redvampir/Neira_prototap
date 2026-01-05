@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harry Potter: Multiplayer Hogwarts</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 50%, #16213e 100%);
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+        
+        .login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .login-box {
+            background: rgba(25, 25, 45, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            border: 3px solid rgba(255, 215, 0, 0.5);
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            text-align: center;
+        }
+        
+        .login-box h1 {
+            color: #ffd700;
+            font-size: 36px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+        
+        .login-box input {
+            width: 300px;
+            padding: 15px;
+            margin: 10px 0;
+            background: rgba(15, 15, 30, 0.8);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 8px;
+            color: #f0f0f0;
+            font-size: 16px;
+        }
+        
+        .login-box button {
+            width: 300px;
+            padding: 15px;
+            margin-top: 20px;
+            background: linear-gradient(135deg, #8a2be2 0%, #6a1bb2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .login-box button:hover {
+            transform: scale(1.05);
+        }
+        
+        .game-container {
+            display: none;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+        
+        .game-container.active {
+            display: flex;
+        }
+        
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .header {
+            background: rgba(25, 25, 45, 0.9);
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .header h1 {
+            color: #ffd700;
+            font-size: 28px;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+        
+        .game-field {
+            flex: 1;
+            background: rgba(15, 15, 30, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+            position: relative;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            gap: 2px;
+            max-width: 750px;
+            max-height: 750px;
+            aspect-ratio: 1;
+        }
+        
+        .cell {
+            background: rgba(30, 30, 50, 0.6);
+            border: 1px solid rgba(100, 100, 150, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            position: relative;
+            min-width: 40px;
+            min-height: 40px;
+        }
+        
+        .cell.artifact {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .player-icon {
+            position: absolute;
+            font-size: 28px;
+            z-index: 10;
+            filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+        }
+        
+        .sidebar {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .players-panel {
+            background: rgba(25, 25, 45, 0.9);
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .players-panel h2 {
+            color: #ffd700;
+            font-size: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 8px 0;
+            background: rgba(15, 15, 30, 0.6);
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .chat-panel {
+            flex: 1;
+            background: rgba(25, 25, 45, 0.9);
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .chat-header {
+            color: #ffd700;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: rgba(15, 15, 30, 0.6);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 90%;
+        }
+        
+        .message.system {
+            background: rgba(100, 100, 150, 0.3);
+            align-self: center;
+            text-align: center;
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+        
+        .message.chat {
+            background: rgba(138, 43, 226, 0.3);
+            align-self: flex-start;
+            border-left: 3px solid;
+        }
+        
+        .message .sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            background: rgba(15, 15, 30, 0.6);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 8px;
+            color: #f0f0f0;
+            font-size: 14px;
+        }
+        
+        .chat-input button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #8a2be2 0%, #6a1bb2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .controls {
+            text-align: center;
+            color: #a0a0a0;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <h1>⚡ Multiplayer Hogwarts ⚡</h1>
+            <input type="text" id="playerName" placeholder="Your wizard name" value="Wizard" />
+            <input type="text" id="roomId" placeholder="Room ID (optional)" value="hogwarts" />
+            <input type="text" id="serverUrl" placeholder="Server" value="ws://localhost:8003/game" />
+            <button onclick="joinGame()">Join Game</button>
+        </div>
+    </div>
+    
+    <div class="game-container" id="gameContainer">
+        <div class="game-area">
+            <div class="header">
+                <h1>⚡ Hogwarts: Multiplayer Adventure ⚡</h1>
+                <div class="controls">
+                    Use WASD or Arrow Keys • Collect artifacts • Chat with players!
+                </div>
+            </div>
+            
+            <div class="game-field">
+                <div class="grid" id="grid"></div>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="players-panel">
+                <h2>👥 Players Online</h2>
+                <div id="playersList"></div>
+            </div>
+            
+            <div class="chat-panel">
+                <div class="chat-header">💬 Multiplayer Chat</div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Send message..." />
+                    <button onclick="sendChat()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let myPlayerId = null;
+        let gameState = null;
+        
+        function joinGame() {
+            const playerName = document.getElementById('playerName').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            
+            if (!playerName) {
+                alert('Enter your wizard name!');
+                return;
+            }
+            
+            myPlayerId = 'player_' + Date.now();
+            
+            ws = new WebSocket(serverUrl);
+            
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    action: 'join',
+                    player_id: myPlayerId,
+                    player_name: playerName,
+                    room_id: roomId || 'default'
+                }));
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addSystemMessage('Connection error! Check server is running.');
+            };
+            
+            ws.onclose = () => {
+                addSystemMessage('Disconnected from server');
+            };
+        }
+        
+        function handleMessage(data) {
+            switch(data.type) {
+                case 'joined':
+                    gameState = data.state;
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('gameContainer').classList.add('active');
+                    initGrid(gameState.grid_size);
+                    renderGame();
+                    addSystemMessage('Connected! Welcome to Hogwarts!');
+                    break;
+                    
+                case 'player_joined':
+                    if (!gameState.players) gameState.players = [];
+                    gameState.players.push(data.player);
+                    renderGame();
+                    addSystemMessage(`${data.player.name} joined the game!`);
+                    break;
+                    
+                case 'player_left':
+                    if (gameState.players) {
+                        gameState.players = gameState.players.filter(p => p.id !== data.player_id);
+                        renderGame();
+                    }
+                    addSystemMessage('A player left the game');
+                    break;
+                    
+                case 'player_moved':
+                    updatePlayerPosition(data.data);
+                    if (data.data.artifact) {
+                        const artifact = data.data.artifact;
+                        const player = gameState.players.find(p => p.id === artifact.collected_by);
+                        if (player) {
+                            addSystemMessage(`${player.name} collected ${artifact.icon}!`);
+                        }
+                    }
+                    renderGame();
+                    break;
+                    
+                case 'state_update':
+                    gameState = data.state;
+                    renderGame();
+                    break;
+                    
+                case 'chat':
+                    addChatMessage(data.player_name, data.message, data.player_id);
+                    break;
+            }
+        }
+        
+        function initGrid(size) {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    grid.appendChild(cell);
+                }
+            }
+        }
+        
+        function renderGame() {
+            if (!gameState) return;
+            
+            // Clear all cells
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.innerHTML = '';
+                cell.classList.remove('artifact');
+            });
+            
+            // Render artifacts
+            gameState.artifacts.forEach(artifact => {
+                if (!artifact.collected) {
+                    const cell = document.querySelector(`.cell[data-x="${artifact.x}"][data-y="${artifact.y}"]`);
+                    if (cell) {
+                        cell.textContent = artifact.icon;
+                        cell.classList.add('artifact');
+                    }
+                }
+            });
+            
+            // Render players
+            gameState.players.forEach(player => {
+                const cell = document.querySelector(`.cell[data-x="${player.x}"][data-y="${player.y}"]`);
+                if (cell) {
+                    const icon = document.createElement('div');
+                    icon.className = 'player-icon';
+                    icon.textContent = '🧙';
+                    icon.style.color = player.color;
+                    icon.title = player.name;
+                    cell.appendChild(icon);
+                }
+            });
+            
+            // Update players list
+            updatePlayersList();
+        }
+        
+        function updatePlayersList() {
+            const list = document.getElementById('playersList');
+            list.innerHTML = '';
+            
+            gameState.players.forEach(player => {
+                const item = document.createElement('div');
+                item.className = 'player-item';
+                item.style.borderLeftColor = player.color;
+                item.innerHTML = `
+                    <span>${player.name}${player.id === myPlayerId ? ' (You)' : ''}</span>
+                    <span style="color: #ffd700;">⭐ ${player.score}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+        
+        function updatePlayerPosition(data) {
+            if (!gameState) return;
+            const player = gameState.players.find(p => p.id === data.player_id);
+            if (player) {
+                player.x = data.new_pos.x;
+                player.y = data.new_pos.y;
+                if (data.artifact) {
+                    player.score = (player.score || 0) + 100;
+                    const artifact = gameState.artifacts.find(a => a.id === data.artifact.id);
+                    if (artifact) {
+                        artifact.collected = true;
+                    }
+                }
+            }
+        }
+        
+        function sendMove(direction) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'move',
+                    direction: direction
+                }));
+            }
+        }
+        
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'chat',
+                    message: message
+                }));
+                input.value = '';
+            }
+        }
+        
+        function addSystemMessage(text) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const message = document.createElement('div');
+            message.className = 'message system';
+            message.textContent = text;
+            messagesDiv.appendChild(message);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function addChatMessage(sender, text, playerId) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const message = document.createElement('div');
+            message.className = 'message chat';
+            
+            const player = gameState.players.find(p => p.id === playerId);
+            if (player) {
+                message.style.borderLeftColor = player.color;
+            }
+            
+            message.innerHTML = `
+                <div class="sender" style="color: ${player ? player.color : '#ffd700'}">${sender}</div>
+                <div>${text}</div>
+            `;
+            messagesDiv.appendChild(message);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('chatInput') === document.activeElement) return;
+            
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') {
+                e.preventDefault();
+                sendMove('up');
+            } else if (key === 's' || key === 'arrowdown') {
+                e.preventDefault();
+                sendMove('down');
+            } else if (key === 'a' || key === 'arrowleft') {
+                e.preventDefault();
+                sendMove('left');
+            } else if (key === 'd' || key === 'arrowright') {
+                e.preventDefault();
+                sendMove('right');
+            }
+        });
+        
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChat();
+        });
+    </script>
+</body>
+</html>

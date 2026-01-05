@@ -8,5 +8,68 @@
         "reportOptionalMemberAccess": "none",
         "reportAttributeAccessIssue": "none"
     },
-    "chatgpt.openOnStartup": true
+    "chatgpt.openOnStartup": true,
+    
+    // === NEIRA PROJECT RULES ===
+    
+    // Автозапуск валидации при сохранении
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "\\.py$",
+                "cmd": "python scripts/validate_code.py ${file}"
+            }
+        ]
+    },
+    
+    // Python форматирование
+    "python.formatting.provider": "none",
+    "[python]": {
+        "editor.formatOnSave": false,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        },
+        "editor.rulers": [100],
+        "editor.tabSize": 4
+    },
+    
+    // Подсветка проблемных паттернов
+    "todohighlight.keywords": [
+        {
+            "text": "except:",
+            "color": "#ffffff",
+            "backgroundColor": "#ff0000",
+            "overviewRulerColor": "#ff0000"
+        },
+        {
+            "text": "except Exception:",
+            "color": "#000000",
+            "backgroundColor": "#ffaa00",
+            "overviewRulerColor": "#ffaa00"
+        },
+        {
+            "text": "TODO",
+            "color": "#000000",
+            "backgroundColor": "#ffcc00"
+        }
+    ],
+    
+    // Скрыть лишние файлы
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        ".pytest_cache": true,
+        ".neira_cache": true
+    },
+    
+    // Тесты
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests/"],
+    
+    // Copilot - ссылка на инструкции
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "file": ".github/copilot-instructions.md"
+        }
+    ]
 }

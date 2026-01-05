@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 CONFIG_VERSION = 1
 LAYER_KIND_OLLAMA_ADAPTER = "ollama_adapter"
+LAYER_KIND_PROMPT = "prompt_layer"
+LAYER_KIND_PROFILE = "profile"
 
 
 class ModelLayersError(RuntimeError):
@@ -50,12 +52,14 @@ def _as_optional_float(value: Any, *, field_name: str) -> Optional[float]:
 
 @dataclass(frozen=True)
 class ModelLayer:
-    """Слой модели (пока только LoRA/адаптер Ollama)."""
+    """Слой модели (адаптеры Ollama, промпт-слои, профили)."""
 
     id: str
     kind: str = LAYER_KIND_OLLAMA_ADAPTER
     description: str = ""
     size_gb: Optional[float] = None
+    adapter: Optional[str] = None
+    system_prompt: Optional[str] = None
     created_at: str = field(default_factory=_utc_now_iso)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -67,6 +71,10 @@ class ModelLayer:
         }
         if self.size_gb is not None:
             payload["size_gb"] = self.size_gb
+        if self.adapter is not None:
+            payload["adapter"] = self.adapter
+        if self.system_prompt is not None:
+            payload["system_prompt"] = self.system_prompt
         return payload
 
     @staticmethod
@@ -79,6 +87,8 @@ class ModelLayer:
         description_raw = data.get("description", "")
         description = description_raw if isinstance(description_raw, str) else str(description_raw)
         size_gb = _as_optional_float(data.get("size_gb"), field_name="size_gb")
+        adapter = _as_optional_str(data.get("adapter"), field_name="adapter")
+        system_prompt = _as_optional_str(data.get("system_prompt"), field_name="system_prompt")
         created_at = _as_optional_str(data.get("created_at"), field_name="created_at") or _utc_now_iso()
 
         return ModelLayer(
@@ -86,6 +96,8 @@ class ModelLayer:
             kind=kind,
             description=description,
             size_gb=size_gb,
+            adapter=adapter,
+            system_prompt=system_prompt,
             created_at=created_at,
         )
 
@@ -244,7 +256,18 @@ class ModelLayersRegistry:
         layer = entry.find_layer(entry.active_layer_id)
         if layer is None:
             return None
-        return layer.id if layer.kind == LAYER_KIND_OLLAMA_ADAPTER else None
+        if layer.kind != LAYER_KIND_OLLAMA_ADAPTER:
+            return None
+        return layer.adapter or layer.id
+
+    def get_active_prompt(self, model_name: str) -> Optional[str]:
+        entry = self._ensure_model_entry(model_name)
+        if not entry.active_layer_id:
+            return None
+        layer = entry.find_layer(entry.active_layer_id)
+        if layer is None:
+            return None
+        return layer.system_prompt
 
     def add_layer(
         self,
@@ -277,6 +300,8 @@ class ModelLayersRegistry:
         kind: Optional[str] = None,
         description: Optional[str] = None,
         size_gb: Optional[float] = None,
+        adapter: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> None:
         entry = self._ensure_model_entry(model_name)
         layer_id = _as_non_empty_str(layer_id, field_name="id")
@@ -291,12 +316,20 @@ class ModelLayersRegistry:
         next_kind = _as_non_empty_str(kind, field_name="kind") if kind is not None else existing.kind
         next_description = description if description is not None else existing.description
         next_size_gb = size_gb if size_gb is not None else existing.size_gb
+        next_adapter = _as_optional_str(adapter, field_name="adapter") if adapter is not None else existing.adapter
+        next_system_prompt = (
+            _as_optional_str(system_prompt, field_name="system_prompt")
+            if system_prompt is not None
+            else existing.system_prompt
+        )
 
         updated = ModelLayer(
             id=next_id,
             kind=next_kind,
             description=next_description,
             size_gb=next_size_gb,
+            adapter=next_adapter,
+            system_prompt=next_system_prompt,
             created_at=existing.created_at,
         )
 

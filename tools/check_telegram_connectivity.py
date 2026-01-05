@@ -18,6 +18,10 @@ import sys
 from pathlib import Path
 
 import httpx
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -29,6 +33,47 @@ from telegram_network import load_telegram_network_config, sanitize_url_for_log
 _TOKEN_RE = re.compile(r"\\bbot\\d+:[A-Za-z0-9_-]+\\b")
 _TG_URL_RE = re.compile(r"(https?://api\\.telegram\\.org/bot)[^/\\s]+", flags=re.IGNORECASE)
 _URL_CREDENTIALS_RE = re.compile(r"(://)([^/@\\s]+@)")
+
+
+def _load_env_fallback(env_path: Path) -> None:
+    data = None
+    for encoding in ("utf-8", "utf-8-sig", "cp1251"):
+        try:
+            data = env_path.read_text(encoding=encoding)
+            break
+        except Exception:
+            continue
+
+    if data is None:
+        return
+
+    for raw in data.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value
+
+
+def _load_env_from_repo() -> None:
+    env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        return
+
+    if load_dotenv is not None:
+        try:
+            load_dotenv(dotenv_path=env_path, override=False)
+            return
+        except UnicodeDecodeError:
+            pass
+        except Exception:
+            return
+
+    _load_env_fallback(env_path)
 
 
 def _mask_token(token: str) -> str:
@@ -60,6 +105,7 @@ def _build_getme_url(token: str, base_url: str | None) -> str:
 
 
 def main() -> int:
+    _load_env_from_repo()
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         print("Ошибка: TELEGRAM_BOT_TOKEN не задан в окружении/.env")
@@ -136,4 +182,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

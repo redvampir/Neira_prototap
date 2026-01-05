@@ -23,6 +23,155 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 
+
+# ═══════════════════════════════════════════════════════════════════
+# 🧬 СИСТЕМА ОСВЕДОМЛЁННОСТИ ОБ ОРГАНАХ
+# ═══════════════════════════════════════════════════════════════════
+def get_organ_awareness_prompt() -> str:
+    """
+    Генерирует динамический промпт с информацией об органах Нейры.
+    Вызывается при формировании system prompt для LLM.
+    
+    Использует ленивую загрузку чтобы избежать циклических зависимостей.
+    """
+    organ_info = []
+    seen_names = set()  # Для избежания дубликатов
+    
+    # Получаем ExecutableOrgans (приоритет) — ленивый импорт
+    try:
+        import importlib
+        executable_organs_module = importlib.import_module('executable_organs')
+        get_registry = getattr(executable_organs_module, 'get_organ_registry', None)
+        if get_registry:
+            registry = get_registry()
+            for organ_id, organ in registry.organs.items():
+                if organ.name in seen_names:
+                    continue
+                seen_names.add(organ.name)
+                organ_info.append(f"  • {organ.name}: {organ.description}")
+    except Exception as e:
+        pass  # Молча пропускаем если не удалось загрузить
+    
+    # Получаем UnifiedOrganSystem (только custom органы) — ленивый импорт
+    try:
+        import importlib
+        unified_module = importlib.import_module('unified_organ_system')
+        get_system = getattr(unified_module, 'get_organ_system', None)
+        if get_system:
+            organ_system = get_system()
+            for organ_id, organ in organ_system.organs.items():
+                if organ_id.startswith("builtin_"):
+                    continue  # Пропускаем встроенные клетки
+                # Проверяем дубликаты — извлекаем ключевое слово из имени
+                name_lower = organ.name.lower()
+                # Ключевые слова типов органов
+                type_keywords = ['math', 'text', 'graphics', 'code', 'web', 'memory', 'image', 'vision']
+                
+                is_duplicate = False
+                for kw in type_keywords:
+                    if kw in name_lower:
+                        # Проверяем есть ли уже орган этого типа
+                        for seen_name in seen_names:
+                            if kw in seen_name.lower():
+                                is_duplicate = True
+                                break
+                    if is_duplicate:
+                        break
+                
+                if is_duplicate:
+                    continue
+                seen_names.add(organ.name)
+                triggers = ", ".join(organ.triggers[:3]) if organ.triggers else "нет"
+                organ_info.append(f"  • {organ.name}: триггеры [{triggers}]")
+    except Exception:
+        pass
+    
+    # Если ничего не нашли — добавляем дефолтную информацию
+    if not organ_info:
+        organ_info = [
+            "  • (органы загружаются динамически)",
+            "  • Примеры: рисование, математика, обработка текста"
+        ]
+    
+    return f"""
+═══════════════════════════════════════════════════════════════════
+🧬 МОИ ОРГАНЫ (специализированные модули)
+═══════════════════════════════════════════════════════════════════
+
+Я могу автоматически использовать специализированные органы:
+{chr(10).join(organ_info)}
+
+ВАЖНО:
+- Органы активируются АВТОМАТИЧЕСКИ по ключевым словам
+- Я НЕ создаю органы напрямую — это делает система
+- Для создания нового органа пользователь пишет: /grow <описание> или #создай_орган <описание>
+- Если меня просят что-то, что я не умею — я могу предложить создать орган
+
+Примеры предложений:
+- "Интересная задача! Хочешь, система создаст для этого специальный орган? Напиши: #создай_орган <описание>"
+- "Для таких задач я могу отрастить новый орган. Используй /grow <что нужно>"
+═══════════════════════════════════════════════════════════════════
+"""
+
+
+def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    if parsed < min_value:
+        return min_value
+    if max_value is not None and parsed > max_value:
+        return max_value
+    return parsed
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+# Импортируем общий модуль идентичности
+from neira_identity import build_identity_prompt, IDENTITY_PROMPT as _NEIRA_IDENTITY
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str], include_organs: bool = True) -> str:
+    """
+    Объединяет базовый промпт с слоем модели, идентичностью и информацией об органах.
+    
+    Args:
+        base_prompt: Основной системный промпт
+        layer_prompt: Дополнительный слой от модели
+        include_organs: Добавлять ли информацию об органах (по умолчанию True)
+    """
+    parts = [base_prompt] if base_prompt else []
+    
+    # ВАЖНО: Добавляем идентичность Нейры (кто создатели)
+    if _NEIRA_IDENTITY:
+        parts.append(_NEIRA_IDENTITY)
+    
+    # Добавляем информацию об органах (гибридный подход)
+    if include_organs:
+        organ_prompt = get_organ_awareness_prompt()
+        if organ_prompt:
+            parts.append(organ_prompt)
+    
+    # Добавляем слой модели
+    if layer_prompt:
+        parts.append(f"[Слой модели]\n{layer_prompt}")
+    
+    return "\n\n".join(parts) if parts else ""
+
 try:
     import numpy as np  # type: ignore
     _NUMPY_AVAILABLE = True
@@ -88,14 +237,21 @@ except ImportError:
     LLM_MANAGER_AVAILABLE = False
     print("⚠️ LLMManager недоступен, используем только Ollama")
 
+try:
+    from local_embeddings import get_local_embedding
+    LOCAL_EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    LOCAL_EMBEDDINGS_AVAILABLE = False
+
 # === КОНФИГ ===
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
 
 # МОДЕЛИ v0.9 — Fine-tuned + Qwen Coder
-MODEL_CODE = "qwen2.5-coder:7b"              # Кодогенерация (доступна локально)
-MODEL_REASON = "neira-cell-router:latest"     # Fine-tuned модель с Cell Router логикой
-MODEL_PERSONALITY = "ministral-3:3b"          # Личность Neira (3B параметров, легковесная)
+MODEL_CODE = "nemotron-mini"              # Кодогенерация (доступна локально)
+MODEL_REASON = "nemotron-mini"            # Универсальная модель
+MODEL_PERSONALITY = "nemotron-mini"       # Личность Neira
 
 # Облачные модели (0 VRAM, удалённые вычисления)
 MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)
@@ -103,12 +259,16 @@ MODEL_CLOUD_UNIVERSAL = "deepseek-v3.1:671b-cloud"  # Универсальная
 MODEL_CLOUD_VISION = "qwen3-vl:235b-cloud"     # Мультимодальная (будущее)
 
 EMBED_MODEL = "nomic-embed-text"
-TIMEOUT = 180
+TIMEOUT = _env_int("NEIRA_LLM_TIMEOUT", 180, min_value=5, max_value=600)
+DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
+OLLAMA_NUM_CTX = _env_int("NEIRA_OLLAMA_NUM_CTX", 0, min_value=0)
 MEMORY_FILE = "neira_memory.json"
 
 # Retry-логика
 MAX_RETRIES = 0
-MIN_ACCEPTABLE_SCORE = 7
+# Минимальный балл для принятия ответа (8 = строго, 6 = мягче)
+# При высоком значении верификатор часто отклоняет хорошие ответы
+MIN_ACCEPTABLE_SCORE = _env_int("NEIRA_MIN_ACCEPTABLE_SCORE", 6, min_value=1, max_value=10)
 
 # Маппинг типов задач → модели
 # "code" / "reason" / "personality" / "cloud_code" / "cloud_universal"
@@ -127,6 +287,18 @@ USE_CLOUD_IF = {
     "retries": 1,         # После 1 неудачной попытки → облако
     "code_lines": 50,     # Код > 50 строк → облачная модель для кода
 }
+
+
+_EMBEDDING_MANAGER: Optional[Any] = None
+
+
+def _get_embedding_manager() -> Optional[Any]:
+    global _EMBEDDING_MANAGER
+    if not LLM_MANAGER_AVAILABLE:
+        return None
+    if _EMBEDDING_MANAGER is None:
+        _EMBEDDING_MANAGER = create_default_manager()
+    return _EMBEDDING_MANAGER
 
 
 from dataclasses import dataclass, field
@@ -226,6 +398,25 @@ class MemoryCell:
     
     def get_embedding(self, text: str) -> List[float]:
         """Получить embedding через Ollama"""
+        if not text or not text.strip():
+            return []
+        if LOCAL_EMBEDDINGS_AVAILABLE:
+            try:
+                local_embedding = get_local_embedding(text)
+                if local_embedding:
+                    return local_embedding
+            except Exception as e:
+                print(f"Local embedding error: {e}")
+        manager = _get_embedding_manager()
+        if manager:
+            try:
+                embedding = manager.get_embedding(text)
+                if embedding:
+                    return embedding
+            except Exception as e:
+                print(f"LLMManager embedding error: {e}")
+        if OLLAMA_DISABLED:
+            return []
         try:
             response = requests.post(
                 OLLAMA_EMBED_URL,
@@ -406,9 +597,11 @@ class Cell:
         # НОВОЕ: Используем LLM Manager с автоматическим fallback
         if LLM_MANAGER_AVAILABLE and Cell._llm_manager:
             return self._call_llm_manager(full_prompt, temperature, memory_context_used)
-        else:
-            # Fallback на старый метод (только Ollama)
-            return self._call_ollama_legacy(full_prompt, temperature, force_code_model, memory_context_used)
+        if OLLAMA_DISABLED:
+            self._ollama_available = False
+            return self._fallback_response(full_prompt, memory_context_used, "ollama_disabled")
+        # Fallback на старый метод (только Ollama)
+        return self._call_ollama_legacy(full_prompt, temperature, force_code_model, memory_context_used)
     
     def _call_llm_manager(self, prompt: str, temperature: float, memory_context: str) -> str:
         """Вызов через LLM Manager с автоматическим fallback между провайдерами"""
@@ -419,7 +612,7 @@ class Cell:
             prompt=prompt,
             system_prompt=self.system_prompt,
             temperature=temperature,
-            max_tokens=2048
+            max_tokens=DEFAULT_MAX_RESPONSE_TOKENS
         )
         
         if response.success:
@@ -435,11 +628,18 @@ class Cell:
         
         # Выбор модели
         model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_REASON
-        options: Dict[str, Any] = {"temperature": temperature, "num_predict": 2048}
+        options: Dict[str, Any] = {"temperature": temperature, "num_predict": DEFAULT_MAX_RESPONSE_TOKENS}
+        if OLLAMA_NUM_CTX:
+            options["num_ctx"] = OLLAMA_NUM_CTX
         if _MODEL_LAYERS is not None:
             adapter = _MODEL_LAYERS.get_active_adapter(model)
             if adapter:
                 options["adapter"] = adapter
+            layer_prompt = _MODEL_LAYERS.get_active_prompt(model)
+        else:
+            layer_prompt = None
+
+        system_prompt = _merge_system_prompt(self.system_prompt, layer_prompt)
         
         try:
             response = requests.post(
@@ -447,7 +647,7 @@ class Cell:
                 json={
                     "model": model,
                     "prompt": prompt,
-                    "system": self.system_prompt,
+                    "system": system_prompt,
                     "stream": False,
                     "options": options
                 },
@@ -492,6 +692,13 @@ class Cell:
     def _fallback_response(self, prompt: str, memory_context: str, reason: str) -> str:
         """Генерация fallback-ответа когда Ollama недоступна"""
         
+        if reason == "ollama_disabled":
+            return (
+                "*[Автономный режим — ollama_disabled]*\n\n"
+                "Ollama отключена через NEIRA_DISABLE_OLLAMA. "
+                "Настрой другой провайдер (LM Studio/llama.cpp/облако) и повтори запрос."
+            )
+
         # Специальная обработка нехватки памяти
         if reason == "out_of_memory":
             return (
@@ -787,8 +994,8 @@ JSON формат:
                 for fact in facts:
                     fact["source"] = source
                 return facts
-        except:
-            pass
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass  # Ожидаемые ошибки парсинга
         return []
 
 
@@ -816,7 +1023,7 @@ def get_model_status() -> Dict[str, Any]:
             "cloud_universal_ready": cloud_universal_ready,
             "cloud_vision_ready": cloud_vision_ready
         }
-    except:
+    except (requests.RequestException, KeyError, json.JSONDecodeError):
         return {
             "ollama_running": False,
             "models": [],
@@ -839,12 +1046,16 @@ def ensure_models_installed():
         return False
 
     missing = []
+    def _add_missing(cmd: str) -> None:
+        if cmd not in missing:
+            missing.append(cmd)
+
     if not status["code_model_ready"]:
-        missing.append(f"ollama pull {MODEL_CODE}")
+        _add_missing(f"ollama pull {MODEL_CODE}")
     if not status["reason_model_ready"]:
-        missing.append(f"ollama pull {MODEL_REASON}")
+        _add_missing(f"ollama pull {MODEL_REASON}")
     if not status["embed_model_ready"]:
-        missing.append(f"ollama pull {EMBED_MODEL}")
+        _add_missing(f"ollama pull {EMBED_MODEL}")
 
     if missing:
         print("⚠️ Не хватает моделей. Выполни:")
@@ -853,9 +1064,13 @@ def ensure_models_installed():
         print("\n💡 Облачная модель (опционально): export GROQ_API_KEY=your_key")
         return False
 
-    models_str = f"{MODEL_CODE}, {MODEL_REASON}"
-    if status["personality_model_ready"]:
-        models_str += f", {MODEL_PERSONALITY}"
+    models_list = []
+    for name in (MODEL_CODE, MODEL_REASON):
+        if name not in models_list:
+            models_list.append(name)
+    if status["personality_model_ready"] and MODEL_PERSONALITY not in models_list:
+        models_list.append(MODEL_PERSONALITY)
+    models_str = ", ".join(models_list)
 
     # Облачные модели
     cloud_models = []
@@ -890,8 +1105,8 @@ def record_response_time(duration_ms: float):
         try:
             ns = get_nervous_system()
             ns.record_response_time(duration_ms)
-        except:
-            pass
+        except Exception:
+            pass  # Не критично если метрики не записались
 
 
 def get_health_status() -> Dict[str, Any]:

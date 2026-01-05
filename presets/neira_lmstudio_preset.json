@@ -1,0 +1,29 @@
+{
+  "preset": "",
+  "operation": {
+    "fields": [
+      {
+        "key": "llm.prediction.temperature",
+        "value": 0.7
+      },
+      {
+        "key": "llm.prediction.tools",
+        "value": {
+          "type": "none"
+        }
+      },
+      {
+        "key": "llm.prediction.contextPrefill",
+        "value": []
+      }
+    ]
+  },
+  "load": {
+    "fields": [
+      {
+        "key": "llm.load.contextLength",
+        "value": 8192
+      }
+    ]
+  }
+}

@@ -16,6 +16,65 @@ from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
+def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    if value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str]) -> str:
+    if not layer_prompt:
+        return base_prompt
+    if not base_prompt:
+        return layer_prompt
+    return f"{base_prompt}\n\n[Слой модели]\n{layer_prompt}"
+
+
+try:
+    from model_layers import ModelLayersRegistry
+
+    _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
+except Exception:
+    _MODEL_LAYERS = None
+
+try:
+    from llm_providers import create_default_manager
+    LLM_MANAGER_AVAILABLE = True
+except ImportError:
+    LLM_MANAGER_AVAILABLE = False
+
+_CODE_LLM_MANAGER: Optional[Any] = None
+
+
+def _get_code_manager() -> Optional[Any]:
+    global _CODE_LLM_MANAGER
+    if not LLM_MANAGER_AVAILABLE:
+        return None
+    if _CODE_LLM_MANAGER is None:
+        _CODE_LLM_MANAGER = create_default_manager()
+    return _CODE_LLM_MANAGER
+
 # Пробуем импортировать из новой версии (cells_v3), иначе из старой (cells)
 try:
     from cells_v3 import Cell, CellResult, MemoryCell, OLLAMA_URL, MODEL_CODE as LOCAL_MODEL, TIMEOUT # type: ignore
@@ -28,6 +87,11 @@ except ImportError:
     except ImportError:
         LOCAL_MODEL = "qwen2.5-coder:7b"
     TIMEOUT = 120
+
+DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
+CODE_MAX_TOKENS = _env_int("NEIRA_CODE_MAX_TOKENS", DEFAULT_MAX_RESPONSE_TOKENS, min_value=128)
+OLLAMA_NUM_CTX = _env_int("NEIRA_OLLAMA_NUM_CTX", 0, min_value=0)
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
 
 # === НАСТРОЙКИ ОБЛАКА ===
 # ВНИМАНИЕ: Ollama работает ТОЛЬКО локально (localhost:11434)
@@ -85,7 +149,7 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
             "model": CLOUD_MODEL,
             "messages": messages,
             "temperature": 0.2, # Для кода температура ниже
-            "max_tokens": 4096
+            "max_tokens": CODE_MAX_TOKENS
         }
         
         # Внимание: таймаут для облака больше, так как большие модели думают дольше
@@ -104,14 +168,42 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
         Пытается использовать локальную Ollama с graceful degradation.
         Возвращает: (content, source_model_name)
         """
+        base_system = system or self.system_prompt
+        layer_prompt = _MODEL_LAYERS.get_active_prompt(LOCAL_MODEL) if _MODEL_LAYERS else None
+        system_prompt = _merge_system_prompt(base_system, layer_prompt)
+
+        manager = _get_code_manager()
+        if manager:
+            try:
+                response = manager.generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.2,
+                    max_tokens=CODE_MAX_TOKENS
+                )
+                if response.success:
+                    return response.content, f"{response.provider.value}:{response.model}"
+            except Exception:
+                pass
+
+        if OLLAMA_DISABLED:
+            return self._offline_response(prompt, "ollama_disabled"), "OFFLINE"
+
         # Облако отключено — используем только локальную модель
         try:
             ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+            options: Dict[str, Any] = {"temperature": 0.2, "num_predict": CODE_MAX_TOKENS}
+            if OLLAMA_NUM_CTX:
+                options["num_ctx"] = OLLAMA_NUM_CTX
+            if _MODEL_LAYERS is not None:
+                adapter = _MODEL_LAYERS.get_active_adapter(LOCAL_MODEL)
+                if adapter:
+                    options["adapter"] = adapter
             payload = {
                 "model": LOCAL_MODEL,
-                "prompt": f"{system or self.system_prompt}\n\n{prompt}",
+                "prompt": f"{system_prompt}\n\n{prompt}",
                 "stream": False,
-                "options": {"temperature": 0.2, "num_predict": 2048}
+                "options": options
             }
             response = requests.post(ollama_url, json=payload, timeout=TIMEOUT)
             if response.status_code != 200:
@@ -130,6 +222,12 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
     
     def _offline_response(self, prompt: str, reason: str) -> str:
         """Ответ когда Ollama недоступна"""
+        if reason == "ollama_disabled":
+            return (
+                "*[Автономный режим — ollama_disabled]*\n\n"
+                "Ollama отключена через NEIRA_DISABLE_OLLAMA. "
+                "Настрой другой провайдер (LM Studio/llama.cpp/облако) и повтори команду."
+            )
         return (
             f"*[Автономный режим — {reason}]*\n\n"
             f"Не могу выполнить операцию с кодом — Ollama недоступна.\n"

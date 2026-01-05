@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 Harry Potter Multiplayer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        /* Login screen */
+        #loginScreen {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        #loginScreen h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #1a1a2e;
+            font-size: 16px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .info-box {
+            background: rgba(52, 152, 219, 0.2);
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        /* Game screen */
+        #gameScreen {
+            display: none;
+        }
+
+        .game-header {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .game-layout {
+            display: grid;
+            grid-template-columns: 1fr 250px;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .game-board {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            gap: 2px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            padding: 5px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        @media (max-width: 480px) {
+            .cell {
+                font-size: 16px;
+            }
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .panel h3 {
+            margin-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
+
+        .player-item {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chat-messages {
+            height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #1a1a2e;
+        }
+
+        .chat-input button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+
+        .status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .status.connected {
+            background: #27ae60;
+        }
+
+        .status.disconnected {
+            background: #e74c3c;
+        }
+
+        .controls-hint {
+            text-align: center;
+            margin-top: 15px;
+            opacity: 0.8;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="loginScreen">
+            <h1>🎮 Harry Potter<br>Multiplayer</h1>
+            
+            <div class="info-box">
+                <strong>📱 Для игры с телефона:</strong><br>
+                1. Подключитесь к той же WiFi сети<br>
+                2. Откройте эту страницу по адресу, который покажет сервер<br>
+                3. Введите имя и Room ID
+            </div>
+
+            <div class="input-group">
+                <label>👤 Имя игрока:</label>
+                <input type="text" id="playerName" placeholder="Гарри" value="">
+            </div>
+
+            <div class="input-group">
+                <label>🏰 Room ID:</label>
+                <input type="text" id="roomId" placeholder="hogwarts" value="hogwarts">
+            </div>
+
+            <div class="input-group">
+                <label>🌐 Адрес сервера:</label>
+                <input type="text" id="serverUrl" placeholder="ws://IP:8003/game">
+                <small style="opacity: 0.7; margin-top: 5px; display: block;">
+                    Автоопределён: <span id="autoUrl">определяется...</span>
+                </small>
+            </div>
+
+            <button class="btn" onclick="joinGame()">🎮 Войти в игру</button>
+
+            <div id="errorMessage" style="color: #e74c3c; margin-top: 15px; text-align: center;"></div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="gameScreen">
+            <div class="game-header">
+                <div>
+                    <h2>🎮 Harry Potter Multiplayer</h2>
+                    <div style="margin-top: 5px;">
+                        <span class="status connected" id="connectionStatus">Подключено</span>
+                    </div>
+                </div>
+                <div>
+                    <strong id="yourName">Игрок</strong><br>
+                    <span>Счёт: <strong id="yourScore">0</strong></span>
+                </div>
+            </div>
+
+            <div class="game-layout">
+                <div class="game-board">
+                    <div class="grid" id="gameGrid"></div>
+                    
+                    <!-- Сенсорное управление для смартфона -->
+                    <div id="touchControls" style="display: none; margin-top: 15px;">
+                        <div style="display: grid; grid-template-columns: repeat(3, 60px); gap: 5px; justify-content: center;">
+                            <div></div>
+                            <button onclick="move('up')" style="padding: 15px; font-size: 24px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 10px; color: #fff; cursor: pointer;">⬆️</button>
+                            <div></div>
+                            <button onclick="move('left')" style="padding: 15px; font-size: 24px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 10px; color: #fff; cursor: pointer;">⬅️</button>
+                            <div style="padding: 15px; text-align: center; color: #fff;">🎮</div>
+                            <button onclick="move('right')" style="padding: 15px; font-size: 24px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 10px; color: #fff; cursor: pointer;">➡️</button>
+                            <div></div>
+                            <button onclick="move('down')" style="padding: 15px; font-size: 24px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 10px; color: #fff; cursor: pointer;">⬇️</button>
+                            <div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="controls-hint">
+                        🎮 Управление: WASD / стрелки / кнопки<br>
+                        🎯 Цель: собрать все волшебные артефакты
+                    </div>
+                </div>
+
+                <div class="sidebar">
+                    <div class="panel">
+                        <h3>👥 Игроки онлайн</h3>
+                        <div id="playersList"></div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>💬 Чат</h3>
+                        <div class="chat-messages" id="chatMessages"></div>
+                        <div class="chat-input">
+                            <input type="text" id="chatInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter') sendChat()">
+                            <button onclick="sendChat()">📤</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let myPlayerId = null;
+        let myPlayerName = null;
+        let gameState = {
+            players: [],
+            artifacts: [],
+            grid_size: 15
+        };
+
+        // Автоопределение URL сервера
+        function detectServerUrl() {
+            const hostname = window.location.hostname;
+            let serverUrl;
+            
+            if (hostname === '' || hostname === 'file://') {
+                // Открыто из файла - используем localhost
+                serverUrl = 'ws://localhost:8003/game';
+            } else {
+                // Открыто через HTTP - используем текущий host
+                serverUrl = `ws://${hostname}:8003/game`;
+            }
+            
+            document.getElementById('serverUrl').value = serverUrl;
+            document.getElementById('autoUrl').textContent = serverUrl;
+            
+            return serverUrl;
+        }
+
+        // При загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            detectServerUrl();
+            
+            // Генерируем случайное имя
+            const names = ['Гарри', 'Рон', 'Гермиона', 'Драко', 'Невилл', 'Луна'];
+            document.getElementById('playerName').value = names[Math.floor(Math.random() * names.length)];
+        });
+
+        function joinGame() {
+            const playerName = document.getElementById('playerName').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+
+            if (!playerName || !roomId) {
+                showError('Заполните имя и Room ID');
+                return;
+            }
+
+            myPlayerName = playerName;
+            myPlayerId = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+            connectToServer(serverUrl, roomId);
+        }
+
+        function connectToServer(serverUrl, roomId) {
+            showError('Подключение...');
+
+            try {
+                ws = new WebSocket(serverUrl);
+
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({
+                        action: 'join',
+                        player_id: myPlayerId,
+                        player_name: myPlayerName,
+                        room_id: roomId
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleServerMessage(data);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    showError('❌ Ошибка подключения. Убедитесь что сервер запущен!');
+                };
+
+                ws.onclose = () => {
+                    if (document.getElementById('gameScreen').style.display === 'block') {
+                        document.getElementById('connectionStatus').textContent = 'Отключено';
+                        document.getElementById('connectionStatus').className = 'status disconnected';
+                    }
+                };
+
+            } catch (error) {
+                showError('❌ Не удалось подключиться: ' + error.message);
+            }
+        }
+
+        function handleServerMessage(data) {
+            switch (data.type) {
+                case 'joined':
+                    gameState = data.state;
+                    showGameScreen();
+                    renderGame();
+                    break;
+
+                case 'player_joined':
+                    addSystemMessage(`${data.player.name} присоединился`);
+                    if (!gameState.players.find(p => p.id === data.player.id)) {
+                        gameState.players.push(data.player);
+                    }
+                    renderGame();
+                    break;
+
+                case 'player_moved':
+                    const player = gameState.players.find(p => p.id === data.data.player_id);
+                    if (player) {
+                        player.x = data.data.new_pos.x;
+                        player.y = data.data.new_pos.y;
+                        if (data.data.artifact) {
+                            player.score += 100;
+                            const artifact = gameState.artifacts.find(a => a.id === data.data.artifact.id);
+                            if (artifact) {
+                                artifact.collected = true;
+                                addSystemMessage(`${player.name} собрал ${artifact.icon}!`);
+                            }
+                        }
+                    }
+                    renderGame();
+                    break;
+
+                case 'player_left':
+                    gameState.players = gameState.players.filter(p => p.id !== data.player_id);
+                    addSystemMessage(`${data.player_name || 'Игрок'} вышел`);
+                    renderGame();
+                    break;
+
+                case 'chat_message':
+                    addChatMessage(data.player_name, data.message);
+                    break;
+            }
+        }
+
+        function showGameScreen() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+            document.getElementById('yourName').textContent = myPlayerName;
+            
+            // Создаём сетку
+            const grid = document.getElementById('gameGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < gameState.grid_size * gameState.grid_size; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${i}`;
+                grid.appendChild(cell);
+            }
+
+            // Клавиши управления
+            document.addEventListener('keydown', handleKeyPress);
+            
+            // Показываем сенсорное управление на мобильных устройствах
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                document.getElementById('touchControls').style.display = 'block';
+            }
+        }
+
+        function renderGame() {
+            // Очистка сетки
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => cell.textContent = '');
+
+            // Отрисовка артефактов
+            gameState.artifacts.forEach(artifact => {
+                if (!artifact.collected) {
+                    const cellIndex = artifact.y * gameState.grid_size + artifact.x;
+                    const cell = document.getElementById(`cell-${cellIndex}`);
+                    if (cell) cell.textContent = artifact.icon;
+                }
+            });
+
+            // Отрисовка игроков
+            gameState.players.forEach(player => {
+                const cellIndex = player.y * gameState.grid_size + player.x;
+                const cell = document.getElementById(`cell-${cellIndex}`);
+                if (cell) {
+                    cell.textContent = player.id === myPlayerId ? '🧙‍♂️' : '🧙';
+                    cell.style.background = player.color;
+                }
+            });
+
+            // Обновление списка игроков
+            updatePlayersList();
+
+            // Обновление счёта
+            const myPlayer = gameState.players.find(p => p.id === myPlayerId);
+            if (myPlayer) {
+                document.getElementById('yourScore').textContent = myPlayer.score || 0;
+            }
+        }
+
+        function updatePlayersList() {
+            const list = document.getElementById('playersList');
+            list.innerHTML = '';
+
+            // Сортировка по счёту
+            const sorted = [...gameState.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+            sorted.forEach(player => {
+                const item = document.createElement('div');
+                item.className = 'player-item';
+                item.innerHTML = `
+                    <span>${player.id === myPlayerId ? '⭐ ' : ''}${player.name}</span>
+                    <span>${player.score || 0}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function handleKeyPress(e) {
+            const directions = {
+                'w': 'up', 'W': 'up', 'ArrowUp': 'up',
+                's': 'down', 'S': 'down', 'ArrowDown': 'down',
+                'a': 'left', 'A': 'left', 'ArrowLeft': 'left',
+                'd': 'right', 'D': 'right', 'ArrowRight': 'right'
+            };
+
+            const direction = directions[e.key];
+            if (direction && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'move',
+                    direction: direction
+                }));
+                e.preventDefault();
+            }
+        }
+        
+        function move(direction) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'move',
+                    direction: direction
+                }));
+            }
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'chat',
+                    message: message
+                }));
+                input.value = '';
+            }
+        }
+
+        function addChatMessage(playerName, message) {
+            const container = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message';
+            msgDiv.innerHTML = `<strong>${playerName}:</strong> ${message}`;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addSystemMessage(message) {
+            const container = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message';
+            msgDiv.style.opacity = '0.7';
+            msgDiv.style.fontStyle = 'italic';
+            msgDiv.textContent = '🔔 ' + message;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+        }
+    </script>
+</body>
+</html>

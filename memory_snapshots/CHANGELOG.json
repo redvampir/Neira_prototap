@@ -1942,6 +1942,4724 @@
         }
       },
       "filepath": "memory_snapshots\\snapshot_20251223_101335_059750d6.json"
+    },
+    {
+      "id": "9f15a5ff",
+      "timestamp": "20251228_121739",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 185,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 41,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 61,
+          "preference": 32,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 185
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_121739_9f15a5ff.json"
+    },
+    {
+      "id": "37d05735",
+      "timestamp": "20251228_121944",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 185,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 41,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 61,
+          "preference": 32,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 185
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_121944_37d05735.json"
+    },
+    {
+      "id": "91ce320a",
+      "timestamp": "20251228_122219",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 185,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 41,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 61,
+          "preference": 32,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 185
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_122219_91ce320a.json"
+    },
+    {
+      "id": "88255012",
+      "timestamp": "20251228_122804",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 185,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 41,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 61,
+          "preference": 32,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 185
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_122804_88255012.json"
+    },
+    {
+      "id": "14a5559e",
+      "timestamp": "20251228_123419",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 185,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 41,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 61,
+          "preference": 32,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 185
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_123419_14a5559e.json"
+    },
+    {
+      "id": "5f7e6141",
+      "timestamp": "20251228_125010",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 192,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 43,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 64,
+          "preference": 34,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 192
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_125010_5f7e6141.json"
+    },
+    {
+      "id": "568da6bf",
+      "timestamp": "20251228_162802",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 195,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 44,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 65,
+          "preference": 35,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 195
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_162802_568da6bf.json"
+    },
+    {
+      "id": "69042b94",
+      "timestamp": "20251228_162923",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 195,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 44,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 65,
+          "preference": 35,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1
+        },
+        "by_validation": {
+          "pending": 195
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_162923_69042b94.json"
+    },
+    {
+      "id": "5cae1dfd",
+      "timestamp": "20251228_175839",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 201,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 44,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 65,
+          "preference": 35,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 201
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_175839_5cae1dfd.json"
+    },
+    {
+      "id": "1a4ff405",
+      "timestamp": "20251228_185929",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_185929_1a4ff405.json"
+    },
+    {
+      "id": "ea177bb0",
+      "timestamp": "20251228_191455",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_191455_ea177bb0.json"
+    },
+    {
+      "id": "5bae4c67",
+      "timestamp": "20251228_194745",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_194745_5bae4c67.json"
+    },
+    {
+      "id": "cff81f27",
+      "timestamp": "20251228_201742",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_201742_cff81f27.json"
+    },
+    {
+      "id": "68a3c5b6",
+      "timestamp": "20251228_203507",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_203507_68a3c5b6.json"
+    },
+    {
+      "id": "6575a8f2",
+      "timestamp": "20251228_203616",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_203616_6575a8f2.json"
+    },
+    {
+      "id": "f8c48629",
+      "timestamp": "20251228_220739",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_220739_f8c48629.json"
+    },
+    {
+      "id": "46ce8e62",
+      "timestamp": "20251228_220818",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251228_220818_46ce8e62.json"
+    },
+    {
+      "id": "de8150c1",
+      "timestamp": "20251229_025246",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_025246_de8150c1.json"
+    },
+    {
+      "id": "158de705",
+      "timestamp": "20251229_025344",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_025344_158de705.json"
+    },
+    {
+      "id": "fccca4e2",
+      "timestamp": "20251229_032828",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_032828_fccca4e2.json"
+    },
+    {
+      "id": "beccde4d",
+      "timestamp": "20251229_033827",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_033827_beccde4d.json"
+    },
+    {
+      "id": "d9dd990e",
+      "timestamp": "20251229_040404",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_040404_d9dd990e.json"
+    },
+    {
+      "id": "bee98670",
+      "timestamp": "20251229_040617",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_040617_bee98670.json"
+    },
+    {
+      "id": "879456cc",
+      "timestamp": "20251229_040935",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_040935_879456cc.json"
+    },
+    {
+      "id": "08933a48",
+      "timestamp": "20251229_041910",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_041910_08933a48.json"
+    },
+    {
+      "id": "3a39b187",
+      "timestamp": "20251229_042719",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_042719_3a39b187.json"
+    },
+    {
+      "id": "638fae65",
+      "timestamp": "20251229_042854",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_042854_638fae65.json"
+    },
+    {
+      "id": "ce745e5c",
+      "timestamp": "20251229_043004",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 208,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 46,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 68,
+          "preference": 37,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 208
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_043004_ce745e5c.json"
+    },
+    {
+      "id": "2d256b26",
+      "timestamp": "20251229_044750",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 214,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 48,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 71,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 214
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_044750_2d256b26.json"
+    },
+    {
+      "id": "78e95f2f",
+      "timestamp": "20251229_055251",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 214,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 48,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 71,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 1,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1
+        },
+        "by_validation": {
+          "pending": 214
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_055251_78e95f2f.json"
+    },
+    {
+      "id": "82eef74d",
+      "timestamp": "20251229_071251",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 218,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 2,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1
+        },
+        "by_validation": {
+          "pending": 218
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_071251_82eef74d.json"
+    },
+    {
+      "id": "106db69d",
+      "timestamp": "20251229_100308",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 218,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 2,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1
+        },
+        "by_validation": {
+          "pending": 218
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_100308_106db69d.json"
+    },
+    {
+      "id": "60e94cf6",
+      "timestamp": "20251229_110559",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 226,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 2,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1
+        },
+        "by_validation": {
+          "pending": 226
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_110559_60e94cf6.json"
+    },
+    {
+      "id": "6ff92c66",
+      "timestamp": "20251229_143247",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 226,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 2,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1
+        },
+        "by_validation": {
+          "pending": 226
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_143247_6ff92c66.json"
+    },
+    {
+      "id": "615d313b",
+      "timestamp": "20251229_151759",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 304,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 2,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1
+        },
+        "by_validation": {
+          "pending": 304
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_151759_615d313b.json"
+    },
+    {
+      "id": "f0c1fe70",
+      "timestamp": "20251229_153048",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_153048_f0c1fe70.json"
+    },
+    {
+      "id": "2079bd5a",
+      "timestamp": "20251229_202459",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_202459_2079bd5a.json"
+    },
+    {
+      "id": "586e4f16",
+      "timestamp": "20251229_202600",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_202600_586e4f16.json"
+    },
+    {
+      "id": "590892f6",
+      "timestamp": "20251229_205843",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251229_205843_590892f6.json"
+    },
+    {
+      "id": "9c4d9903",
+      "timestamp": "20251230_051243",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_051243_9c4d9903.json"
+    },
+    {
+      "id": "6e883592",
+      "timestamp": "20251230_052226",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_052226_6e883592.json"
+    },
+    {
+      "id": "39ee5d6d",
+      "timestamp": "20251230_125840",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_125840_39ee5d6d.json"
+    },
+    {
+      "id": "4b7347d5",
+      "timestamp": "20251230_132340",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 308,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 72,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 308
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_132340_4b7347d5.json"
+    },
+    {
+      "id": "c23be542",
+      "timestamp": "20251230_155529",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_155529_c23be542.json"
+    },
+    {
+      "id": "44ac9610",
+      "timestamp": "20251230_162917",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_162917_44ac9610.json"
+    },
+    {
+      "id": "b1562bc0",
+      "timestamp": "20251230_183512",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_183512_b1562bc0.json"
+    },
+    {
+      "id": "c852de30",
+      "timestamp": "20251230_191759",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_191759_c852de30.json"
+    },
+    {
+      "id": "b8e6bab6",
+      "timestamp": "20251230_193001",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_193001_b8e6bab6.json"
+    },
+    {
+      "id": "a568ee2b",
+      "timestamp": "20251230_193834",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_193834_a568ee2b.json"
+    },
+    {
+      "id": "4b167550",
+      "timestamp": "20251230_193947",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_193947_4b167550.json"
+    },
+    {
+      "id": "4be8a369",
+      "timestamp": "20251230_195107",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_195107_4be8a369.json"
+    },
+    {
+      "id": "57ffb727",
+      "timestamp": "20251230_195236",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_195236_57ffb727.json"
+    },
+    {
+      "id": "d0fe6a8f",
+      "timestamp": "20251230_195756",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_195756_d0fe6a8f.json"
+    },
+    {
+      "id": "f08bd81b",
+      "timestamp": "20251230_200135",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_200135_f08bd81b.json"
+    },
+    {
+      "id": "17cf7ad5",
+      "timestamp": "20251230_200254",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_200254_17cf7ad5.json"
+    },
+    {
+      "id": "b39ab639",
+      "timestamp": "20251230_200620",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251230_200620_b39ab639.json"
+    },
+    {
+      "id": "5793c7e5",
+      "timestamp": "20251231_055954",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_055954_5793c7e5.json"
+    },
+    {
+      "id": "f5c8b259",
+      "timestamp": "20251231_083536",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_083536_f5c8b259.json"
+    },
+    {
+      "id": "dd0180b2",
+      "timestamp": "20251231_105203",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_105203_dd0180b2.json"
+    },
+    {
+      "id": "bbf4da76",
+      "timestamp": "20251231_105407",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 311,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "learned": 49,
+          "fact": 38,
+          "preference/learned": 2,
+          "applied": 1,
+          "instruction": 75,
+          "preference": 38,
+          "technique": 2,
+          "инструкция_гейплей": 1,
+          "управление": 1,
+          "персонаж": 1,
+          "объекты_сбора": 1,
+          "система_проgression": 1,
+          "UI_инструменты": 1,
+          "интерактивность": 1,
+          "атмосфера": 1,
+          "информация": 1,
+          "инструкция": 3,
+          "практическое действие": 2,
+          "преференция/автоматизация": 1,
+          "техническая диагностика": 1,
+          "преference": 1,
+          "технология": 1,
+          "алгоритм": 1,
+          "структура данных": 1,
+          "оптимизация": 1,
+          "интеграция": 1,
+          "статистика": 1,
+          "тестирование": 1,
+          "экстра": 1,
+          "code": 72,
+          "история": 1,
+          "основные особенности": 2,
+          "производительность": 1,
+          "применение": 1,
+          "недостатки": 1,
+          "пример": 1,
+          "функция": 1,
+          "преференция": 1
+        },
+        "by_validation": {
+          "pending": 311
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_105407_bbf4da76.json"
+    },
+    {
+      "id": "f801b5bd",
+      "timestamp": "20251231_142800",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 6,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1
+        },
+        "by_validation": {
+          "pending": 6
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_142800_f801b5bd.json"
+    },
+    {
+      "id": "47ad7dec",
+      "timestamp": "20251231_143044",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 6,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1
+        },
+        "by_validation": {
+          "pending": 6
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_143044_47ad7dec.json"
+    },
+    {
+      "id": "654e38f2",
+      "timestamp": "20251231_143146",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 6,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1
+        },
+        "by_validation": {
+          "pending": 6
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_143146_654e38f2.json"
+    },
+    {
+      "id": "b397b8df",
+      "timestamp": "20251231_181036",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 11,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1
+        },
+        "by_validation": {
+          "pending": 11
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_181036_b397b8df.json"
+    },
+    {
+      "id": "97a8f23d",
+      "timestamp": "20251231_190210",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 11,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1
+        },
+        "by_validation": {
+          "pending": 11
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_190210_97a8f23d.json"
+    },
+    {
+      "id": "d481eb61",
+      "timestamp": "20251231_191250",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20251231_191250_d481eb61.json"
+    },
+    {
+      "id": "e956b872",
+      "timestamp": "20260101_141123",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_141123_e956b872.json"
+    },
+    {
+      "id": "f274a798",
+      "timestamp": "20260101_141658",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_141658_f274a798.json"
+    },
+    {
+      "id": "a16107a1",
+      "timestamp": "20260101_142126",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_142126_a16107a1.json"
+    },
+    {
+      "id": "3a1af683",
+      "timestamp": "20260101_145041",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_145041_3a1af683.json"
+    },
+    {
+      "id": "ffba0255",
+      "timestamp": "20260101_145329",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_145329_ffba0255.json"
+    },
+    {
+      "id": "4fb78d20",
+      "timestamp": "20260101_145702",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_145702_4fb78d20.json"
+    },
+    {
+      "id": "a0f9ffdd",
+      "timestamp": "20260101_150835",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_150835_a0f9ffdd.json"
+    },
+    {
+      "id": "a865bd8b",
+      "timestamp": "20260101_154449",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_154449_a865bd8b.json"
+    },
+    {
+      "id": "c49f8208",
+      "timestamp": "20260101_184351",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_184351_c49f8208.json"
+    },
+    {
+      "id": "5fc08dca",
+      "timestamp": "20260101_184359",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_184359_5fc08dca.json"
+    },
+    {
+      "id": "b286434c",
+      "timestamp": "20260101_184509",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 13,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 2
+        },
+        "by_validation": {
+          "pending": 13
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260101_184509_b286434c.json"
+    },
+    {
+      "id": "ba996f51",
+      "timestamp": "20260102_051012",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 70,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 17,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 70
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_051012_ba996f51.json"
+    },
+    {
+      "id": "431b565f",
+      "timestamp": "20260102_083047",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_083047_431b565f.json"
+    },
+    {
+      "id": "f04a8539",
+      "timestamp": "20260102_083909",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_083909_f04a8539.json"
+    },
+    {
+      "id": "4a6ba60f",
+      "timestamp": "20260102_101003",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_101003_4a6ba60f.json"
+    },
+    {
+      "id": "c711c519",
+      "timestamp": "20260102_101153",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_101153_c711c519.json"
+    },
+    {
+      "id": "27b18a3c",
+      "timestamp": "20260102_102322",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_102322_27b18a3c.json"
+    },
+    {
+      "id": "96259f9b",
+      "timestamp": "20260102_102701",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 76,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 23,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 76
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_102701_96259f9b.json"
+    },
+    {
+      "id": "9530a0b6",
+      "timestamp": "20260102_121403",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 93,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 40,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 93
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_121403_9530a0b6.json"
+    },
+    {
+      "id": "3cecf37a",
+      "timestamp": "20260102_134010",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 93,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 40,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 93
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_134010_3cecf37a.json"
+    },
+    {
+      "id": "e338023e",
+      "timestamp": "20260102_152816",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 93,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 1,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 40,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 93
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_152816_e338023e.json"
+    },
+    {
+      "id": "0ac53aa9",
+      "timestamp": "20260102_181736",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_181736_0ac53aa9.json"
+    },
+    {
+      "id": "353bcd18",
+      "timestamp": "20260102_181943",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_181943_353bcd18.json"
+    },
+    {
+      "id": "b488e7a9",
+      "timestamp": "20260102_182252",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_182252_b488e7a9.json"
+    },
+    {
+      "id": "977e4786",
+      "timestamp": "20260102_183808",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_183808_977e4786.json"
+    },
+    {
+      "id": "6c89eb55",
+      "timestamp": "20260102_185145",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_185145_6c89eb55.json"
+    },
+    {
+      "id": "20edf959",
+      "timestamp": "20260102_190318",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_190318_20edf959.json"
+    },
+    {
+      "id": "9fb0b534",
+      "timestamp": "20260102_213027",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_213027_9fb0b534.json"
+    },
+    {
+      "id": "47a34ecc",
+      "timestamp": "20260102_214700",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_214700_47a34ecc.json"
+    },
+    {
+      "id": "4d87c0f4",
+      "timestamp": "20260102_220100",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260102_220100_4d87c0f4.json"
+    },
+    {
+      "id": "afd77939",
+      "timestamp": "20260103_053235",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_053235_afd77939.json"
+    },
+    {
+      "id": "c4d9de68",
+      "timestamp": "20260103_053343",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_053343_c4d9de68.json"
+    },
+    {
+      "id": "98a6fe03",
+      "timestamp": "20260103_072917",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_072917_98a6fe03.json"
+    },
+    {
+      "id": "ad479d8d",
+      "timestamp": "20260103_072938",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_072938_ad479d8d.json"
+    },
+    {
+      "id": "f51a8934",
+      "timestamp": "20260103_072956",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_072956_f51a8934.json"
+    },
+    {
+      "id": "36a26622",
+      "timestamp": "20260103_080436",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_080436_36a26622.json"
+    },
+    {
+      "id": "fcf9e6cd",
+      "timestamp": "20260103_081843",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_081843_fcf9e6cd.json"
+    },
+    {
+      "id": "3b374491",
+      "timestamp": "20260103_084236",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_084236_3b374491.json"
+    },
+    {
+      "id": "71297e90",
+      "timestamp": "20260103_084625",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_084625_71297e90.json"
+    },
+    {
+      "id": "fd5e85cb",
+      "timestamp": "20260103_084720",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 132,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 77,
+          "knowledge": 42
+        },
+        "by_validation": {
+          "pending": 132
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_084720_fd5e85cb.json"
+    },
+    {
+      "id": "dab12238",
+      "timestamp": "20260103_100500",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 150,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 80,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 150
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_100500_dab12238.json"
+    },
+    {
+      "id": "c285cd4c",
+      "timestamp": "20260103_100544",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 150,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 80,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 150
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_100544_c285cd4c.json"
+    },
+    {
+      "id": "dea70fc1",
+      "timestamp": "20260103_100553",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 150,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 80,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 150
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_100553_dea70fc1.json"
+    },
+    {
+      "id": "bb606dc5",
+      "timestamp": "20260103_100708",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 150,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 80,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 150
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_100708_bb606dc5.json"
+    },
+    {
+      "id": "a4180cae",
+      "timestamp": "20260103_105053",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 150,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 80,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 150
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_105053_a4180cae.json"
+    },
+    {
+      "id": "2097c2f2",
+      "timestamp": "20260103_112109",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 164,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 94,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 164
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_112109_2097c2f2.json"
+    },
+    {
+      "id": "2c9a9a6e",
+      "timestamp": "20260103_113154",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 164,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 94,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 164
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_113154_2c9a9a6e.json"
+    },
+    {
+      "id": "4a345f66",
+      "timestamp": "20260103_113541",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 164,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 94,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 164
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_113541_4a345f66.json"
+    },
+    {
+      "id": "84109093",
+      "timestamp": "20260103_114816",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 164,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 94,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 164
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_114816_84109093.json"
+    },
+    {
+      "id": "44c7f78f",
+      "timestamp": "20260103_120953",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 164,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 94,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 164
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_120953_44c7f78f.json"
+    },
+    {
+      "id": "67a2353b",
+      "timestamp": "20260103_124557",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 172,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 102,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 172
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_124557_67a2353b.json"
+    },
+    {
+      "id": "2d1dab15",
+      "timestamp": "20260103_160322",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 172,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 102,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 172
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_160322_2d1dab15.json"
+    },
+    {
+      "id": "bda1b308",
+      "timestamp": "20260103_164421",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 172,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 102,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 172
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_164421_bda1b308.json"
+    },
+    {
+      "id": "4f630977",
+      "timestamp": "20260103_173314",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 182,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 112,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 182
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_173314_4f630977.json"
+    },
+    {
+      "id": "c7df8f0f",
+      "timestamp": "20260103_182159",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 188,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 118,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 188
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_182159_c7df8f0f.json"
+    },
+    {
+      "id": "b276f7a7",
+      "timestamp": "20260103_182543",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 188,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 118,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 188
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_182543_b276f7a7.json"
+    },
+    {
+      "id": "a088e6dd",
+      "timestamp": "20260103_183310",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 199,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 129,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 199
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_183310_a088e6dd.json"
+    },
+    {
+      "id": "f1bc66f2",
+      "timestamp": "20260103_185700",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 199,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 129,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 199
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_185700_f1bc66f2.json"
+    },
+    {
+      "id": "61b25841",
+      "timestamp": "20260103_194025",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 202,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 132,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 202
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_194025_61b25841.json"
+    },
+    {
+      "id": "7609501a",
+      "timestamp": "20260103_194533",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 202,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 132,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 202
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_194533_7609501a.json"
+    },
+    {
+      "id": "b86c66e3",
+      "timestamp": "20260103_201359",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_201359_b86c66e3.json"
+    },
+    {
+      "id": "0c0cafb3",
+      "timestamp": "20260103_204639",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_204639_0c0cafb3.json"
+    },
+    {
+      "id": "cef33a44",
+      "timestamp": "20260103_204720",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_204720_cef33a44.json"
+    },
+    {
+      "id": "1c73783f",
+      "timestamp": "20260103_204824",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_204824_1c73783f.json"
+    },
+    {
+      "id": "5a759d0d",
+      "timestamp": "20260103_205311",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_205311_5a759d0d.json"
+    },
+    {
+      "id": "94d731a4",
+      "timestamp": "20260103_205444",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_205444_94d731a4.json"
+    },
+    {
+      "id": "8bb5a44e",
+      "timestamp": "20260103_210455",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_210455_8bb5a44e.json"
+    },
+    {
+      "id": "f91da74c",
+      "timestamp": "20260103_211207",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260103_211207_f91da74c.json"
+    },
+    {
+      "id": "b11452aa",
+      "timestamp": "20260104_050801",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_050801_b11452aa.json"
+    },
+    {
+      "id": "edac8f02",
+      "timestamp": "20260104_051339",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051339_edac8f02.json"
+    },
+    {
+      "id": "64118448",
+      "timestamp": "20260104_051450",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051450_64118448.json"
+    },
+    {
+      "id": "c0664c88",
+      "timestamp": "20260104_051530",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051530_c0664c88.json"
+    },
+    {
+      "id": "05a7c214",
+      "timestamp": "20260104_051644",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051644_05a7c214.json"
+    },
+    {
+      "id": "86266ada",
+      "timestamp": "20260104_051704",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051704_86266ada.json"
+    },
+    {
+      "id": "e7473fe0",
+      "timestamp": "20260104_051716",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_051716_e7473fe0.json"
+    },
+    {
+      "id": "32879732",
+      "timestamp": "20260104_054232",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_054232_32879732.json"
+    },
+    {
+      "id": "6ab2b39b",
+      "timestamp": "20260104_054451",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_054451_6ab2b39b.json"
+    },
+    {
+      "id": "81a78e46",
+      "timestamp": "20260104_055124",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_055124_81a78e46.json"
+    },
+    {
+      "id": "d5690c52",
+      "timestamp": "20260104_055533",
+      "message": "Auto-snapshot before cleanup",
+      "stats": {
+        "total_memories": 203,
+        "avg_confidence": 0.5,
+        "by_category": {
+          "instruction": 3,
+          "preference": 2,
+          "learned": 2,
+          "инструкция": 1,
+          "reasoning": 1,
+          "interaction": 1,
+          "emotional_response": 1,
+          "contextual_awareness": 1,
+          "purpose": 1,
+          "fact": 133,
+          "knowledge": 57
+        },
+        "by_validation": {
+          "pending": 203
+        }
+      },
+      "filepath": "memory_snapshots\\snapshot_20260104_055533_d5690c52.json"
     }
   ]
 }

@@ -6,6 +6,7 @@ Neira Wrapper v0.5 — Асинхронная обёртка для Backend API
 import sys
 import os
 import asyncio
+import logging
 from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, Optional
 from dataclasses import dataclass
@@ -15,9 +16,10 @@ from datetime import datetime
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-print(f"🔍 Parent dir: {parent_dir}")
-print(f"🔍 __file__: {__file__}")
-print(f"🔍 sys.path[0]: {sys.path[0]}")
+logger = logging.getLogger(__name__)
+logger.info("🔍 Parent dir: %s", parent_dir)
+logger.info("🔍 __file__: %s", __file__)
+logger.info("🔍 sys.path[0]: %s", sys.path[0])
 
 from main import Neira
 from cells import get_model_status
@@ -25,18 +27,18 @@ from cells import get_model_status
 # Импорт UI Code Cell
 try:
     from ui_code_cell import UICodeCell
-    print(f"✅ UICodeCell импортирован: {UICodeCell}")
+    logger.info("✅ UICodeCell импортирован: %s", UICodeCell)
 except ImportError as e:
     UICodeCell = None
-    print(f"⚠️ UICodeCell не найден: {e}")
+    logger.warning("⚠️ UICodeCell не найден: %s", e)
 
 # Импорт Cell Router
 try:
     from cell_router import get_router
-    print(f"✅ CellRouter импортирован: {get_router}")
+    logger.info("✅ CellRouter импортирован: %s", get_router)
 except ImportError as e:
     get_router = None
-    print(f"⚠️ CellRouter не найден: {e}")
+    logger.warning("⚠️ CellRouter не найден: %s", e)
 
 
 @dataclass
@@ -60,44 +62,44 @@ class NeiraWrapper:
         Args:
             verbose: Показывать отладочную информацию (False для API)
         """
-        print(f"[NeiraWrapper.__init__] START (verbose={verbose})")
+        logger.info("[NeiraWrapper.__init__] START (verbose=%s)", verbose)
         
         # Для backend отключаем фоновые watcher-потоки (они мешают чистому завершению
         # процесса и в консольных прогревах могут приводить к крешам/фаталам).
         os.environ.setdefault("NEIRA_ENABLE_CELL_WATCHER", "false")
 
         # Инициализируем Neira в отдельном потоке
-        print("[NeiraWrapper.__init__] Creating Neira...")
+        logger.info("[NeiraWrapper.__init__] Creating Neira...")
         self.neira = Neira(verbose=verbose)
-        print("[NeiraWrapper.__init__] Neira created")
+        logger.info("[NeiraWrapper.__init__] Neira created")
         self.is_processing = False
         
         # Инициализируем Cell Router
-        print("[NeiraWrapper.__init__] Creating Cell Router...")
+        logger.info("[NeiraWrapper.__init__] Creating Cell Router...")
         self.router = get_router() if get_router else None
-        print(f"[NeiraWrapper.__init__] Cell Router: {self.router}")
+        logger.info("[NeiraWrapper.__init__] Cell Router: %s", self.router)
         
         # Добавляем контекст о клетках в system prompt
         if self.router:
             cell_context = self.router.get_system_prompt_extension()
             # TODO: Добавить в personality или system prompt Neira
-            print("🧬 Cell Router инициализирован")
+            logger.info("🧬 Cell Router инициализирован")
         
         # Инициализируем UI Code Cell если доступен
-        print(f"[NeiraWrapper.__init__] UICodeCell available: {UICodeCell is not None}")
+        logger.info("[NeiraWrapper.__init__] UICodeCell available: %s", UICodeCell is not None)
         self.ui_code_cell = None
         if UICodeCell:
             try:
-                print("[NeiraWrapper.__init__] Creating UICodeCell...")
+                logger.info("[NeiraWrapper.__init__] Creating UICodeCell...")
                 self.ui_code_cell = UICodeCell(self.neira)
-                print("🎨 UICodeCell инициализирован")
-                print(f"   Templates loaded: {list(self.ui_code_cell.templates.keys())}")
+                logger.info("🎨 UICodeCell инициализирован")
+                logger.info("   Templates loaded: %s", list(self.ui_code_cell.templates.keys()))
             except Exception as e:
-                print(f"⚠️ Ошибка инициализации UICodeCell: {e}")
+                logger.warning("⚠️ Ошибка инициализации UICodeCell: %s", e)
                 import traceback
                 traceback.print_exc()
         
-        print("[NeiraWrapper.__init__] DONE")
+        logger.info("[NeiraWrapper.__init__] DONE")
 
     async def process_stream(self, user_input: str) -> AsyncGenerator[StreamChunk, None]:
         """
@@ -125,10 +127,10 @@ class NeiraWrapper:
                 if use_cell:
                     selected_cell = cell_name
                     cell_reasoning = reasoning
-                    print(f"🎯 [Router] Выбрана клетка: {cell_name}")
-                    print(f"   [Router] Обоснование: {reasoning}")
+                    logger.info("🎯 [Router] Выбрана клетка: %s", cell_name)
+                    logger.info("   [Router] Обоснование: %s", reasoning)
                 else:
-                    print(f"ℹ️ [Router] Клетка не требуется: {reasoning}")
+                    logger.info("ℹ️ [Router] Клетка не требуется: %s", reasoning)
             
             # Этап 1: Анализ
             yield StreamChunk(
@@ -165,7 +167,7 @@ class NeiraWrapper:
 
             # НОВАЯ ЛОГИКА: Если выбрана клетка ui_code_cell — вызываем её напрямую
             if selected_cell == "ui_code_cell" and self.ui_code_cell:
-                print(f"🎨 [Execution] Вызываю UICodeCell.generate_ui() для: {user_input}")
+                logger.info("🎨 [Execution] Вызываю UICodeCell.generate_ui() для: %s", user_input)
                 
                 # Генерируем UI артефакт
                 artifact = await loop.run_in_executor(
@@ -174,7 +176,7 @@ class NeiraWrapper:
                     user_input
                 )
                 
-                print(f"✅ [Execution] Артефакт создан: {artifact['id']}, template={artifact['template_used']}")
+                logger.info("✅ [Execution] Артефакт создан: %s, template=%s", artifact["id"], artifact["template_used"])
                 
                 # Возвращаем результат с артефактом
                 yield StreamChunk(
@@ -365,10 +367,17 @@ class NeiraWrapper:
 
     # === Самосознание и Органы (v0.6) ===
 
+    def _ensure_introspection(self) -> bool:
+        """Обеспечивает инициализацию IntrospectionCell (lazy loading)"""
+        if self.neira.introspection:
+            return True
+        # Вызываем lazy-инициализацию из main.py
+        return self.neira._ensure_introspection()
+
     def get_self_description(self) -> Dict[str, Any]:
         """Получить описание себя (самосознание)"""
         try:
-            if self.neira.introspection:
+            if self._ensure_introspection():
                 description = self.neira.introspection.get_self_description()
                 organs_count = len(self.neira.introspection.organs)
                 active_count = len([o for o in self.neira.introspection.organs.values() if o.status == "active"])
@@ -383,14 +392,14 @@ class NeiraWrapper:
                         "has_experience": self.neira.experience is not None
                     }
                 }
-            return {"error": "Introspection cell not available"}
+            return {"error": "Introspection cell not available", "reason": self.neira._introspection_error or "Unknown"}
         except Exception as e:
             return {"error": str(e)}
 
     def get_organs(self) -> Dict[str, Any]:
         """Получить список всех органов"""
         try:
-            if self.neira.introspection:
+            if self._ensure_introspection():
                 organs = {}
                 for key, organ in self.neira.introspection.organs.items():
                     organs[key] = {
@@ -410,14 +419,14 @@ class NeiraWrapper:
                         "dormant": len([o for o in organs.values() if o["status"] == "dormant"])
                     }
                 }
-            return {"error": "Introspection cell not available"}
+            return {"error": "Introspection cell not available", "reason": self.neira._introspection_error or "Unknown"}
         except Exception as e:
             return {"error": str(e)}
 
     def get_organ_details(self, organ_name: str) -> Dict[str, Any]:
         """Получить детали конкретного органа"""
         try:
-            if self.neira.introspection:
+            if self._ensure_introspection():
                 organ = self.neira.introspection.organs.get(organ_name)
                 if organ:
                     return {
@@ -429,20 +438,20 @@ class NeiraWrapper:
                         "uses_count": organ.uses_count
                     }
                 return {"error": f"Organ '{organ_name}' not found"}
-            return {"error": "Introspection cell not available"}
+            return {"error": "Introspection cell not available", "reason": self.neira._introspection_error or "Unknown"}
         except Exception as e:
             return {"error": str(e)}
 
     def get_growth_capabilities(self) -> Dict[str, Any]:
         """Информация о возможностях роста"""
         try:
-            if self.neira.introspection:
+            if self._ensure_introspection():
                 return {
                     "capabilities": self.neira.introspection.get_growth_capabilities(),
                     "cell_factory_available": self.neira.evolution.cell_factory is not None if self.neira.evolution else False,
                     "can_grow": True
                 }
-            return {"error": "Introspection cell not available"}
+            return {"error": "Introspection cell not available", "reason": self.neira._introspection_error or "Unknown"}
         except Exception as e:
             return {"error": str(e)}
 
@@ -450,15 +459,15 @@ class NeiraWrapper:
 # === ТЕСТ ===
 if __name__ == "__main__":
     async def test():
-        print("Testing NeiraWrapper...")
+        logger.info("Testing NeiraWrapper...")
         wrapper = NeiraWrapper(verbose=True)
 
-        print("\n1. Testing stats...")
+        logger.info("1. Testing stats...")
         stats = wrapper.get_stats()
-        print(f"Stats: {stats}")
+        logger.info("Stats: %s", stats)
 
-        print("\n2. Testing streaming...")
+        logger.info("2. Testing streaming...")
         async for chunk in wrapper.process_stream("Привет, как дела?"):
-            print(f"[{chunk.type}] {chunk.stage or ''}: {chunk.content}")
+            logger.info("[%s] %s: %s", chunk.type, chunk.stage or "", chunk.content)
 
     asyncio.run(test())
