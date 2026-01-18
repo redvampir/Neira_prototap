@@ -18,6 +18,7 @@
 - [Cortex](architecture/CORTEX.md) — мозг системы v2.0
 - [Cell Router](architecture/CELL_ROUTER.md) — маршрутизация клеток
 - [Миграция мозга в Rust](architecture/RUST_BRAIN_MIGRATION.md) — этапы и требования миграции
+- [Rust Brain Crates](architecture/RUST_BRAIN_CRATES.md) — состав модулей и границы ответственности
 
 ### ⚡ [Возможности](features/)
 - [Система памяти](features/memory/) — хранение, защита, консолидация
