@@ -17,6 +17,7 @@
 - [Общая архитектура](architecture/ARCHITECTURE.md) — структура Neira v2
 - [Cortex](architecture/CORTEX.md) — мозг системы v2.0
 - [Cell Router](architecture/CELL_ROUTER.md) — маршрутизация клеток
+- [Миграция мозга в Rust](architecture/RUST_BRAIN_MIGRATION.md) — этапы и требования миграции
 
 ### ⚡ [Возможности](features/)
 - [Система памяти](features/memory/) — хранение, защита, консолидация
