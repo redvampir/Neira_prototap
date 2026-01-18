@@ -20,6 +20,7 @@
 - [Миграция мозга в Rust](architecture/RUST_BRAIN_MIGRATION.md) — этапы и требования миграции
 - [Rust Brain Crates](architecture/RUST_BRAIN_CRATES.md) — состав модулей и границы ответственности
 - [Критерии автономии Rust Brain](architecture/RUST_BRAIN_V1.md) — автономия, латентность, fallback, тесты
+- [Roadmap миграции данных Rust Brain](architecture/RUST_BRAIN_MIGRATION_ROADMAP.md) — источники данных, этапы миграции, деградация
 - [Дорожная карта Rust Brain](architecture/RUST_BRAIN_ROADMAP.md) — этапы 0–3, риски и метрики
 
 ### ⚡ [Возможности](features/)
