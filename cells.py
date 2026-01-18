@@ -27,79 +27,13 @@ import math
 # ═══════════════════════════════════════════════════════════════════
 # 🧬 СИСТЕМА ОСВЕДОМЛЁННОСТИ ОБ ОРГАНАХ
 # ═══════════════════════════════════════════════════════════════════
-def get_organ_awareness_prompt() -> str:
-    """
-    Генерирует динамический промпт с информацией об органах Нейры.
-    Вызывается при формировании system prompt для LLM.
-    
-    Использует ленивую загрузку чтобы избежать циклических зависимостей.
-    """
-    organ_info = []
-    seen_names = set()  # Для избежания дубликатов
-    
-    # Получаем ExecutableOrgans (приоритет) — ленивый импорт
-    try:
-        import importlib
-        executable_organs_module = importlib.import_module('executable_organs')
-        get_registry = getattr(executable_organs_module, 'get_organ_registry', None)
-        if get_registry:
-            registry = get_registry()
-            for organ_id, organ in registry.organs.items():
-                if organ.name in seen_names:
-                    continue
-                seen_names.add(organ.name)
-                organ_info.append(f"  • {organ.name}: {organ.description}")
-    except Exception as e:
-        pass  # Молча пропускаем если не удалось загрузить
-    
-    # Получаем UnifiedOrganSystem (только custom органы) — ленивый импорт
-    try:
-        import importlib
-        unified_module = importlib.import_module('unified_organ_system')
-        get_system = getattr(unified_module, 'get_organ_system', None)
-        if get_system:
-            organ_system = get_system()
-            for organ_id, organ in organ_system.organs.items():
-                if organ_id.startswith("builtin_"):
-                    continue  # Пропускаем встроенные клетки
-                # Проверяем дубликаты — извлекаем ключевое слово из имени
-                name_lower = organ.name.lower()
-                # Ключевые слова типов органов
-                type_keywords = ['math', 'text', 'graphics', 'code', 'web', 'memory', 'image', 'vision']
-                
-                is_duplicate = False
-                for kw in type_keywords:
-                    if kw in name_lower:
-                        # Проверяем есть ли уже орган этого типа
-                        for seen_name in seen_names:
-                            if kw in seen_name.lower():
-                                is_duplicate = True
-                                break
-                    if is_duplicate:
-                        break
-                
-                if is_duplicate:
-                    continue
-                seen_names.add(organ.name)
-                triggers = ", ".join(organ.triggers[:3]) if organ.triggers else "нет"
-                organ_info.append(f"  • {organ.name}: триггеры [{triggers}]")
-    except Exception:
-        pass
-    
-    # Если ничего не нашли — добавляем дефолтную информацию
-    if not organ_info:
-        organ_info = [
-            "  • (органы загружаются динамически)",
-            "  • Примеры: рисование, математика, обработка текста"
-        ]
-    
-    return f"""
+ORGAN_AWARENESS_TEMPLATE = """
 ═══════════════════════════════════════════════════════════════════
 🧬 МОИ ОРГАНЫ (специализированные модули)
 ═══════════════════════════════════════════════════════════════════
 
 Я могу автоматически использовать специализированные органы:
-{chr(10).join(organ_info)}
+__ORGAN_INFO__
 
 ВАЖНО:
 - Органы активируются АВТОМАТИЧЕСКИ по ключевым словам
@@ -113,6 +47,67 @@ def get_organ_awareness_prompt() -> str:
 ═══════════════════════════════════════════════════════════════════
 """
 
+MAX_ORGAN_TRIGGERS = 3
+
+def _get_hybrid_system() -> Optional[object]:
+    try:
+        from neira.organs.hybrid_system import get_hybrid_organ_system
+    except ImportError:
+        return None
+    try:
+        return get_hybrid_organ_system()
+    except (RuntimeError, OSError, ValueError):
+        return None
+
+def _format_hybrid_entry(entry: object) -> str:
+    name = str(getattr(entry, "name", "")).strip()
+    if not name:
+        return ""
+    description = str(getattr(entry, "description", "")).strip()
+    triggers = list(getattr(entry, "triggers", []) or [])
+    capabilities = list(getattr(entry, "capabilities", []) or [])
+    label = ""
+    if triggers:
+        label = "????????: " + ", ".join(triggers[:MAX_ORGAN_TRIGGERS])
+    elif capabilities:
+        label = "???????????: " + ", ".join(capabilities[:MAX_ORGAN_TRIGGERS])
+    if description and label:
+        return f"  - {name}: {description} ({label})"
+    if description:
+        return f"  - {name}: {description}"
+    if label:
+        return f"  - {name}: {label}"
+    return f"  - {name}"
+
+def _build_hybrid_lines() -> List[str]:
+    system = _get_hybrid_system()
+    if system is None:
+        return []
+    try:
+        entries = system.list_organs()
+    except (AttributeError, RuntimeError, OSError, ValueError):
+        return []
+    lines: List[str] = []
+    for entry in entries:
+        organ_id = getattr(entry, "organ_id", "")
+        if isinstance(organ_id, str) and organ_id.startswith("builtin_"):
+            continue
+        line = _format_hybrid_entry(entry)
+        if line:
+            lines.append(line)
+    return lines
+
+def _default_organ_lines() -> List[str]:
+    return [
+        "  - (?????? ???? ?? ????????????????)",
+        "  - ??????: ???????????, ??????, ???, ???",
+    ]
+
+def get_organ_awareness_prompt() -> str:
+    organ_info = _build_hybrid_lines()
+    if not organ_info:
+        organ_info = _default_organ_lines()
+    return ORGAN_AWARENESS_TEMPLATE.replace("__ORGAN_INFO__", "\n".join(organ_info))
 
 def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
     value = os.getenv(name)
@@ -231,11 +226,18 @@ except ImportError:
 
 # Импорт универсального LLM менеджера
 try:
-    from llm_providers import LLMManager, create_default_manager, ProviderType
+    from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+    print("⚠️ LLM client недоступен, используем только Ollama")
+
+try:
+    from llm_providers import create_default_manager
     LLM_MANAGER_AVAILABLE = True
 except ImportError:
     LLM_MANAGER_AVAILABLE = False
-    print("⚠️ LLMManager недоступен, используем только Ollama")
+    print("⚠️ LLMManager недоступен, используем legacy Ollama embeddings")
 
 try:
     from local_embeddings import get_local_embedding
@@ -564,16 +566,21 @@ class Cell:
     use_code_model: bool = False  # Флаг для использования code-модели
     
     # Глобальный LLM менеджер (создается один раз для всех клеток)
-    _llm_manager = None
+    _llm_client: Optional[LLMClient] = None
+    _llm_available: bool = False
     
     def __init__(self, memory: Optional[MemoryCell] = None):
         self.memory = memory
         self._ollama_available = True  # Флаг доступности Ollama (legacy)
         
         # Инициализируем LLM менеджер один раз для всех клеток
-        if Cell._llm_manager is None and LLM_MANAGER_AVAILABLE:
-            Cell._llm_manager = create_default_manager()
-            print("🌐 LLM Manager initialized (multi-provider support enabled)")
+        if Cell._llm_client is None and LLM_CLIENT_AVAILABLE:
+            Cell._llm_client = build_default_llm_client()
+            Cell._llm_available = not isinstance(Cell._llm_client, NullLLMClient)
+            if Cell._llm_available:
+                print("🌐 LLM client initialized (multi-provider support enabled)")
+            else:
+                print("⚠️ LLM client недоступен, используем Ollama")
     
     def call_llm(self, prompt: str, with_memory: bool = True, 
                  temperature: float = 0.7,
@@ -595,34 +602,34 @@ class Cell:
                 full_prompt = f"[Последние сообщения]\n{recent}\n\n{full_prompt}"
         
         # НОВОЕ: Используем LLM Manager с автоматическим fallback
-        if LLM_MANAGER_AVAILABLE and Cell._llm_manager:
-            return self._call_llm_manager(full_prompt, temperature, memory_context_used)
+        if Cell._llm_available and Cell._llm_client:
+            return self._call_llm_client(full_prompt, temperature, memory_context_used)
         if OLLAMA_DISABLED:
             self._ollama_available = False
             return self._fallback_response(full_prompt, memory_context_used, "ollama_disabled")
         # Fallback на старый метод (только Ollama)
         return self._call_ollama_legacy(full_prompt, temperature, force_code_model, memory_context_used)
     
-    def _call_llm_manager(self, prompt: str, temperature: float, memory_context: str) -> str:
-        """Вызов через LLM Manager с автоматическим fallback между провайдерами"""
-        if Cell._llm_manager is None:
-            raise RuntimeError("LLM Manager не инициализирован")
-            
-        response = Cell._llm_manager.generate(
+    def _call_llm_client(self, prompt: str, temperature: float, memory_context: str) -> str:
+        """????? LLM ??????? ? fallback ?? legacy."""
+        if Cell._llm_client is None:
+            raise RuntimeError("LLM client ?? ???????????????")
+
+        response: LLMResult = Cell._llm_client.generate(
             prompt=prompt,
             system_prompt=self.system_prompt,
             temperature=temperature,
             max_tokens=DEFAULT_MAX_RESPONSE_TOKENS
         )
-        
+
         if response.success:
             self._ollama_available = True
             return response.content
-        else:
-            # Если все провайдеры не справились, возвращаем умное сообщение
-            self._ollama_available = False
-            return self._fallback_response(prompt, memory_context, f"all_providers_failed: {response.error}")
-    
+
+        self._ollama_available = False
+        error = response.error or "unknown"
+        return self._fallback_response(prompt, memory_context, f"all_providers_failed: {error}")
+
     def _call_ollama_legacy(self, prompt: str, temperature: float, force_code_model: bool, memory_context: str) -> str:
         """Legacy метод вызова только Ollama (если LLM Manager недоступен)"""
         

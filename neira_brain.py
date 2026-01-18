@@ -43,6 +43,7 @@ def _env_int(name: str, default: int, min_val: int = 1) -> int:
 DB_PATH = Path(os.getenv("NEIRA_BRAIN_DB", "neira_brain.db"))
 CACHE_MAX_ENTRIES = _env_int("NEIRA_CACHE_MAX_ENTRIES", 5000, 100)
 CACHE_TTL_DAYS = _env_int("NEIRA_CACHE_TTL_DAYS", 30, 1)
+HYBRID_RESPONSE_WEIGHT = 0.5
 
 
 # ============== Схема базы данных ==============
@@ -623,20 +624,30 @@ class NeiraBrain:
             
             # Расчёт автономности
             total = summary.get('request', 0)
+            autonomous_responses = summary.get('autonomous_response', 0)
+            hybrid_responses = summary.get('hybrid_response', 0)
+            llm_calls = summary.get('llm_call', 0)
             pathway_hits = summary.get('pathway_hit', 0)
             cache_hits = summary.get('cache_hit', 0)
-            llm_calls = summary.get('llm_call', 0)
             
             autonomy_rate = 0.0
+            autonomy_rate_weighted = 0.0
             if total > 0:
-                autonomy_rate = (pathway_hits + cache_hits) / total
+                autonomy_rate = autonomous_responses / total
+                autonomy_rate_weighted = (
+                    (autonomous_responses + hybrid_responses * HYBRID_RESPONSE_WEIGHT) / total
+                )
             
             return {
                 'total_requests': total,
+                'autonomous_responses': autonomous_responses,
+                'hybrid_responses': hybrid_responses,
                 'pathway_hits': pathway_hits,
                 'cache_hits': cache_hits,
                 'llm_calls': llm_calls,
                 'autonomy_rate': round(autonomy_rate * 100, 1),
+                'autonomy_rate_strict': round(autonomy_rate * 100, 1),
+                'autonomy_rate_weighted': round(autonomy_rate_weighted * 100, 1),
                 'period_hours': hours
             }
     

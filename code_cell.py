@@ -59,21 +59,24 @@ except Exception:
     _MODEL_LAYERS = None
 
 try:
-    from llm_providers import create_default_manager
-    LLM_MANAGER_AVAILABLE = True
+    from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
+    LLM_CLIENT_AVAILABLE = True
 except ImportError:
-    LLM_MANAGER_AVAILABLE = False
+    LLM_CLIENT_AVAILABLE = False
 
-_CODE_LLM_MANAGER: Optional[Any] = None
+_CODE_LLM_CLIENT: Optional[LLMClient] = None
 
 
-def _get_code_manager() -> Optional[Any]:
-    global _CODE_LLM_MANAGER
-    if not LLM_MANAGER_AVAILABLE:
+def _get_code_client() -> Optional[LLMClient]:
+    global _CODE_LLM_CLIENT
+    if not LLM_CLIENT_AVAILABLE:
         return None
-    if _CODE_LLM_MANAGER is None:
-        _CODE_LLM_MANAGER = create_default_manager()
-    return _CODE_LLM_MANAGER
+    if _CODE_LLM_CLIENT is None:
+        client = build_default_llm_client()
+        if isinstance(client, NullLLMClient):
+            return None
+        _CODE_LLM_CLIENT = client
+    return _CODE_LLM_CLIENT
 
 # Пробуем импортировать из новой версии (cells_v3), иначе из старой (cells)
 try:
@@ -172,18 +175,20 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
         layer_prompt = _MODEL_LAYERS.get_active_prompt(LOCAL_MODEL) if _MODEL_LAYERS else None
         system_prompt = _merge_system_prompt(base_system, layer_prompt)
 
-        manager = _get_code_manager()
-        if manager:
+        client = _get_code_client()
+        if client:
             try:
-                response = manager.generate(
+                response: LLMResult = client.generate(
                     prompt=prompt,
                     system_prompt=system_prompt,
                     temperature=0.2,
                     max_tokens=CODE_MAX_TOKENS
                 )
-                if response.success:
-                    return response.content, f"{response.provider.value}:{response.model}"
-            except Exception:
+                if response.success and response.content:
+                    provider = response.provider or "unknown"
+                    model = response.model or "default"
+                    return response.content, f"{provider}:{model}"
+            except (RuntimeError, ValueError, TypeError, OSError):
                 pass
 
         if OLLAMA_DISABLED:

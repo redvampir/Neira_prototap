@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Union
 from urllib.parse import urlparse, parse_qs
 import logging
 
@@ -136,8 +137,10 @@ class ContentExtractor:
     # Поддерживаемые расширения файлов
     TEXT_EXTENSIONS = {
         '.txt', '.md', '.markdown', '.rst', '.text',
+        '.mdx',
         '.py', '.js', '.ts', '.java', '.cpp', '.c', '.h',
         '.html', '.htm', '.xml', '.json', '.yaml', '.yml',
+        '.jsonl',
         '.css', '.sql', '.sh', '.bat', '.ps1',
         '.ini', '.cfg', '.conf', '.env', '.log'
     }
@@ -488,13 +491,23 @@ class LearningManager:
         if self.memory:
             # Разбиваем на чанки для лучшего поиска
             chunks = self._chunk_content(content.content)
-            
             for i, chunk in enumerate(chunks):
-                self.memory.remember(
-                    text=chunk,
-                    source=f"{content.source}#chunk{i}",
-                    category=category
-                )
+                category_arg: Any = category
+                if hasattr(self.memory, "_save_memory") and hasattr(self.memory, "short_term"):
+                    try:
+                        from memory_system import MemoryCategory
+                        category_arg = MemoryCategory.LEARNED
+                    except ImportError:
+                        category_arg = None
+
+                try:
+                    self.memory.remember(
+                        text=chunk,
+                        source=f"{content.source}#chunk{i}",
+                        category=category_arg,
+                    )
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.warning("Не удалось сохранить chunk в память: %s", exc)
         
         # Записываем в историю
         history_entry = {

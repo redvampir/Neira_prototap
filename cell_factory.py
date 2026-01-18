@@ -35,7 +35,7 @@ from cells import (
 )
 from experience import ExperienceSystem
 from organ_guardian import OrganGuardian, ThreatLevel  # ✨ НОВОЕ
-from llm_providers import LLMManager, create_default_manager  # ✨ Универсальный LLM провайдер
+from neira.core.llm_adapter import LLMClient, build_default_llm_client
 
 logger = logging.getLogger("neira-cell-factory")
 
@@ -53,14 +53,14 @@ class CreationMode:
     MANUAL = "manual"      # Только по запросу администратора
 
 # Глобальный LLM Manager для универсального доступа к LLM (Ollama/LMStudio/OpenAI/etc)
-_LLM_MANAGER: Optional[LLMManager] = None
+_LLM_CLIENT: Optional[LLMClient] = None
 
-def _get_llm_manager() -> LLMManager:
-    """Ленивая инициализация LLM Manager"""
-    global _LLM_MANAGER
-    if _LLM_MANAGER is None:
-        _LLM_MANAGER = create_default_manager()
-    return _LLM_MANAGER
+def _get_llm_client() -> LLMClient:
+    """Ленивая инициализация LLM клиента"""
+    global _LLM_CLIENT
+    if _LLM_CLIENT is None:
+        _LLM_CLIENT = build_default_llm_client()
+    return _LLM_CLIENT
 
 
 # 🆕 Менеджер режимов создания органов
@@ -417,6 +417,53 @@ class GeneratedCell:
         return GeneratedCell(**d)
 
 
+def _unique_strings(items: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        cleaned = item.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result
+
+
+def _build_organ_triggers(spec: CellSpec, commands: List[str]) -> List[str]:
+    candidates = [spec.task_pattern, spec.cell_name, *commands]
+    return _unique_strings([c for c in candidates if c])
+
+
+def _register_generated_organ(
+    spec: CellSpec,
+    commands: List[str],
+    author_id: int
+) -> Tuple[bool, str]:
+    try:
+        from neira.organs.hybrid_system import get_hybrid_organ_system
+    except ImportError:
+        return False, "hybrid_unavailable"
+
+    triggers = _build_organ_triggers(spec, commands)
+    if not triggers:
+        return False, "empty_triggers"
+
+    try:
+        system = get_hybrid_organ_system()
+        return system.register_custom_organ(
+            name=spec.cell_name,
+            description=spec.description,
+            cell_type="custom",
+            triggers=triggers,
+            code=None,
+            created_by=str(author_id),
+            require_approval=False,
+        )
+    except (AttributeError, RuntimeError, OSError, ValueError, TypeError) as e:
+        logger.warning("HybridOrganSystem registration failed: %s", e)
+        return False, f"register_failed: {e}"
+
+
 class CellFactory:
     """Фабрика клеток с проверкой безопасности"""
 
@@ -630,7 +677,7 @@ __all__ = ["{class_name}"]
         )
         
         # Получаем LLM Manager для универсального доступа к любому LLM
-        llm = _get_llm_manager()
+        llm = _get_llm_client()
         
         for attempt in range(max_retries):
             try:
@@ -640,7 +687,7 @@ __all__ = ["{class_name}"]
                 
                 logger.info(f"🧬 Генерация спецификации органа (попытка {attempt + 1}/{max_retries})...")
                 
-                # Используем LLMManager вместо прямого запроса к Ollama
+                # Используем LLM клиент вместо прямого запроса к Ollama
                 llm_response = llm.generate(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -663,6 +710,14 @@ __all__ = ["{class_name}"]
                 spec_text = _extract_json_block(result)
                 if not spec_text:
                     logger.warning(f"⚠️ Ответ модели не содержит JSON (попытка {attempt + 1}). Ответ: {result[:200]}...")
+                    # Сохраняем полный сырой ответ для отладки
+                    try:
+                        os.makedirs("artifacts", exist_ok=True)
+                        with open(os.path.join("artifacts", "cell_factory_failed_responses.log"), "a", encoding="utf-8") as rf:
+                            rf.write(f"\n--- {datetime.now().isoformat()} | attempt={attempt+1} | provider={getattr(llm_response, 'provider', '')} | model={getattr(llm_response, 'model', '')} ---\n")
+                            rf.write(result + "\n")
+                    except Exception:
+                        logger.debug("Не удалось записать сырой ответ модели в artifacts")
                     continue
 
                 # Многоуровневый парсинг JSON
@@ -683,6 +738,14 @@ __all__ = ["{class_name}"]
                 
                 if spec_data is None:
                     logger.warning(f"⚠️ Не удалось распарсить JSON (попытка {attempt + 1}). Текст: {spec_text[:200]}...")
+                    # Сохраняем непарсируемый JSON-кандидат для отладки
+                    try:
+                        os.makedirs("artifacts", exist_ok=True)
+                        with open(os.path.join("artifacts", "cell_factory_failed_responses.log"), "a", encoding="utf-8") as rf:
+                            rf.write(f"\n--- {datetime.now().isoformat()} | parse_failed | attempt={attempt+1} ---\n")
+                            rf.write(spec_text + "\n")
+                    except Exception:
+                        logger.debug("Не удалось записать непарсируемый JSON в artifacts")
                     continue
 
                 # Проверяем обязательные поля
@@ -707,7 +770,7 @@ __all__ = ["{class_name}"]
                 logger.warning(f"⚠️ Таймаут запроса к модели (попытка {attempt + 1})")
             except requests.exceptions.RequestException as e:
                 logger.error(f"⚠️ Ошибка сети: {e} (попытка {attempt + 1})")
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, OSError) as e:
                 logger.exception(f"⚠️ Неожиданная ошибка: {e} (попытка {attempt + 1})")
         
         logger.error(f"❌ Не удалось создать спецификацию органа после {max_retries} попыток")
@@ -924,6 +987,8 @@ __all__ = ["{class_name}"]
         self.registry.append(generated_cell)
         self.save_registry()
 
+        organ_registered, organ_message = _register_generated_organ(spec, commands, author_id)
+
         # Emit event so running bot can hot-register commands
         try:
             from neira.utils.event_bus import event_bus
@@ -943,7 +1008,9 @@ __all__ = ["{class_name}"]
             "threat_level": "safe",
             "report": safety_report,
             "message": "✅ Орган создан и готов к использованию!",
-            "commands": commands
+            "commands": commands,
+            "organ_registered": organ_registered,
+            "organ_message": organ_message,
         }
 
         if not valid:

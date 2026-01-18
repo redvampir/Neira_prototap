@@ -66,7 +66,7 @@ LLM_CODE_TEMPERATURE: Final[float] = 0.3  # Ниже для кода
 LLM_CREATIVE_TEMPERATURE: Final[float] = 0.9  # Выше для творчества
 
 # Ollama специфичные
-OLLAMA_DEFAULT_MODEL: Final[str] = os.getenv("NEIRA_OLLAMA_MODEL", "nemotron-mini")
+OLLAMA_DEFAULT_MODEL: Final[str] = os.getenv("NEIRA_OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_BASE_URL: Final[str] = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_NUM_CTX: Final[int] = int(os.getenv("NEIRA_OLLAMA_NUM_CTX", "32768"))
 

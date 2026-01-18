@@ -134,3 +134,56 @@ class TestRateLimiter:
         # user2 ещё не исчерпал лимит
         allowed, _ = limiter.check("user2")
         assert allowed
+
+
+class TestBackgroundActivityAwareness:
+    """Тесты осознания Нейрой своей фоновой активности."""
+    
+    def test_format_time_ago(self):
+        """Форматирование времени в читаемом виде."""
+        from neira_server import NeiraServer
+        server = NeiraServer()
+        
+        # Проверяем разные интервалы
+        assert server._format_time_ago(30) == "только что"
+        assert server._format_time_ago(120) == "2 мин. назад"
+        assert server._format_time_ago(3600) == "1 ч. назад"
+        assert server._format_time_ago(7200) == "2 ч. назад"
+        assert server._format_time_ago(86400) == "1 дн. назад"
+    
+    def test_background_activity_summary_structure(self):
+        """Проверка структуры отчёта о фоновой активности."""
+        import time
+        from neira_server import NeiraServer
+        server = NeiraServer()
+        
+        now = time.time()
+        server._last_learning_run = now - 300  # 5 минут назад
+        server._last_learning_run_stats = {
+            "total": 10,
+            "success": 8,
+            "total_words": 3000,
+            "duration_sec": 20.5
+        }
+        server._last_evolution_run = now - 7200  # 2 часа назад
+        
+        summary = server._build_background_activity_summary(now)
+        
+        # Проверяем обязательные секции
+        assert "[Фоновая активность]" in summary
+        assert "Обучение:" in summary
+        assert "Эволюция:" in summary
+        assert "8/10 источников" in summary
+        assert "3000 слов" in summary
+    
+    def test_self_model_contains_background_activity(self):
+        """Самомодель содержит секцию фоновой активности."""
+        from neira_server import NeiraServer
+        server = NeiraServer()
+        
+        context = server._build_self_model_context()
+        
+        assert "[Самомодель Neira]" in context
+        assert "[Фоновая активность]" in context
+        assert "[Правила]" in context
+        assert "фоновой активности" in context.lower()

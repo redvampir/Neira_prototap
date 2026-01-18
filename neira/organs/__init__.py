@@ -29,6 +29,12 @@ def __getattr__(name):
     elif name == "OrganCreationEngine":
         from organ_creation_engine import OrganCreationEngine
         return OrganCreationEngine
+    elif name == "HybridOrganSystem":
+        from neira.organs.hybrid_system import HybridOrganSystem
+        return HybridOrganSystem
+    elif name == "get_hybrid_organ_system":
+        from neira.organs.hybrid_system import get_hybrid_organ_system
+        return get_hybrid_organ_system
     raise AttributeError(f"module 'neira.organs' has no attribute '{name}'")
 
 __all__ = [
@@ -37,4 +43,6 @@ __all__ = [
     "ExecutableOrgan",
     "get_organ_registry",
     "OrganCreationEngine",
+    "HybridOrganSystem",
+    "get_hybrid_organ_system",
 ]

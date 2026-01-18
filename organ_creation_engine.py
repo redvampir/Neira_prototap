@@ -7,7 +7,7 @@ OrganCreationEngine — оркестратор создания и тестир�
 - При неудаче делает повторную генерацию с подсказками из `ExperienceSystem` и `LETTER_TO_NEIRA.txt`
 - Возвращает подробный отчёт
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import logging
 from pathlib import Path
 from time import sleep
@@ -39,6 +39,55 @@ class OrganCreationEngine:
         paras = [p.strip() for p in text.split('\n\n') if p.strip()]
         top = "\n\n".join(paras[:3])
         return f"{prompt}\n\n#GuidingPrinciples:\n{top}"
+
+    def _ensure_hybrid_registration(
+        self,
+        cell: Any,
+        author_id: int
+    ) -> Tuple[bool, str, str]:
+        try:
+            from neira.organs.hybrid_system import get_hybrid_organ_system
+        except ImportError:
+            return False, 'hybrid_unavailable', ''
+
+        try:
+            system = get_hybrid_organ_system()
+        except (RuntimeError, OSError, ValueError):
+            return False, 'hybrid_unavailable', ''
+
+        try:
+            entry = system.get_organ(cell.cell_name)
+        except (AttributeError, RuntimeError, OSError, ValueError):
+            entry = None
+
+        if entry:
+            return True, 'already_registered', entry.organ_id
+
+        triggers = list(getattr(cell, 'command_triggers', []) or [])
+        task_pattern = getattr(cell, 'task_pattern', '')
+        if task_pattern:
+            triggers.append(task_pattern)
+        triggers = [t for t in triggers if t]
+        if not triggers:
+            return False, 'empty_triggers', ''
+
+        try:
+            ok, msg = system.register_custom_organ(
+                name=cell.cell_name,
+                description=cell.description,
+                cell_type='custom',
+                triggers=triggers,
+                code=None,
+                created_by=str(author_id),
+                require_approval=False,
+            )
+        except (AttributeError, RuntimeError, OSError, TypeError, ValueError) as e:
+            logger.warning('HybridOrganSystem registration failed: %s', e)
+            return False, f'register_failed: {e}', ''
+
+        entry = system.get_organ(cell.cell_name)
+        organ_id = entry.organ_id if entry else ''
+        return ok, msg, organ_id
 
     def create_and_test_organ(self, description: str, author_id: int = 0, max_attempts: int = 2) -> Dict[str, Any]:
         """Попытаться создать орган и протестировать его работоспособность.
@@ -107,7 +156,15 @@ class OrganCreationEngine:
                 if ok:
                     logger.info("Орган успешно сгенерирован и прошёл smoke-test: %s", gen.cell_name)
                     # Пометим как активный в реестре (уже активен по умолчанию для safe)
-                    return {"success": True, "cell": gen, "report": "Создан и протестирован"}
+                    organ_registered, organ_message, organ_id = self._ensure_hybrid_registration(gen, author_id)
+                    return {
+                        "success": True,
+                        "cell": gen,
+                        "report": "Создан и протестирован",
+                        "organ_registered": organ_registered,
+                        "organ_message": organ_message,
+                        "organ_id": organ_id,
+                    }
                 else:
                     last_report = "Smoke-test вернул пустой результат"
                     logger.warning(last_report)

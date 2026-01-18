@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
 import logging
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,21 +45,6 @@ def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[in
     return value
 
 
-def _env_optional_int(name: str, min_value: int = 1, max_value: Optional[int] = None) -> Optional[int]:
-    raw = os.getenv(name)
-    if raw is None or not raw.strip():
-        return None
-    try:
-        value = int(raw.strip())
-    except ValueError:
-        return None
-    if value < min_value:
-        return min_value
-    if max_value is not None and value > max_value:
-        return max_value
-    return value
-
-
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -72,7 +58,8 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
-DEFAULT_OLLAMA_NUM_CTX = _env_optional_int("NEIRA_OLLAMA_NUM_CTX", min_value=256)
+DEFAULT_OLLAMA_NUM_CTX = _env_int("NEIRA_OLLAMA_NUM_CTX", 2048, min_value=256)
+DEFAULT_OLLAMA_NUM_GPU_FALLBACK = 0
 
 
 def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str]) -> str:
@@ -135,6 +122,24 @@ def _parse_provider_priority() -> List[ProviderType]:
     return result if result else list(_DEFAULT_PROVIDER_PRIORITY)
 
 
+def _create_local_session() -> requests.Session:
+    """
+    Создаёт requests.Session для локальных провайдеров.
+
+    На Windows requests может подхватывать системные прокси (WinHTTP/IE),
+    что ломает вызовы к 127.0.0.1/localhost. Поэтому отключаем trust_env.
+    """
+    session = requests.Session()
+    session.trust_env = False
+    session.proxies = {}
+    return session
+
+
+def _base_url_from_endpoint(endpoint: str) -> str:
+    parsed = urlparse(endpoint)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 @dataclass
 class LLMResponse:
     """Стандартный ответ от LLM"""
@@ -193,22 +198,24 @@ class OllamaProvider(LLMProvider):
     def __init__(
         self,
         model: str = "qwen2.5:0.5b",
-        url: str = "http://localhost:11434/api/generate",
+        url: str = "http://127.0.0.1:11434/api/generate",
         timeout: int = 180
     ):
         self.url = url
+        self.base_url = _base_url_from_endpoint(url)
+        self._session = _create_local_session()
         super().__init__(model, timeout)
     
     def _check_availability(self) -> bool:
         """Проверяем доступность Ollama"""
         try:
-            response = requests.get(
-                "http://localhost:11434/api/tags",
+            response = self._session.get(
+                f"{self.base_url}/api/tags",
                 timeout=5
             )
             self.available = response.status_code == 200
             return self.available
-        except Exception:
+        except (requests.exceptions.RequestException, ValueError):
             self.available = False
             return False
     
@@ -221,15 +228,28 @@ class OllamaProvider(LLMProvider):
     ) -> LLMResponse:
         """Генерация через Ollama"""
         try:
-            options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
-            if DEFAULT_OLLAMA_NUM_CTX is not None:
-                options["num_ctx"] = DEFAULT_OLLAMA_NUM_CTX
+            options: Dict[str, Any] = {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_ctx": DEFAULT_OLLAMA_NUM_CTX,
+            }
+            num_gpu_raw = os.getenv("NEIRA_OLLAMA_NUM_GPU", "").strip()
+            num_gpu: Optional[int] = None
+            if num_gpu_raw:
+                try:
+                    num_gpu = int(num_gpu_raw)
+                except ValueError:
+                    num_gpu = None
+            if num_gpu is None and _env_bool("NEIRA_OFFLINE_MODE", False):
+                num_gpu = DEFAULT_OLLAMA_NUM_GPU_FALLBACK
+            if num_gpu is not None:
+                options["num_gpu"] = max(num_gpu, 0)
             if _MODEL_LAYERS is not None:
                 adapter = _MODEL_LAYERS.get_active_adapter(self.model)
                 if adapter:
                     options["adapter"] = adapter
 
-            response = requests.post(
+            response = self._session.post(
                 self.url,
                 json={
                     "model": self.model,
@@ -240,18 +260,73 @@ class OllamaProvider(LLMProvider):
                 },
                 timeout=self.timeout
             )
-            
-            if response.status_code == 500:
-                error_msg = response.json().get("error", "unknown error")
+
+            payload: Any = None
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+
+            if response.status_code != 200:
+                error_msg = ""
+                if isinstance(payload, dict):
+                    error_msg = str(payload.get("error") or payload.get("message") or payload)
+                else:
+                    error_msg = response.text.strip()
+                lower_error = error_msg.lower()
+                is_cuda_oom = "cuda" in lower_error and (
+                    "cudamalloc failed" in lower_error
+                    or "out of memory" in lower_error
+                    or "unable to allocate" in lower_error
+                )
+                if is_cuda_oom and options.get("num_gpu") != 0:
+                    try:
+                        retry_options = dict(options)
+                        retry_options["num_gpu"] = 0
+                        retry_resp = self._session.post(
+                            self.url,
+                            json={
+                                "model": self.model,
+                                "prompt": prompt,
+                                "system": system_prompt,
+                                "stream": False,
+                                "options": retry_options,
+                            },
+                            timeout=self.timeout,
+                        )
+                        retry_payload: Any = None
+                        try:
+                            retry_payload = retry_resp.json()
+                        except ValueError:
+                            retry_payload = None
+                        if retry_resp.status_code == 200 and isinstance(retry_payload, dict):
+                            result = retry_payload.get("response", "")
+                            if result and str(result).strip():
+                                return LLMResponse(
+                                    content=str(result),
+                                    provider=ProviderType.OLLAMA,
+                                    model=self.model,
+                                    success=True,
+                                )
+                    except (requests.exceptions.RequestException, ValueError):
+                        pass
+                if is_cuda_oom:
+                    error_msg = (
+                        f"{error_msg}\n"
+                        "Похоже, не хватает VRAM для загрузки модели. "
+                        "Либо отключите GPU для Ollama: `NEIRA_OLLAMA_NUM_GPU=0`, "
+                        "либо уменьшите контекст: `NEIRA_OLLAMA_NUM_CTX=2048` (или 1024), "
+                        "и перезапустите Ollama."
+                    ).strip()
                 return LLMResponse(
                     content="",
                     provider=ProviderType.OLLAMA,
                     model=self.model,
                     success=False,
-                    error=f"Ollama error: {error_msg}"
+                    error=f"Ollama HTTP {response.status_code}: {error_msg or 'unknown error'}"
                 )
-            
-            result = response.json().get("response", "")
+
+            result = payload.get("response", "") if isinstance(payload, dict) else ""
             
             if not result or not result.strip():
                 return LLMResponse(
@@ -277,7 +352,7 @@ class OllamaProvider(LLMProvider):
                 success=False,
                 error="Timeout"
             )
-        except Exception as e:
+        except (requests.exceptions.RequestException, ValueError) as e:
             return LLMResponse(
                 content="",
                 provider=ProviderType.OLLAMA,
@@ -301,10 +376,9 @@ class OllamaProvider(LLMProvider):
             return None
         
         try:
-            base_url = self.url.replace("/api/generate", "")
-            embed_url = f"{base_url}/api/embeddings"
+            embed_url = f"{self.base_url}/api/embeddings"
             
-            response = requests.post(
+            response = self._session.post(
                 embed_url,
                 json={"model": model, "prompt": text},
                 timeout=30
@@ -688,6 +762,7 @@ class LlamaCppProvider(LLMProvider):
     ):
         self.url = url
         self.base_url = url.replace("/v1/chat/completions", "")
+        self._session = _create_local_session()
         super().__init__(model, timeout)
     
     def _check_availability(self) -> bool:
@@ -695,14 +770,14 @@ class LlamaCppProvider(LLMProvider):
         try:
             # Пробуем health endpoint
             health_url = f"{self.base_url}/health"
-            response = requests.get(health_url, timeout=5)
+            response = self._session.get(health_url, timeout=5)
             if response.status_code == 200:
                 self.available = True
                 return True
             
             # Fallback: пробуем models endpoint
             models_url = f"{self.base_url}/v1/models"
-            response = requests.get(models_url, timeout=5)
+            response = self._session.get(models_url, timeout=5)
             self.available = response.status_code == 200
             return self.available
         except Exception:
@@ -732,7 +807,7 @@ class LlamaCppProvider(LLMProvider):
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = requests.post(
+            response = self._session.post(
                 self.url,
                 headers={"Content-Type": "application/json"},
                 json={
@@ -794,13 +869,14 @@ class LMStudioProvider(LLMProvider):
     ):
         self.url = url
         self.base_url = url.replace("/v1/chat/completions", "")
+        self._session = _create_local_session()
         super().__init__(model, timeout)
     
     def _check_availability(self) -> bool:
         """Проверяем доступность LM Studio"""
         try:
             models_url = f"{self.base_url}/v1/models"
-            response = requests.get(models_url, timeout=5)
+            response = self._session.get(models_url, timeout=5)
             if response.status_code == 200:
                 self.available = True
                 # Пробуем получить имя модели
@@ -837,7 +913,7 @@ class LMStudioProvider(LLMProvider):
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = requests.post(
+            response = self._session.post(
                 self.url,
                 headers={"Content-Type": "application/json"},
                 json={

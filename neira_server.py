@@ -11,13 +11,14 @@ import errno
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, TYPE_CHECKING
 
 # Настройка логирования
 logging.basicConfig(
@@ -44,6 +45,18 @@ try:
 except ValueError:
     CHAT_LOG_MAX_CHARS = 0
 
+_NAME_TOKEN = r"[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]{1,}"
+_SELF_NAME_PATTERN = re.compile(
+    rf"(?:^|[\s,])я\s*(?:-|—)?\s*({_NAME_TOKEN})",
+    re.IGNORECASE,
+)
+_EXPLICIT_NAME_PATTERNS = (
+    re.compile(rf"меня\s+зовут\s*({_NAME_TOKEN})", re.IGNORECASE),
+    re.compile(rf"(?:зови|зовите)\s+меня\s*({_NAME_TOKEN})", re.IGNORECASE),
+    re.compile(rf"(?:можешь|можете)\s+звать\s+меня\s*({_NAME_TOKEN})", re.IGNORECASE),
+    re.compile(rf"(?:называй|называйте)\s+меня\s*({_NAME_TOKEN})", re.IGNORECASE),
+)
+
 
 class _IgnoreConnectionResetFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -56,8 +69,13 @@ class _IgnoreConnectionResetFilter(logging.Filter):
         exc = record.exc_info[1]
         if isinstance(exc, ConnectionResetError):
             return False
-        if isinstance(exc, OSError) and getattr(exc, "errno", None) == 10054:
-            return False
+        if isinstance(exc, OSError):
+            if getattr(exc, "errno", None) == 10054:
+                return False
+            if getattr(exc, "winerror", None) == 64:
+                return False
+            if getattr(exc, "errno", None) == 64:
+                return False
         return True
 
 
@@ -192,6 +210,42 @@ DEFAULT_MODULES = frozenset({
     MODULE_LEARNING,
 })
 
+MESSAGE_PREVIEW_LIMIT = 50
+EXECUTABLE_ORGAN_CONFIDENCE = 0.6
+CORTEX_MIN_CONFIDENCE = 0.6
+CORTEX_SKIP_STRATEGIES = frozenset({"template"})
+BYTES_IN_MB = 1024 * 1024
+
+DEFAULT_OFFLINE_LEARNING_DIRS = ("training_data", "training_scenarios", "docs", "data")
+DEFAULT_OFFLINE_LEARNING_INTERVAL_SEC = 3600
+DEFAULT_OFFLINE_LEARNING_IDLE_SEC = 600
+DEFAULT_OFFLINE_LEARNING_MAX_FILES = 20
+DEFAULT_OFFLINE_LEARNING_MAX_MB = 2
+DEFAULT_OFFLINE_LEARNING_INITIAL_DELAY_SEC = 30
+DEFAULT_OFFLINE_LEARNING_EXCLUDE_DIRS = (".git", "node_modules", ".next", ".neira_cache", ".cursor", "_archive")
+DEFAULT_OFFLINE_LEARNING_INCLUDE_GLOBS: tuple[str, ...] = ()
+DEFAULT_OFFLINE_LEARNING_MAX_ERROR_ENTRIES = 30
+DEFAULT_OFFLINE_LEARNING_MAX_SOURCES_PREVIEW = 8
+DEFAULT_LEARNING_HISTORY_RECENT_LIMIT = 20
+MAX_LEARNING_HISTORY_RECENT_LIMIT = 200
+
+DEFAULT_EVOLUTION_INTERVAL_SEC = 4 * 3600
+DEFAULT_EVOLUTION_CHECK_INTERVAL_SEC = 300
+DEFAULT_EVOLUTION_IDLE_SEC = 1200
+DEFAULT_EVOLUTION_MIN_REQUESTS = 30
+DEFAULT_EVOLUTION_AUTONOMY_THRESHOLD = 70
+DEFAULT_EVOLUTION_MIN_INTERVAL_SEC = 1800
+DEFAULT_LLM_TIMEOUT_SEC = 600
+DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY = "ollama"
+DEFAULT_OFFLINE_OLLAMA_MODEL = "qwen2.5-coder:7b"
+DEFAULT_OFFLINE_OLLAMA_NUM_CTX = 2048
+DEFAULT_OFFLINE_OLLAMA_NUM_GPU = 0
+DEFAULT_MAX_RESPONSE_TOKENS = 1024
+
+DEFAULT_AUTONOMY_OPTIMIZE_ENABLED = True
+DEFAULT_AUTONOMY_OPTIMIZE_INTERVAL_SEC = 3600
+DEFAULT_AUTONOMY_OPTIMIZE_IDLE_SEC = 600
+
 SERVICE_PRESETS: Dict[str, FrozenSet[str]] = {
     "all": DEFAULT_MODULES,
     "core": frozenset({MODULE_CORE, MODULE_STREAM, MODULE_WS}),
@@ -209,6 +263,21 @@ def _env_flag(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, min_value: int = 0, max_value: Optional[int] = None) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    if value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
 
 
 def _parse_modules(raw: str) -> Set[str]:
@@ -328,11 +397,131 @@ class NeiraServer:
         # Context Manager
         self._context_functions: Optional[ContextFunctions] = None
         self._context_error: Optional[str] = None
+
+        # Режимы автономности
+        self._offline_mode = _env_flag("NEIRA_OFFLINE_MODE", True)
+        self._offline_allow_local_llm = _env_flag("NEIRA_OFFLINE_ALLOW_LOCAL_LLM", True)
+        self._cortex_enabled = _env_flag("NEIRA_CORTEX_ENABLED", True)
+        if self._offline_mode:
+            os.environ.setdefault("NEIRA_WEB_SEARCH_ENABLED", "0")
+            os.environ.setdefault("NEIRA_WEB_SEARCH_HTML_FALLBACK", "0")
+            os.environ.setdefault("NEIRA_ENABLE_WEB", "0")
+            os.environ["LLM_PROVIDER_PRIORITY"] = DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY
+            os.environ["NEIRA_OLLAMA_MODEL"] = DEFAULT_OFFLINE_OLLAMA_MODEL
+            os.environ["NEIRA_MAX_RESPONSE_TOKENS"] = str(DEFAULT_MAX_RESPONSE_TOKENS)
+            os.environ.setdefault("NEIRA_OLLAMA_NUM_CTX", str(DEFAULT_OFFLINE_OLLAMA_NUM_CTX))
+            os.environ.setdefault("NEIRA_OLLAMA_NUM_GPU", str(DEFAULT_OFFLINE_OLLAMA_NUM_GPU))
+            os.environ["NEIRA_DISABLE_OLLAMA"] = "0" if self._offline_allow_local_llm else "1"
+        self._cortex_use_llm = (not self._offline_mode) or self._offline_allow_local_llm
+        self._llm_timeout_sec = _env_int("NEIRA_LLM_TIMEOUT_SEC", DEFAULT_LLM_TIMEOUT_SEC, min_value=0)
+        self._offline_learning_enabled = _env_flag("NEIRA_OFFLINE_LEARNING_ENABLED", True)
+        self._offline_learning_summarize = _env_flag("NEIRA_OFFLINE_LEARNING_SUMMARIZE", True)
+        self._offline_learning_category = os.getenv("NEIRA_OFFLINE_LEARNING_CATEGORY", "offline").strip() or "offline"
+        offline_dirs_raw = os.getenv(
+            "NEIRA_OFFLINE_LEARNING_DIRS",
+            ",".join(DEFAULT_OFFLINE_LEARNING_DIRS),
+        )
+        self._offline_learning_dirs = [d.strip() for d in offline_dirs_raw.split(",") if d.strip()]
+        include_globs_raw = os.getenv("NEIRA_OFFLINE_LEARNING_INCLUDE_GLOBS", "").strip()
+        if include_globs_raw:
+            self._offline_learning_include_globs = [g.strip() for g in include_globs_raw.split(",") if g.strip()]
+        else:
+            self._offline_learning_include_globs = list(DEFAULT_OFFLINE_LEARNING_INCLUDE_GLOBS)
+        exclude_raw = os.getenv(
+            "NEIRA_OFFLINE_LEARNING_EXCLUDE_DIRS",
+            ",".join(DEFAULT_OFFLINE_LEARNING_EXCLUDE_DIRS),
+        )
+        self._offline_learning_exclude_dirs = [d.strip() for d in exclude_raw.split(",") if d.strip()]
+        self._offline_learning_interval = _env_int(
+            "NEIRA_OFFLINE_LEARNING_INTERVAL_SEC",
+            DEFAULT_OFFLINE_LEARNING_INTERVAL_SEC,
+            min_value=60,
+        )
+        self._offline_learning_idle_seconds = _env_int(
+            "NEIRA_OFFLINE_LEARNING_IDLE_SEC",
+            DEFAULT_OFFLINE_LEARNING_IDLE_SEC,
+            min_value=60,
+        )
+        self._offline_learning_max_files = _env_int(
+            "NEIRA_OFFLINE_LEARNING_MAX_FILES",
+            DEFAULT_OFFLINE_LEARNING_MAX_FILES,
+            min_value=1,
+        )
+        self._offline_learning_initial_delay = _env_int(
+            "NEIRA_OFFLINE_LEARNING_INITIAL_DELAY_SEC",
+            DEFAULT_OFFLINE_LEARNING_INITIAL_DELAY_SEC,
+            min_value=0,
+        )
+        max_mb = _env_int(
+            "NEIRA_OFFLINE_LEARNING_MAX_MB",
+            DEFAULT_OFFLINE_LEARNING_MAX_MB,
+            min_value=1,
+        )
+        self._offline_learning_max_bytes = max_mb * BYTES_IN_MB
+
+        self._evolution_enabled = _env_flag("NEIRA_EVOLUTION_ENABLED", True)
+        self._evolution_interval = _env_int(
+            "NEIRA_EVOLUTION_INTERVAL_SEC",
+            DEFAULT_EVOLUTION_INTERVAL_SEC,
+            min_value=60,
+        )
+        self._evolution_check_interval = _env_int(
+            "NEIRA_EVOLUTION_CHECK_INTERVAL_SEC",
+            DEFAULT_EVOLUTION_CHECK_INTERVAL_SEC,
+            min_value=60,
+        )
+        self._evolution_idle_seconds = _env_int(
+            "NEIRA_EVOLUTION_IDLE_SEC",
+            DEFAULT_EVOLUTION_IDLE_SEC,
+            min_value=60,
+        )
+        self._evolution_min_requests = _env_int(
+            "NEIRA_EVOLUTION_MIN_REQUESTS",
+            DEFAULT_EVOLUTION_MIN_REQUESTS,
+            min_value=1,
+        )
+        self._evolution_autonomy_threshold = _env_int(
+            "NEIRA_EVOLUTION_AUTONOMY_THRESHOLD",
+            DEFAULT_EVOLUTION_AUTONOMY_THRESHOLD,
+            min_value=0,
+            max_value=100,
+        )
+        self._evolution_min_interval = _env_int(
+            "NEIRA_EVOLUTION_MIN_INTERVAL_SEC",
+            DEFAULT_EVOLUTION_MIN_INTERVAL_SEC,
+            min_value=60,
+        )
+
+        self._autonomy_optimize_enabled = _env_flag(
+            "NEIRA_AUTONOMY_OPTIMIZE_ENABLED",
+            DEFAULT_AUTONOMY_OPTIMIZE_ENABLED,
+        )
+        self._autonomy_optimize_interval = _env_int(
+            "NEIRA_AUTONOMY_OPTIMIZE_INTERVAL_SEC",
+            DEFAULT_AUTONOMY_OPTIMIZE_INTERVAL_SEC,
+            min_value=60,
+        )
+        self._autonomy_optimize_idle_seconds = _env_int(
+            "NEIRA_AUTONOMY_OPTIMIZE_IDLE_SEC",
+            DEFAULT_AUTONOMY_OPTIMIZE_IDLE_SEC,
+            min_value=60,
+        )
+
+        self._last_activity = time.time()
+        self._last_learning_run = 0.0
+        self._last_evolution_run = 0.0
+        self._last_autonomy_optimize_run = 0.0
+        self._last_learning_run_stats: Optional[Dict[str, Any]] = None
+        self._last_learning_sources: list[str] = []
+        self._offline_learning_recent_errors: list[Dict[str, Any]] = []
+        self._background_tasks: Set[asyncio.Task] = set()
         
         # === Phase 1: Новые модули автономности ===
         self._neira_brain = None
         self._organ_system = None
         self._response_engine = None
+        self._cortex = None
+        self._cortex_error: Optional[str] = None
         self._autonomy_modules_error: Optional[str] = None
         self._init_autonomy_modules()
 
@@ -346,8 +535,23 @@ class NeiraServer:
             from response_engine import get_response_engine
             
             self._neira_brain = get_brain()
+            self._ensure_pathways_seeded()
             self._organ_system = get_organ_system()
             self._response_engine = get_response_engine()
+
+            # 🧠 Neira Cortex
+            if self._cortex_enabled:
+                try:
+                    from neira_cortex import create_cortex
+                    self._cortex = create_cortex(
+                        pathways_file="neural_pathways.json",
+                        use_llm=self._cortex_use_llm,
+                    )
+                    logger.info("🧠 Cortex инициализирован")
+                except (ImportError, RuntimeError, OSError, ValueError, AttributeError) as e:
+                    self._cortex = None
+                    self._cortex_error = str(e)
+                    logger.warning(f"⚠️ Cortex недоступен: {e}")
             
             # 🧬 ExecutableOrgans v1.0
             try:
@@ -373,12 +577,374 @@ class NeiraServer:
             
             # Получаем статистику
             stats = self._response_engine.get_autonomy_stats()
-            autonomy_rate = stats.get('metrics', {}).get('autonomy_rate', 0)
+            autonomy_rate = stats.get('metrics', {}).get('autonomy_rate_strict', stats.get('metrics', {}).get('autonomy_rate', 0))
             logger.info(f"📊 Текущая автономность: {autonomy_rate}%")
             
         except Exception as e:
             self._autonomy_modules_error = str(e)
             logger.warning(f"⚠️ Модули автономности недоступны: {e}")
+
+    def _ensure_pathways_seeded(self, pathways_file: str = "neural_pathways.json") -> None:
+        """Загрузить базовые pathways в БД, если она пустая."""
+        if not self._neira_brain:
+            return
+        import sqlite3
+        try:
+            rows = self._neira_brain.query("SELECT COUNT(*) AS count FROM pathways")
+            current = int(rows[0]["count"]) if rows else 0
+        except (RuntimeError, ValueError, OSError, sqlite3.Error) as exc:
+            logger.warning(f"⚠️ Не удалось проверить pathways: {exc}")
+            return
+        if current > 0:
+            return
+        try:
+            migrated = self._neira_brain.migrate_from_json(pathways_file)
+        except (RuntimeError, ValueError, OSError, sqlite3.Error) as exc:
+            logger.warning(f"⚠️ Не удалось мигрировать pathways: {exc}")
+            return
+        if migrated > 0:
+            logger.info(f"🧠 Pathways загружены из {pathways_file}: {migrated}")
+
+    def _record_response_metric(
+        self,
+        event_type: str,
+        source: str,
+        message: str,
+        latency_ms: float,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Записать метрику ответа."""
+        if not self._neira_brain:
+            return
+        payload = {
+            "source": source,
+            "message_preview": message[:MESSAGE_PREVIEW_LIMIT],
+            "latency_ms": latency_ms,
+        }
+        if extra:
+            payload.update(extra)
+        self._neira_brain.record_metric(event_type, "server", payload)
+
+    def _finalize_autonomous_response(
+        self,
+        response: str,
+        source: str,
+        message: str,
+        user_id: Optional[str],
+        latency_ms: float,
+        autonomy_engine: Optional[Any],
+        record_latency: bool,
+        event_type: str = "autonomous_response",
+        was_autonomous: bool = True,
+        record_in_monitor: bool = True,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, str]:
+        """Зафиксировать автономный ответ и обновить контекст."""
+        self._record_response_metric(event_type, source, message, latency_ms, extra)
+        if autonomy_engine and record_latency and record_in_monitor:
+            autonomy_engine.record_response(source, latency_ms, was_autonomous)
+        self._update_autonomy_context(autonomy_engine, user_id, message, response)
+        return response, source
+
+    def _update_autonomy_context(
+        self,
+        autonomy_engine: Optional[Any],
+        user_id: Optional[str],
+        message: str,
+        response: str,
+    ) -> None:
+        """Обновить контекст AutonomyEngine."""
+        if not autonomy_engine or not user_id:
+            return
+        autonomy_engine.update_context(user_id, "user", message)
+        autonomy_engine.update_context(user_id, "assistant", response)
+
+    def _get_user_context(self, user_id: Optional[str]) -> Dict[str, Any]:
+        """Получить контекст пользователя для автономных ответов."""
+        if not user_id or not self._neira_brain:
+            return {}
+        prefs = self._neira_brain.get_user_prefs(user_id)
+        if not prefs:
+            return {}
+        context = dict(prefs.get("variables", {}))
+        name = prefs.get("name")
+        if name:
+            context["user_name"] = name
+        return context
+
+    def _try_executable_organs_response(
+        self,
+        message: str,
+        user_id: Optional[str],
+        start_time: float,
+    ) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+        """Пробовать ответ через ExecutableOrgans."""
+        if not self._executable_organs:
+            return None, None, None
+        best_organ, confidence = self._executable_organs.find_best_organ(message)
+        if not best_organ or confidence < EXECUTABLE_ORGAN_CONFIDENCE:
+            return None, None, None
+        result, organ_id, record_id = self._executable_organs.process_command(message)
+        latency = (time.perf_counter() - start_time) * 1000
+
+        self._last_organ_response = {
+            "organ_id": organ_id,
+            "record_id": record_id,
+            "user_id": user_id,
+        }
+
+        logger.info(f"🧬 ExecutableOrgan {organ_id} за {latency:.1f}ms (confidence={confidence:.2f})")
+        return result, f"executable_organ:{organ_id}", latency
+
+    def _try_context_cache_response(
+        self,
+        message: str,
+        user_id: Optional[str],
+        autonomy_engine: Optional[Any],
+        start_time: float,
+        record_latency: bool,
+    ) -> Tuple[Optional[str], Optional[float]]:
+        """Пробовать контекстный ответ AutonomyEngine."""
+        if not autonomy_engine or not user_id:
+            return None, None
+        contextual = autonomy_engine.get_contextual_response(message, user_id)
+        if not contextual:
+            return None, None
+        latency = (time.perf_counter() - start_time) * 1000
+        if record_latency:
+            autonomy_engine.record_response("context_cache", latency, True)
+        logger.info(f"🗂️ Контекстный ответ за {latency:.1f}ms")
+        return contextual, latency
+
+    def _try_cortex_response(
+        self,
+        message: str,
+        user_id: Optional[str],
+        user_context: Dict[str, Any],
+        start_time: float,
+    ) -> Optional[Dict[str, Any]]:
+        """Пробовать ответ через Cortex."""
+        if self._cortex is None:
+            return None
+        try:
+            result = self._cortex.process(message, user_id or "server", context=user_context)
+        except (RuntimeError, ValueError, OSError, AttributeError) as exc:
+            logger.warning(f"⚠️ Cortex ошибка: {exc}")
+            return None
+
+        response = str(getattr(result, "response", "")).strip()
+        if not response:
+            return None
+
+        latency_ms = getattr(result, "latency_ms", None)
+        if latency_ms is None:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+
+        llm_used = bool(getattr(result, "llm_used", False))
+        strategy = getattr(getattr(result, "strategy", None), "value", None) or str(getattr(result, "strategy", "unknown"))
+        intent = getattr(getattr(result, "intent", None), "value", None) or str(getattr(result, "intent", "unknown"))
+
+        extra = {
+            "strategy": strategy,
+            "intent": intent,
+            "confidence": getattr(result, "confidence", None),
+            "pathway_id": getattr(result, "pathway_id", None),
+            "llm_used": llm_used,
+        }
+
+        return {
+            "response": response,
+            "source": f"cortex:{strategy}",
+            "latency_ms": float(latency_ms),
+            "llm_used": llm_used,
+            "extra": extra,
+        }
+
+    def _should_accept_cortex_result(self, cortex_result: Dict[str, Any]) -> bool:
+        """Проверить, что ответ Cortex достаточно качественный, чтобы прерывать дальнейший пайплайн."""
+        response = str(cortex_result.get("response", "")).strip()
+        if not response:
+            return False
+
+        extra = cortex_result.get("extra") or {}
+        confidence = extra.get("confidence")
+        if isinstance(confidence, (int, float)) and float(confidence) < CORTEX_MIN_CONFIDENCE:
+            return False
+
+        llm_used = bool(cortex_result.get("llm_used", False))
+        strategy = str(extra.get("strategy", "")).strip().lower()
+        if not llm_used and strategy in CORTEX_SKIP_STRATEGIES:
+            return False
+
+        return True
+
+    async def _call_neira_process(self, prompt: str) -> str:
+        """Безопасно вызвать синхронный `Neira.process` без блокировки event loop."""
+        if self.neira is None:
+            raise RuntimeError("Neira not initialized")
+        work = asyncio.to_thread(self.neira.process, prompt)
+        if self._llm_timeout_sec <= 0:
+            return await work
+        return await asyncio.wait_for(work, timeout=self._llm_timeout_sec)
+
+    def _try_response_engine_response(
+        self,
+        message: str,
+        user_context: Dict[str, Any],
+        start_time: float,
+    ) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+        """Пробовать ответ через ResponseEngine."""
+        if self._response_engine is None:
+            return None, None, None
+        response, source = self._response_engine.try_respond_autonomous(message, user_context)
+        if not response:
+            return None, None, None
+        latency = (time.perf_counter() - start_time) * 1000
+        return response, source, latency
+
+    def _handle_executable_organs_stage(
+        self,
+        message: str,
+        user_id: Optional[str],
+        autonomy_engine: Optional[Any],
+        start_time: float,
+        record_latency: bool,
+    ) -> Optional[Tuple[str, str]]:
+        """Стадия ExecutableOrgans."""
+        response, source, latency = self._try_executable_organs_response(message, user_id, start_time)
+        if not (response and source and latency is not None):
+            return None
+        return self._finalize_autonomous_response(
+            response=response,
+            source=source,
+            message=message,
+            user_id=user_id,
+            latency_ms=latency,
+            autonomy_engine=autonomy_engine,
+            record_latency=record_latency,
+            extra={"organ_id": source.split(":", 1)[-1]},
+        )
+
+    def _should_skip_autonomous(
+        self,
+        autonomy_engine: Optional[Any],
+        message: str,
+        user_id: Optional[str],
+    ) -> bool:
+        """Проверить, нужно ли пропустить автономный ответ."""
+        if not autonomy_engine:
+            return False
+        decision = autonomy_engine.should_respond_autonomous(message, user_id)
+        if decision.decision.value == "llm_required" and (not self._offline_mode or self._offline_allow_local_llm):
+            logger.debug(f"🤔 Decision: LLM required ({decision.reasoning})")
+            return True
+        return False
+
+    def _handle_context_cache_stage(
+        self,
+        message: str,
+        user_id: Optional[str],
+        autonomy_engine: Optional[Any],
+        start_time: float,
+        record_latency: bool,
+    ) -> Optional[Tuple[str, str]]:
+        """Стадия контекстного кэша AutonomyEngine."""
+        contextual, latency = self._try_context_cache_response(
+            message=message,
+            user_id=user_id,
+            autonomy_engine=autonomy_engine,
+            start_time=start_time,
+            record_latency=record_latency,
+        )
+        if not (contextual and latency is not None):
+            return None
+        return self._finalize_autonomous_response(
+            response=contextual,
+            source="context_cache",
+            message=message,
+            user_id=user_id,
+            latency_ms=latency,
+            autonomy_engine=autonomy_engine,
+            record_latency=record_latency,
+            record_in_monitor=False,
+        )
+
+    def _handle_cortex_stage(
+        self,
+        message: str,
+        user_id: Optional[str],
+        user_context: Dict[str, Any],
+        autonomy_engine: Optional[Any],
+        start_time: float,
+        record_latency: bool,
+    ) -> Optional[Tuple[str, str]]:
+        """Стадия Cortex."""
+        cortex_result = self._try_cortex_response(message, user_id, user_context, start_time)
+        if not cortex_result:
+            return None
+        if not self._should_accept_cortex_result(cortex_result):
+            logger.info(
+                "🧠 Cortex пропущен (strategy=%s, confidence=%s, llm_used=%s)",
+                cortex_result["extra"].get("strategy"),
+                cortex_result["extra"].get("confidence"),
+                cortex_result["llm_used"],
+            )
+            return None
+        event_type = "autonomous_response"
+        was_autonomous = True
+        if cortex_result["llm_used"]:
+            event_type = "hybrid_response"
+            was_autonomous = False
+            self._record_response_metric(
+                "llm_call",
+                "cortex",
+                message,
+                cortex_result["latency_ms"],
+                cortex_result["extra"],
+            )
+
+        response, source = self._finalize_autonomous_response(
+            response=cortex_result["response"],
+            source=cortex_result["source"],
+            message=message,
+            user_id=user_id,
+            latency_ms=cortex_result["latency_ms"],
+            autonomy_engine=autonomy_engine,
+            record_latency=record_latency,
+            event_type=event_type,
+            was_autonomous=was_autonomous,
+            extra=cortex_result["extra"],
+        )
+        logger.info(
+            f"🧠 Cortex ответ за {cortex_result['latency_ms']:.1f}ms "
+            f"(strategy={cortex_result['extra'].get('strategy')}, llm_used={cortex_result['llm_used']})"
+        )
+        return response, source
+
+    def _handle_response_engine_stage(
+        self,
+        message: str,
+        user_id: Optional[str],
+        user_context: Dict[str, Any],
+        autonomy_engine: Optional[Any],
+        start_time: float,
+        record_latency: bool,
+    ) -> Optional[Tuple[str, str]]:
+        """Стадия ResponseEngine."""
+        response, source, latency = self._try_response_engine_response(message, user_context, start_time)
+        if not (response and source and latency is not None):
+            return None
+        response, source = self._finalize_autonomous_response(
+            response=response,
+            source=source,
+            message=message,
+            user_id=user_id,
+            latency_ms=latency,
+            autonomy_engine=autonomy_engine,
+            record_latency=record_latency,
+        )
+        logger.info(f"🤖 Автономный ответ за {latency:.1f}ms (источник: {source})")
+        return response, source
     
     def _try_autonomous_response(
         self, 
@@ -386,110 +952,61 @@ class NeiraServer:
         user_id: Optional[str] = None,
         record_latency: bool = True
     ) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Попытаться ответить автономно (без LLM)
-        
-        Phase 3: Использует AutonomyEngine для принятия решений
-        
-        Returns:
-            (ответ или None, источник или None)
-        """
-        import time
+        """Попытаться ответить автономно (без LLM)."""
         start_time = time.perf_counter()
-        
-        if self._response_engine is None:
+
+        autonomy_engine = getattr(self, "_autonomy_engine", None)
+        if not (self._response_engine or self._executable_organs or autonomy_engine or self._cortex):
             return None, None
-        
+
         try:
-            # 🧬 ПЕРВЫЙ ПРИОРИТЕТ: ExecutableOrgans (имеют реальный код)
-            if self._executable_organs:
-                best_organ, confidence = self._executable_organs.find_best_organ(message)
-                if best_organ and confidence >= 0.6:
-                    result, organ_id, record_id = self._executable_organs.process_command(message)
-                    latency = (time.perf_counter() - start_time) * 1000
-                    
-                    # Сохраняем контекст для feedback
-                    self._last_organ_response = {
-                        'organ_id': organ_id,
-                        'record_id': record_id,
-                        'user_id': user_id
-                    }
-                    
-                    logger.info(f"🧬 ExecutableOrgan {organ_id} за {latency:.1f}ms (confidence={confidence:.2f})")
-                    return result, f"executable_organ:{organ_id}"
-            
-            # === Phase 3: Используем AutonomyEngine для решения ===
-            autonomy_engine = getattr(self, '_autonomy_engine', None)
-            
-            if autonomy_engine:
-                # Получаем решение от AutonomyEngine
-                decision = autonomy_engine.should_respond_autonomous(message, user_id)
-                
-                # Если решено использовать LLM — не пробуем автономно
-                if decision.decision.value == "llm_required":
-                    logger.debug(f"🤔 Decision: LLM required ({decision.reasoning})")
-                    return None, None
-                
-                # Пробуем контекстный ответ (Phase 3)
-                if user_id:
-                    contextual = autonomy_engine.get_contextual_response(message, user_id)
-                    if contextual:
-                        latency = (time.perf_counter() - start_time) * 1000
-                        if record_latency:
-                            autonomy_engine.record_response("context_cache", latency, True)
-                        logger.info(f"🗂️ Контекстный ответ за {latency:.1f}ms")
-                        return contextual, "context_cache"
-            
-            # Получаем контекст пользователя
-            user_context = {}
-            if user_id and self._neira_brain:
-                prefs = self._neira_brain.get_user_prefs(user_id)
-                if prefs:
-                    user_context = prefs.get('variables', {})
-                    user_context['user_name'] = prefs.get('name', '')
-            
-            # 🧬 Сначала пробуем ExecutableOrgans (высший приоритет)
-            if self._executable_organs:
-                best_organ, confidence = self._executable_organs.find_best_organ(message)
-                if best_organ and confidence >= 0.6:
-                    result, organ_id, record_id = self._executable_organs.process_command(message)
-                    latency = (time.perf_counter() - start_time) * 1000
-                    
-                    # Сохраняем контекст для feedback
-                    self._last_organ_response = {
-                        'organ_id': organ_id,
-                        'record_id': record_id,
-                        'user_id': user_id
-                    }
-                    
-                    logger.info(f"🧬 ExecutableOrgan {organ_id} за {latency:.1f}ms (confidence={confidence:.2f})")
-                    return result, f"executable_organ:{organ_id}"
-            
-            # Пробуем ответить через ResponseEngine (Phase 1)
-            response, source = self._response_engine.try_respond_autonomous(message, user_context)
-            
-            if response:
-                latency = (time.perf_counter() - start_time) * 1000
-                
-                # Записываем метрики
-                if self._neira_brain:
-                    self._neira_brain.record_metric('autonomous_response', 'server', {
-                        'source': source,
-                        'message_preview': message[:50],
-                        'latency_ms': latency
-                    })
-                
-                # Phase 3: Записываем в monitor
-                if autonomy_engine and record_latency:
-                    autonomy_engine.record_response(source, latency, True)
-                    # Обновляем контекст
-                    if user_id:
-                        autonomy_engine.update_context(user_id, "user", message)
-                        autonomy_engine.update_context(user_id, "assistant", response)
-                
-                logger.info(f"🤖 Автономный ответ за {latency:.1f}ms (источник: {source})")
-                return response, source
-            
+            result = self._handle_executable_organs_stage(
+                message=message,
+                user_id=user_id,
+                autonomy_engine=autonomy_engine,
+                start_time=start_time,
+                record_latency=record_latency,
+            )
+            if result:
+                return result
+
+            if self._should_skip_autonomous(autonomy_engine, message, user_id):
+                return None, None
+
+            result = self._handle_context_cache_stage(
+                message=message,
+                user_id=user_id,
+                autonomy_engine=autonomy_engine,
+                start_time=start_time,
+                record_latency=record_latency,
+            )
+            if result:
+                return result
+
+            user_context = self._get_user_context(user_id)
+
+            result = self._handle_cortex_stage(
+                message=message,
+                user_id=user_id,
+                user_context=user_context,
+                autonomy_engine=autonomy_engine,
+                start_time=start_time,
+                record_latency=record_latency,
+            )
+            if result:
+                return result
+
+            result = self._handle_response_engine_stage(
+                message=message,
+                user_id=user_id,
+                user_context=user_context,
+                autonomy_engine=autonomy_engine,
+                start_time=start_time,
+                record_latency=record_latency,
+            )
+            if result:
+                return result
+
             return None, None
             
         except Exception as e:
@@ -505,7 +1022,344 @@ class NeiraServer:
             self._response_engine.store_llm_response(query, response, success)
         except Exception as e:
             logger.warning(f"Не удалось сохранить ответ: {e}")
-        
+
+    def _touch_activity(self) -> None:
+        """Зафиксировать активность сервера."""
+        self._last_activity = time.time()
+
+    def _is_idle(self, idle_seconds: int) -> bool:
+        """Проверить, что сервер простаивает."""
+        return (time.time() - self._last_activity) >= idle_seconds
+
+    @web.middleware
+    async def _activity_middleware(self, request: web.Request, handler: Callable[..., Any]) -> web.StreamResponse:
+        """Middleware для фиксации активности."""
+        self._touch_activity()
+        return await handler(request)
+
+    def _is_url_source(self, source: str) -> bool:
+        """Проверить, является ли источник URL."""
+        return source.strip().lower().startswith(("http://", "https://", "www."))
+
+    def _load_learning_history_sources(self) -> Set[str]:
+        """Загрузить список уже изученных источников."""
+        history_path = Path("data") / "learning_history.json"
+        if not history_path.exists():
+            return set()
+        try:
+            data = json.loads(history_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return set()
+        if not isinstance(data, list):
+            return set()
+        learned: Set[str] = set()
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            source = entry.get("source")
+            if source:
+                learned.add(str(source))
+        return learned
+
+    def _load_learning_history_recent(self, limit: int) -> list[Dict[str, Any]]:
+        """Загрузить последние записи из learning_history.json (последние -> первые)."""
+        safe_limit = min(max(limit, 1), MAX_LEARNING_HISTORY_RECENT_LIMIT)
+        history_path = Path("data") / "learning_history.json"
+        if not history_path.exists():
+            return []
+        try:
+            data = json.loads(history_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return []
+        if not isinstance(data, list):
+            return []
+
+        recent = data[-safe_limit:]
+        recent.reverse()
+
+        sanitized: list[Dict[str, Any]] = []
+        for entry in recent:
+            if not isinstance(entry, dict):
+                continue
+            sanitized.append(
+                {
+                    "source": str(entry.get("source", "")),
+                    "source_type": str(entry.get("source_type", "")),
+                    "title": str(entry.get("title", "")),
+                    "word_count": int(entry.get("word_count", 0) or 0),
+                    "category": str(entry.get("category", "")),
+                    "learned_at": str(entry.get("learned_at", "")),
+                    "summary": str(entry.get("summary", "")),
+                }
+            )
+        return sanitized
+
+    def _append_offline_learning_error(self, source: str, exc: BaseException) -> None:
+        """Сохранить краткую ошибку офлайн-обучения (для прозрачности)."""
+        self._offline_learning_recent_errors.append(
+            {
+                "ts": time.time(),
+                "source": source,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        if len(self._offline_learning_recent_errors) > DEFAULT_OFFLINE_LEARNING_MAX_ERROR_ENTRIES:
+            self._offline_learning_recent_errors[:] = self._offline_learning_recent_errors[
+                -DEFAULT_OFFLINE_LEARNING_MAX_ERROR_ENTRIES:
+            ]
+
+    def _query_int(
+        self,
+        request: web.Request,
+        name: str,
+        default: int,
+        *,
+        min_value: int = 0,
+        max_value: Optional[int] = None,
+    ) -> int:
+        """Безопасно распарсить int-параметр из query string."""
+        raw = request.query.get(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        if value < min_value:
+            return min_value
+        if max_value is not None and value > max_value:
+            return max_value
+        return value
+
+    def _collect_offline_sources(self) -> List[str]:
+        """Собрать локальные источники для офлайн-обучения."""
+        import os
+
+        from content_extractor import ContentExtractor
+
+        learned_sources = self._load_learning_history_sources()
+        allowed_ext = {ext.lower() for ext in ContentExtractor.TEXT_EXTENSIONS}
+        candidates: List[Tuple[float, str]] = []
+
+        exclude_dirs = set(self._offline_learning_exclude_dirs)
+
+        for root in self._offline_learning_dirs:
+            root_path = (Path(self.workspace_root) / root).resolve()
+            if not root_path.exists():
+                continue
+            iterator: List[Path] = []
+            if self._offline_learning_include_globs:
+                for pattern in self._offline_learning_include_globs:
+                    try:
+                        iterator.extend([p for p in root_path.glob(pattern) if p.is_file()])
+                    except (OSError, ValueError):
+                        continue
+            else:
+                for current_root, dirnames, filenames in os.walk(root_path):
+                    dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+                    for filename in filenames:
+                        iterator.append(Path(current_root) / filename)
+
+            for file_path in iterator:
+                if file_path.suffix.lower() not in allowed_ext:
+                    continue
+                try:
+                    resolved = file_path.resolve()
+                except OSError:
+                    continue
+                if not resolved.is_relative_to(root_path):
+                    continue
+                if any(part in exclude_dirs for part in resolved.parts):
+                    continue
+                try:
+                    stat = resolved.stat()
+                except OSError:
+                    continue
+                if stat.st_size > self._offline_learning_max_bytes:
+                    continue
+                abs_path = str(resolved)
+                if abs_path in learned_sources:
+                    continue
+                candidates.append((stat.st_mtime, abs_path))
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return [path for _, path in candidates[:self._offline_learning_max_files]]
+
+    async def _learn_offline_sources(self, sources: List[str]) -> Dict[str, int]:
+        """Офлайн-обучение по локальным источникам."""
+        from content_extractor import LearningManager
+
+        memory = None
+        if self.neira and hasattr(self.neira, "memory"):
+            memory = self.neira.memory
+        manager = LearningManager(memory)
+
+        success = 0
+        total_words = 0
+        for source in sources:
+            try:
+                result = await manager.learn_from_source(
+                    source,
+                    self._offline_learning_category,
+                    self._offline_learning_summarize,
+                )
+            except (
+                FileNotFoundError,
+                PermissionError,
+                OSError,
+                UnicodeDecodeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                RuntimeError,
+            ) as exc:
+                logger.warning(f"⚠️ Offline learning error для {source}: {exc}")
+                self._append_offline_learning_error(source, exc)
+                continue
+            if result.get("success"):
+                success += 1
+                total_words += int(result.get("word_count", 0))
+
+        return {"total": len(sources), "success": success, "total_words": total_words}
+
+    async def _run_offline_learning_once(self) -> None:
+        """Запустить единичный цикл офлайн-обучения."""
+        if not await self._ensure_neira():
+            return
+        started = time.time()
+        sources = self._collect_offline_sources()
+        self._last_learning_sources = list(sources)[:DEFAULT_OFFLINE_LEARNING_MAX_SOURCES_PREVIEW]
+        if not sources:
+            self._last_learning_run = time.time()
+            self._last_learning_run_stats = {
+                "total": 0,
+                "success": 0,
+                "total_words": 0,
+                "duration_sec": round(time.time() - started, 3),
+            }
+            return
+        stats = await self._learn_offline_sources(sources)
+        if stats["total"] > 0:
+            logger.info(
+                f"🎓 Оффлайн-обучение: {stats['success']}/{stats['total']} источников, {stats['total_words']} слов"
+            )
+        self._last_learning_run = time.time()
+        self._last_learning_run_stats = {
+            **stats,
+            "duration_sec": round(time.time() - started, 3),
+        }
+
+    async def _offline_learning_loop(self) -> None:
+        """Фоновый цикл офлайн-обучения."""
+        if self._offline_learning_initial_delay > 0:
+            await asyncio.sleep(self._offline_learning_initial_delay)
+        while True:
+            await asyncio.sleep(self._offline_learning_interval)
+            if not self._offline_learning_enabled:
+                continue
+            if not self._is_idle(self._offline_learning_idle_seconds):
+                continue
+            try:
+                await self._run_offline_learning_once()
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError) as exc:
+                logger.warning(f"⚠️ Offline learning loop error: {exc}")
+                self._append_offline_learning_error("<offline_learning_loop>", exc)
+
+    async def _run_autonomy_optimize_once(self) -> None:
+        """Запустить единичный цикл оптимизации автономности (Phase 3)."""
+        autonomy_engine = getattr(self, "_autonomy_engine", None)
+        if not autonomy_engine:
+            return
+        self._last_autonomy_optimize_run = time.time()
+        await asyncio.to_thread(autonomy_engine.optimize)
+
+    async def _autonomy_optimize_loop(self) -> None:
+        """Фоновый цикл оптимизации автономности (Phase 3)."""
+        while True:
+            await asyncio.sleep(self._autonomy_optimize_interval)
+            if not self._autonomy_optimize_enabled:
+                continue
+            if not self._is_idle(self._autonomy_optimize_idle_seconds):
+                continue
+            try:
+                await self._run_autonomy_optimize_once()
+            except Exception as exc:
+                logger.warning(f"Autonomy optimize loop error: {exc}")
+
+    def _get_autonomy_metrics_snapshot(self) -> Dict[str, Any]:
+        """Снимок метрик автономности."""
+        if self._response_engine:
+            stats = self._response_engine.get_autonomy_stats()
+            return stats.get("metrics", {})
+        if self._neira_brain:
+            return self._neira_brain.get_metrics_summary(hours=24)
+        return {}
+
+    def _should_run_evolution(self, now: float) -> bool:
+        """Проверить условия для запуска эволюции."""
+        if now - self._last_evolution_run >= self._evolution_interval:
+            return True
+        if now - self._last_evolution_run < self._evolution_min_interval:
+            return False
+        metrics = self._get_autonomy_metrics_snapshot()
+        total_requests = int(metrics.get("total_requests", 0))
+        autonomy_rate = float(metrics.get("autonomy_rate_strict", metrics.get("autonomy_rate", 0)))
+        if total_requests < self._evolution_min_requests:
+            return False
+        return autonomy_rate < self._evolution_autonomy_threshold
+
+    async def _run_evolution_once(self) -> None:
+        """Запустить единичный цикл эволюции."""
+        if not await self._ensure_neira():
+            return
+        if not self.neira:
+            return
+        evolution = getattr(self.neira, "evolution", None)
+        if evolution is None and hasattr(self.neira, "_ensure_evolution"):
+            ok = self.neira._ensure_evolution()
+            if not ok:
+                return
+            evolution = getattr(self.neira, "evolution", None)
+        if evolution is None:
+            logger.info("⚠️ EvolutionManager недоступен")
+            return
+        self._last_evolution_run = time.time()
+        await asyncio.to_thread(evolution.auto_evolution_cycle)
+
+    async def _evolution_loop(self) -> None:
+        """Фоновый цикл эволюции (гибрид)."""
+        while True:
+            await asyncio.sleep(self._evolution_check_interval)
+            if not self._evolution_enabled:
+                continue
+            if not self._is_idle(self._evolution_idle_seconds):
+                continue
+            now = time.time()
+            if not self._should_run_evolution(now):
+                continue
+            try:
+                await self._run_evolution_once()
+            except Exception as exc:
+                logger.warning(f"⚠️ Evolution loop error: {exc}")
+
+    def _start_background_tasks(self) -> None:
+        """Запустить фоновые задачи."""
+        if self._offline_learning_enabled:
+            self._background_tasks.add(asyncio.create_task(self._offline_learning_loop()))
+        if self._evolution_enabled:
+            self._background_tasks.add(asyncio.create_task(self._evolution_loop()))
+        if self._autonomy_optimize_enabled:
+            self._background_tasks.add(asyncio.create_task(self._autonomy_optimize_loop()))
+
+    async def _stop_background_tasks(self) -> None:
+        """Остановить фоновые задачи."""
+        if not self._background_tasks:
+            return
+        for task in self._background_tasks:
+            task.cancel()
+        await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        self._background_tasks.clear()
+
     async def initialize_neira(self) -> bool:
         """Инициализация Нейры"""
         if self.neira is not None:
@@ -758,6 +1612,251 @@ class NeiraServer:
             CHAT_LOGGER.info(json.dumps(entry, ensure_ascii=False))
         except Exception as exc:
             logger.warning(f"Не удалось записать лог чата: {exc}")
+
+    def _extract_self_name(self, message: str) -> Optional[str]:
+        match = _SELF_NAME_PATTERN.search(message)
+        if not match:
+            return None
+        return match.group(1)
+
+    def _extract_explicit_name(self, message: str) -> Optional[str]:
+        for pattern in _EXPLICIT_NAME_PATTERNS:
+            match = pattern.search(message)
+            if match:
+                return match.group(1)
+        return None
+
+    def _update_user_name(self, user_id: str, name: str) -> None:
+        if not self._neira_brain:
+            return
+        cleaned = name.strip()
+        if not cleaned:
+            return
+        prefs = self._neira_brain.get_user_prefs(user_id)
+        if prefs.get("name") == cleaned:
+            return
+        prefs["name"] = cleaned
+        self._neira_brain.save_user_prefs(user_id, prefs)
+
+    def _build_user_identity_header(
+        self,
+        message: str,
+        user_id: Optional[str],
+        user_name: Optional[str],
+    ) -> str:
+        resolved_name = user_name.strip() if user_name else None
+        if user_id and resolved_name:
+            self._update_user_name(user_id, resolved_name)
+
+        if not resolved_name and user_id and self._neira_brain:
+            prefs = self._neira_brain.get_user_prefs(user_id)
+            resolved_name = prefs.get("name") or None
+
+        explicit_name = self._extract_explicit_name(message)
+        if user_id and explicit_name:
+            self._update_user_name(user_id, explicit_name)
+            if not resolved_name:
+                resolved_name = explicit_name
+
+        try:
+            from neira.utils.identity import resolve_creator_identity
+        except ImportError:
+            resolve_creator_identity = None
+
+        creator_info = None
+        if resolve_creator_identity:
+            if resolved_name:
+                creator_info = resolve_creator_identity(resolved_name)
+            if not creator_info and user_id:
+                creator_info = resolve_creator_identity(user_id)
+            if not creator_info:
+                self_name = self._extract_self_name(message)
+                if self_name:
+                    creator_info = resolve_creator_identity(self_name)
+
+        if creator_info:
+            label = f"{creator_info['display_name']} ({creator_info['role']})"
+            return f"[Собеседник]\n{label}"
+        if resolved_name:
+            return f"[Собеседник]\n{resolved_name} (пользователь)"
+        return ""
+
+    def _compose_full_message(
+        self,
+        *,
+        message: str,
+        context: Optional[str],
+        user_id: Optional[str],
+        user_name: Optional[str],
+    ) -> str:
+        parts = []
+        identity_header = self._build_user_identity_header(message, user_id, user_name)
+        if identity_header:
+            parts.append(identity_header)
+
+        self_model = self._build_self_model_context()
+        if self_model:
+            parts.append(self_model)
+        if context:
+            parts.append(f"[Контекст из редактора]\n```\n{context}\n```")
+        parts.append(message)
+        return "\n\n".join(parts)
+
+    def _build_self_model_context(self) -> str:
+        """Сформировать краткую «самомодель» — список возможностей и ограничений для LLM."""
+        organ_names: list[str] = []
+        if self._organ_system and hasattr(self._organ_system, "organs"):
+            try:
+                organ_names.extend([str(o.name) for o in self._organ_system.organs.values() if getattr(o, "name", None)])
+            except (AttributeError, RuntimeError, ValueError, TypeError):
+                pass
+        if self._executable_organs and hasattr(self._executable_organs, "organs"):
+            try:
+                organ_names.extend([str(o.name) for o in self._executable_organs.organs.values() if getattr(o, "name", None)])
+            except (AttributeError, RuntimeError, ValueError, TypeError):
+                pass
+
+        organ_names = sorted({name.strip() for name in organ_names if str(name).strip()})
+        organ_preview = ", ".join(organ_names[:12]) if organ_names else "(нет)"
+
+        # === Фоновая активность (обучение + эволюция) ===
+        now = time.time()
+        background_activity = self._build_background_activity_summary(now)
+
+        lines = [
+            "[Самомодель Neira]",
+            f"- offline_mode: {self._offline_mode}",
+            f"- offline_allow_local_llm: {self._offline_allow_local_llm}",
+            f"- cortex_enabled: {self._cortex_enabled}",
+            f"- organs: {organ_preview}",
+            "",
+            background_activity,
+            "",
+            "[Правила]",
+            "- Не утверждай, что создала/установила/изменила что-либо без факта.",
+            "- Создание органов допустимо только по явной команде (/grow или фраза «создай орган»).",
+            "- Если просят создать орган — объясни, как правильно сделать это через /grow, но не «создавай» в тексте.",
+            "- Если спрашивают о фоновой активности — используй данные из [Фоновая активность].",
+        ]
+        return "\n".join([line for line in lines if line])
+
+    def _build_background_activity_summary(self, now: float) -> str:
+        """Сформировать описание фоновой активности для самомодели."""
+        lines = ["[Фоновая активность]"]
+
+        # --- Офлайн-обучение ---
+        if self._offline_learning_enabled:
+            if self._last_learning_run > 0:
+                ago_sec = now - self._last_learning_run
+                ago_str = self._format_time_ago(ago_sec)
+                lines.append(f"- Обучение: последний запуск {ago_str}")
+            else:
+                lines.append("- Обучение: ещё не запускалось")
+
+            if self._last_learning_run_stats:
+                total = int(self._last_learning_run_stats.get("total", 0) or 0)
+                success = int(self._last_learning_run_stats.get("success", 0) or 0)
+                words = int(self._last_learning_run_stats.get("total_words", 0) or 0)
+                duration = float(self._last_learning_run_stats.get("duration_sec", 0) or 0)
+                lines.append(f"  - Обработано: {success}/{total} источников, ~{words} слов за {duration:.1f}с")
+
+            # Последние выученные источники (до 5)
+            recent = self._load_learning_history_recent(5)
+            if recent:
+                lines.append("  - Недавно выучено:")
+                for item in recent:
+                    title = item.get("title") or item.get("source", "(без названия)")
+                    # Сокращаем длинные пути
+                    if len(title) > 60:
+                        title = "..." + title[-57:]
+                    word_count = item.get("word_count", 0)
+                    lines.append(f"    • {title} ({word_count} слов)")
+
+            # Ошибки обучения (если есть недавние)
+            if self._offline_learning_recent_errors:
+                recent_errors = [e for e in self._offline_learning_recent_errors if now - e.get("ts", 0) < 3600]
+                if recent_errors:
+                    lines.append(f"  - ⚠️ Ошибки за последний час: {len(recent_errors)}")
+        else:
+            lines.append("- Обучение: отключено")
+
+        # --- Эволюция ---
+        if self._evolution_enabled:
+            if self._last_evolution_run > 0:
+                ago_sec = now - self._last_evolution_run
+                ago_str = self._format_time_ago(ago_sec)
+                lines.append(f"- Эволюция: последний цикл {ago_str}")
+            else:
+                lines.append("- Эволюция: ещё не запускалась")
+        else:
+            lines.append("- Эволюция: отключена")
+
+        # --- Оптимизация автономности ---
+        if self._autonomy_optimize_enabled and self._last_autonomy_optimize_run > 0:
+            ago_sec = now - self._last_autonomy_optimize_run
+            ago_str = self._format_time_ago(ago_sec)
+            lines.append(f"- Оптимизация: последний запуск {ago_str}")
+
+        return "\n".join(lines)
+
+    def _format_time_ago(self, seconds: float) -> str:
+        """Форматировать время назад в читаемом виде."""
+        if seconds < 60:
+            return "только что"
+        if seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} мин. назад"
+        if seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours} ч. назад"
+        days = int(seconds / 86400)
+        return f"{days} дн. назад"
+
+    def _is_explicit_organ_request(self, message: str) -> bool:
+        """Проверить, что пользователь явно просит создать орган."""
+        lowered = message.lower()
+        return any(token in lowered for token in ("/grow", "#создай_орган", "#grow_organ", "#create_organ", "создай орган", "вырасти орган", "отрасти орган"))
+
+    def _guard_llm_response(self, response: str, user_message: str | None = None) -> str:
+        """Удалить опасные/ложные утверждения и эхо пользователя из ответа LLM."""
+        text = response.strip()
+        if not text:
+            return text
+
+        lowered = text.lower()
+        blocked_claims = (
+            "я создал орган",
+            "я создала орган",
+            "создал(а) орган",
+            "я создал новый орган",
+            "я создала новый орган",
+            "я добавил орган",
+            "я добавила орган",
+        )
+        if any(claim in lowered for claim in blocked_claims):
+            return (
+                "Я не создаю органы автоматически в ответе.\n"
+                "Если действительно нужен новый орган — используйте явную команду `/grow <описание>` "
+                "или напишите «создай орган <описание>», и я подскажу следующий шаг."
+            )
+        if user_message:
+            cleaned_message = user_message.strip()
+            if len(cleaned_message) >= 120:
+                msg_lower = cleaned_message.lower()
+                idx = lowered.find(msg_lower)
+                if idx != -1:
+                    text = (text[:idx] + text[idx + len(cleaned_message):]).strip()
+                else:
+                    prefix = msg_lower[:200]
+                    idx = lowered.find(prefix)
+                    if idx != -1:
+                        text = (text[:idx] + text[idx + len(prefix):]).strip()
+                if len(text) < 30:
+                    return (
+                        "Похоже, я повторила ваш текст вместо ответа.\n"
+                        "Сформулируйте запрос короче (1-2 предложения) или уточните, какой результат нужен."
+                    )
+        return text
     
     def _cors_headers(self) -> Dict[str, str]:
         """CORS заголовки для VS Code / Cursor"""
@@ -798,9 +1897,61 @@ class NeiraServer:
     async def handle_autonomy_stats(self, request: web.Request) -> web.Response:
         """Статистика автономности (Phase 1)"""
         try:
+            now = time.time()
             stats = {
                 "autonomy_available": self._response_engine is not None,
-                "error": self._autonomy_modules_error
+                "error": self._autonomy_modules_error,
+                "offline_mode": self._offline_mode,
+                "offline_allow_local_llm": self._offline_allow_local_llm,
+                "cortex_available": self._cortex is not None,
+            }
+            if self._cortex_error:
+                stats["cortex_error"] = self._cortex_error
+
+            stats["llm_config"] = {
+                "provider_priority": os.getenv("LLM_PROVIDER_PRIORITY", ""),
+                "ollama_model": os.getenv("NEIRA_OLLAMA_MODEL", ""),
+                "ollama_disabled": os.getenv("NEIRA_DISABLE_OLLAMA", ""),
+                "ollama_num_ctx": int(os.getenv("NEIRA_OLLAMA_NUM_CTX", "0") or 0),
+                "ollama_num_gpu": int(os.getenv("NEIRA_OLLAMA_NUM_GPU", "0") or 0),
+                "max_response_tokens": int(os.getenv("NEIRA_MAX_RESPONSE_TOKENS", "0") or 0),
+                "timeout_sec": self._llm_timeout_sec,
+            }
+            stats["offline_learning"] = {
+                "enabled": self._offline_learning_enabled,
+                "summarize": self._offline_learning_summarize,
+                "category": self._offline_learning_category,
+                "dirs": list(self._offline_learning_dirs),
+                "include_globs": list(self._offline_learning_include_globs),
+                "exclude_dirs": list(self._offline_learning_exclude_dirs),
+                "interval_sec": self._offline_learning_interval,
+                "idle_sec": self._offline_learning_idle_seconds,
+                "max_files": self._offline_learning_max_files,
+                "max_mb": int(self._offline_learning_max_bytes // BYTES_IN_MB),
+                "initial_delay_sec": self._offline_learning_initial_delay,
+                "last_run_ts": self._last_learning_run,
+                "last_run_ago_sec": (now - self._last_learning_run) if self._last_learning_run else None,
+                "last_run_stats": self._last_learning_run_stats,
+                "last_sources": list(self._last_learning_sources),
+                "recent_errors": list(self._offline_learning_recent_errors),
+            }
+            stats["evolution"] = {
+                "enabled": self._evolution_enabled,
+                "interval_sec": self._evolution_interval,
+                "check_interval_sec": self._evolution_check_interval,
+                "idle_sec": self._evolution_idle_seconds,
+                "min_requests": self._evolution_min_requests,
+                "autonomy_threshold": self._evolution_autonomy_threshold,
+                "min_interval_sec": self._evolution_min_interval,
+                "last_run_ts": self._last_evolution_run,
+                "last_run_ago_sec": (now - self._last_evolution_run) if self._last_evolution_run else None,
+            }
+            stats["autonomy_optimize"] = {
+                "enabled": self._autonomy_optimize_enabled,
+                "interval_sec": self._autonomy_optimize_interval,
+                "idle_sec": self._autonomy_optimize_idle_seconds,
+                "last_run_ts": self._last_autonomy_optimize_run,
+                "last_run_ago_sec": (now - self._last_autonomy_optimize_run) if self._last_autonomy_optimize_run else None,
             }
             
             if self._response_engine:
@@ -834,6 +1985,78 @@ class NeiraServer:
                 status=500,
                 headers=self._cors_headers()
             )
+
+    async def handle_offline_learning_run(self, request: web.Request) -> web.Response:
+        """Запустить офлайн-обучение вручную (один цикл)."""
+        try:
+            neira_error = await self._require_neira()
+            if neira_error:
+                return neira_error
+
+            sources = self._collect_offline_sources()
+            if not sources:
+                self._last_learning_run = time.time()
+                return web.json_response(
+                    json.loads(ServerResponse(
+                        success=True,
+                        data={"message": "Нет новых источников для обучения", "total": 0, "success": 0, "total_words": 0}
+                    ).to_json()),
+                    headers=self._cors_headers()
+                )
+
+            stats = await self._learn_offline_sources(sources)
+            self._last_learning_run = time.time()
+            return web.json_response(
+                json.loads(ServerResponse(
+                    success=True,
+                    data={**stats, "sources": sources}
+                ).to_json()),
+                headers=self._cors_headers()
+            )
+        except Exception as e:
+            logger.error(f"Ошибка ручного офлайн-обучения: {e}")
+            return web.json_response(
+                json.loads(ServerResponse(success=False, error=str(e)).to_json()),
+                status=500,
+                headers=self._cors_headers()
+            )
+
+    async def handle_offline_evolution_run(self, request: web.Request) -> web.Response:
+        """Запустить эволюцию вручную (один цикл)."""
+        try:
+            await self._run_evolution_once()
+            return web.json_response(
+                json.loads(ServerResponse(
+                    success=True,
+                    data={"message": "Цикл эволюции запущен", "last_run_ts": self._last_evolution_run}
+                ).to_json()),
+                headers=self._cors_headers()
+            )
+        except Exception as e:
+            logger.error(f"Ошибка ручной эволюции: {e}")
+            return web.json_response(
+                json.loads(ServerResponse(success=False, error=str(e)).to_json()),
+                status=500,
+                headers=self._cors_headers()
+            )
+
+    async def handle_offline_learning_status(self, request: web.Request) -> web.Response:
+        """Статус офлайн-обучения: что запускалось и какие ошибки были."""
+        self.request_count += 1
+
+        now = time.time()
+        payload = {
+            "enabled": self._offline_learning_enabled,
+            "last_run_ts": self._last_learning_run,
+            "last_run_ago_sec": (now - self._last_learning_run) if self._last_learning_run else None,
+            "last_run_stats": self._last_learning_run_stats,
+            "last_sources": list(self._last_learning_sources),
+            "recent_errors": list(self._offline_learning_recent_errors),
+        }
+        return web.json_response(
+            json.loads(ServerResponse(success=True, data=payload).to_json()),
+            headers=self._cors_headers(),
+        )
     
     async def handle_pathway_feedback(self, request: web.Request) -> web.Response:
         """
@@ -1216,6 +2439,7 @@ class NeiraServer:
             context = data.get("context", "")  # Контекст из редактора
             request_id = data.get("request_id", str(uuid.uuid4())[:8])
             user_id = data.get("user_id")  # Для персонализации
+            user_name = data.get("user_name")
             
             if not message:
                 return web.json_response(
@@ -1231,13 +2455,43 @@ class NeiraServer:
             # Записываем метрику запроса
             if self._neira_brain:
                 self._neira_brain.record_metric('request', 'server', {
-                    'message_preview': message[:50],
+                    'message_preview': message[:MESSAGE_PREVIEW_LIMIT],
                     'has_context': bool(context)
                 })
             
-            logger.info(f"[{request_id}] 📨 Запрос: {message[:50]}...")
+            logger.info(f"[{request_id}] 📨 Запрос: {message[:MESSAGE_PREVIEW_LIMIT]}...")
             start_time = time.perf_counter()
             
+            if self._is_explicit_organ_request(message):
+                policy_text = (
+                    "Создание органов разрешено только по явной команде.\n"
+                    "Используйте `/grow <описание>` (в Telegram) или напишите «создай орган <описание>» — "
+                    "я подскажу следующий шаг, но не буду «создавать» орган в тексте."
+                )
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                self._log_chat_event(
+                    request_id=request_id,
+                    endpoint="/chat",
+                    message=message,
+                    response=policy_text,
+                    context=context,
+                    duration_ms=duration_ms,
+                    model="policy",
+                )
+                return web.json_response(
+                    json.loads(ServerResponse(
+                        success=True,
+                        data={
+                            "response": policy_text,
+                            "model": "policy",
+                            "task_type": "chat",
+                            "model_source": "policy"
+                        },
+                        request_id=request_id
+                    ).to_json()),
+                    headers=self._cors_headers()
+                )
+
             # === Phase 1+3: Попытка автономного ответа ===
             autonomous_response, response_source = self._try_autonomous_response(message, user_id)
             if autonomous_response:
@@ -1275,19 +2529,76 @@ class NeiraServer:
             if neira_error:
                 return neira_error
             
-            # Добавляем контекст к сообщению
-            full_message = message
-            if context:
-                full_message = f"[Контекст из редактора]\n```\n{context}\n```\n\n{message}"
+            full_message = self._compose_full_message(
+                message=message,
+                context=context,
+                user_id=user_id,
+                user_name=user_name,
+            )
             
             # Обработка через Нейру (LLM)
+            llm_start = time.perf_counter()
+            autonomy_engine = getattr(self, "_autonomy_engine", None)
             try:
-                response_text = self.neira.process(full_message)
-                
+                response_text = await self._call_neira_process(full_message)
+                response_text = self._guard_llm_response(response_text, message)
+                llm_latency_ms = (time.perf_counter() - llm_start) * 1000
+
+                if self._neira_brain:
+                    self._neira_brain.record_metric("llm_call", "server", {
+                        "message_preview": message[:MESSAGE_PREVIEW_LIMIT],
+                        "latency_ms": llm_latency_ms,
+                        "success": True,
+                    })
+
+                if autonomy_engine:
+                    autonomy_engine.record_response("llm", llm_latency_ms, False)
+                    self._update_autonomy_context(autonomy_engine, user_id, message, response_text)
+
                 # Сохраняем ответ для будущего использования
                 self._store_llm_response(message, response_text, success=True)
-                
+
+            except asyncio.TimeoutError:
+                llm_latency_ms = (time.perf_counter() - llm_start) * 1000
+                if self._neira_brain:
+                    self._neira_brain.record_metric("llm_call", "server", {
+                        "message_preview": message[:MESSAGE_PREVIEW_LIMIT],
+                        "latency_ms": llm_latency_ms,
+                        "success": False,
+                        "error": "timeout",
+                    })
+                if autonomy_engine:
+                    autonomy_engine.record_response("llm_timeout", llm_latency_ms, False)
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                self._log_chat_event(
+                    request_id=request_id,
+                    endpoint="/chat",
+                    message=message,
+                    error="LLM timeout",
+                    context=context,
+                    duration_ms=duration_ms,
+                    model="ollama",
+                )
+                return web.json_response(
+                    json.loads(ServerResponse(
+                        success=False,
+                        error=f"Таймаут генерации ({self._llm_timeout_sec}s). Попробуйте короче запрос или уменьшите max_tokens.",
+                        request_id=request_id
+                    ).to_json()),
+                    status=504,
+                    headers=self._cors_headers()
+                )
             except Exception as e:
+                llm_latency_ms = (time.perf_counter() - llm_start) * 1000
+                if self._neira_brain:
+                    self._neira_brain.record_metric("llm_call", "server", {
+                        "message_preview": message[:MESSAGE_PREVIEW_LIMIT],
+                        "latency_ms": llm_latency_ms,
+                        "success": False,
+                        "error": str(e),
+                    })
+                if autonomy_engine:
+                    autonomy_engine.record_response("llm_error", llm_latency_ms, False)
                 logger.error(f"[{request_id}] ❌ Ошибка Нейры: {e}")
                 duration_ms = int((time.perf_counter() - start_time) * 1000)
                 self._log_chat_event(
@@ -1394,7 +2705,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] 🔍 Объяснение кода: {len(code)} символов")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 logger.error(f"[{request_id}] ❌ Ошибка: {e}")
                 return web.json_response(
@@ -1460,7 +2771,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] ⚡ Генерация: {description[:50]}...")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -1538,7 +2849,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] 💡 Completion: {len(prefix)} символов контекста")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
                 # Очищаем ответ от markdown и лишнего
                 completion = self._clean_completion(response_text)
                 
@@ -1622,7 +2933,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] 🔧 Fix: {error[:50]}...")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -1711,7 +3022,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] 🧪 Генерация тестов ({fw})")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -1801,7 +3112,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] 📝 Генерация документации ({ds})")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -1879,7 +3190,7 @@ class NeiraServer:
             logger.info(f"[{request_id}] ♻️ Рефакторинг: {instruction[:30] if instruction else 'общий'}...")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -1955,7 +3266,7 @@ Diff:
             logger.info(f"[{request_id}] 📝 Генерация commit message")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
                 # Очищаем от лишнего
                 message = response_text.strip()
                 if message.startswith("```"):
@@ -2032,7 +3343,7 @@ Diff:
             logger.info(f"[{request_id}] 🔍 Анализ diff")
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
             except Exception as e:
                 return web.json_response(
                     json.loads(ServerResponse(
@@ -2567,10 +3878,33 @@ Diff:
             message = data.get("message", "").strip()
             context = data.get("context", "")
             request_id = data.get("request_id", str(uuid.uuid4())[:8])
+            user_id = data.get("user_id")
+            user_name = data.get("user_name")
+            user_id = data.get("user_id")
             
             if not message:
                 await response.write(b'data: {"error": "Empty message"}\n\n')
                 await response.write(b'data: [DONE]\n\n')
+                return response
+
+            if self._is_explicit_organ_request(message):
+                policy_text = (
+                    "Создание органов разрешено только по явной команде.\n"
+                    "Используйте `/grow <описание>` (в Telegram) или напишите «создай орган <описание>» — "
+                    "я подскажу следующий шаг, но не буду «создавать» орган в тексте."
+                )
+                sse_data = json.dumps({"token": policy_text}, ensure_ascii=False)
+                await response.write(f'data: {sse_data}\n\n'.encode('utf-8'))
+                await response.write(b'data: [DONE]\n\n')
+                self._log_chat_event(
+                    request_id=request_id,
+                    endpoint="/stream/chat",
+                    message=message,
+                    response=policy_text,
+                    context=context,
+                    duration_ms=0,
+                    model="policy",
+                )
                 return response
             
             if not await self._ensure_neira():
@@ -2578,17 +3912,20 @@ Diff:
                 await response.write(b'data: [DONE]\n\n')
                 return response
             
-            # Добавляем контекст
-            full_message = message
-            if context:
-                full_message = f"[Контекст]\n```\n{context}\n```\n\n{message}"
+            full_message = self._compose_full_message(
+                message=message,
+                context=context,
+                user_id=user_id,
+                user_name=user_name,
+            )
             
-            logger.info(f"[{request_id}] 📡 Stream chat: {message[:50]}...")
+            logger.info(f"[{request_id}] 📡 Stream chat: {message[:MESSAGE_PREVIEW_LIMIT]}...")
             start_time = time.perf_counter()
             
             # Получаем ответ от Нейры
             try:
-                response_text = self.neira.process(full_message)
+                response_text = await self._call_neira_process(full_message)
+                response_text = self._guard_llm_response(response_text, message)
                 duration_ms = int((time.perf_counter() - start_time) * 1000)
                 self._log_chat_event(
                     request_id=request_id,
@@ -2674,7 +4011,7 @@ Diff:
 3. Возможные улучшения"""
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
                 
                 # Стриминг по словам
                 words = response_text.split(' ')
@@ -2740,7 +4077,7 @@ Diff:
 Код:"""
             
             try:
-                response_text = self.neira.process(prompt)
+                response_text = await self._call_neira_process(prompt)
                 
                 # Стриминг по строкам для кода
                 lines = response_text.split('\n')
@@ -3611,6 +4948,12 @@ Diff:
                     status=400,
                     headers=self._cors_headers()
                 )
+            if self._offline_mode and self._is_url_source(source):
+                return web.json_response(
+                    {"success": False, "error": "Офлайн-режим: доступны только локальные файлы"},
+                    status=400,
+                    headers=self._cors_headers()
+                )
             
             # Импортируем LearningManager
             from content_extractor import LearningManager
@@ -3655,6 +4998,14 @@ Diff:
                     status=400,
                     headers=self._cors_headers()
                 )
+            if self._offline_mode:
+                blocked = [s for s in sources if self._is_url_source(str(s))]
+                if blocked:
+                    return web.json_response(
+                        {"success": False, "error": "Офлайн-режим: URL запрещены", "blocked": blocked},
+                        status=400,
+                        headers=self._cors_headers()
+                    )
             
             from content_extractor import LearningManager
             
@@ -3701,6 +5052,23 @@ Diff:
                 status=500,
                 headers=self._cors_headers()
             )
+
+    async def handle_learning_history(self, request: web.Request) -> web.Response:
+        """Вернуть последние изученные источники (learning_history.json)."""
+        self.request_count += 1
+
+        limit = self._query_int(
+            request,
+            "limit",
+            DEFAULT_LEARNING_HISTORY_RECENT_LIMIT,
+            min_value=1,
+            max_value=MAX_LEARNING_HISTORY_RECENT_LIMIT,
+        )
+        recent = self._load_learning_history_recent(limit)
+        return web.json_response(
+            {"success": True, "limit": limit, "recent": recent},
+            headers=self._cors_headers(),
+        )
     
     async def handle_extract_content(self, request: web.Request) -> web.Response:
         """Извлечение контента без сохранения (превью)"""
@@ -3713,6 +5081,12 @@ Diff:
             if not source:
                 return web.json_response(
                     {"success": False, "error": "source is required"},
+                    status=400,
+                    headers=self._cors_headers()
+                )
+            if self._offline_mode and self._is_url_source(source):
+                return web.json_response(
+                    {"success": False, "error": "Офлайн-режим: URL запрещены"},
                     status=400,
                     headers=self._cors_headers()
                 )
@@ -3802,6 +5176,7 @@ Diff:
         
         try:
             async for msg in ws:
+                self._touch_activity()
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
@@ -3810,6 +5185,31 @@ Diff:
                         if action == "chat":
                             message = data.get("message", "")
                             if message:
+                                user_id = data.get("user_id")
+                                user_name = data.get("user_name")
+
+                                if self._is_explicit_organ_request(message):
+                                    policy_text = (
+                                        "Создание органов разрешено только по явной команде.\n"
+                                        "Используйте `/grow <описание>` (в Telegram) или напишите «создай орган <описание>» — "
+                                        "я подскажу следующий шаг, но не буду «создавать» орган в тексте."
+                                    )
+                                    await ws.send_json({
+                                        "type": "response",
+                                        "content": policy_text,
+                                        "meta": {"model": "policy", "model_source": "policy"}
+                                    })
+                                    continue
+
+                                autonomous_response, response_source = self._try_autonomous_response(message, user_id)
+                                if autonomous_response:
+                                    await ws.send_json({
+                                        "type": "response",
+                                        "content": autonomous_response,
+                                        "meta": {"model": "autonomous", "model_source": response_source or "local_pathways"}
+                                    })
+                                    continue
+
                                 if not await self._ensure_neira():
                                     await ws.send_json({
                                         "type": "error",
@@ -3823,7 +5223,14 @@ Diff:
                                 })
                                 
                                 try:
-                                    response = self.neira.process(message)
+                                    full_message = self._compose_full_message(
+                                        message=message,
+                                        context=None,
+                                        user_id=user_id,
+                                        user_name=user_name,
+                                    )
+                                    response = await self._call_neira_process(full_message)
+                                    response = self._guard_llm_response(response, message)
                                     await ws.send_json({
                                         "type": "response",
                                         "content": response,
@@ -4015,7 +5422,7 @@ Diff:
     
     def setup_routes(self):
         """Настройка маршрутов"""
-        self.app = web.Application()
+        self.app = web.Application(middlewares=[self._activity_middleware])
         
         # CORS preflight
         self.app.router.add_route("OPTIONS", "/{path:.*}", self.handle_options)
@@ -4026,6 +5433,9 @@ Diff:
         self.app.router.add_post("/pathway/feedback", self.handle_pathway_feedback)  # Phase 2
         self.app.router.add_post("/autonomy/optimize", self.handle_autonomy_optimize)  # Phase 3
         self.app.router.add_get("/autonomy/dashboard", self.handle_autonomy_dashboard)  # Phase 3
+        self.app.router.add_post("/offline/learning/run", self.handle_offline_learning_run)
+        self.app.router.add_get("/offline/learning/status", self.handle_offline_learning_status)
+        self.app.router.add_post("/offline/evolution/run", self.handle_offline_evolution_run)
         
         # 🧬 ExecutableOrgans API
         self.app.router.add_get("/organs", self.handle_organs_list)
@@ -4101,6 +5511,7 @@ Diff:
             self.app.router.add_post("/learn", self.handle_learn)
             self.app.router.add_post("/learn/batch", self.handle_learn_batch)
             self.app.router.add_get("/learn/stats", self.handle_learning_stats)
+            self.app.router.add_get("/learn/history", self.handle_learning_history)
             self.app.router.add_post("/learn/extract", self.handle_extract_content)
         
         # Server management
@@ -4240,6 +5651,8 @@ Diff:
         logger.info(f"   WebSocket: ws://{self.host}:{self.port}/ws")
         logger.info("=" * 50)
         logger.info("Нажмите Ctrl+C для остановки")
+
+        self._start_background_tasks()
         
         # Держим сервер запущенным
         try:
@@ -4248,6 +5661,7 @@ Diff:
         except asyncio.CancelledError:
             pass
         finally:
+            await self._stop_background_tasks()
             await runner.cleanup()
 
 
@@ -4258,6 +5672,16 @@ def _configure_io_encoding() -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
+
+
+def start_server() -> None:
+    """Запуск сервера (используется лаунчером neira.py)."""
+    _configure_io_encoding()
+    server = NeiraServer()
+    try:
+        asyncio.run(server.start())
+    except KeyboardInterrupt:
+        logger.info("\n👋 Сервер остановлен")
 
 
 def main():

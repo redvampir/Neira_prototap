@@ -25,6 +25,9 @@ from enum import Enum
 
 logger = logging.getLogger("ExecutableOrgans")
 
+MATH_EXPRESSION_PATTERN = re.compile(r"^[\d\s\+\-\*\/\^\(\)\.]+$")
+MATH_DIGIT_PATTERN = re.compile(r"\d")
+
 
 # ============== Enums ==============
 
@@ -224,12 +227,12 @@ class ExecutableOrgan(ABC):
         """Вернуть confidence 0-1 что орган может обработать команду"""
         pass
     
-    def process(self, command: str, **kwargs) -> Tuple[str, str]:
+    def process(self, command: str, **kwargs) -> Tuple[str, Optional[str]]:
         """
         Обработать команду с учётом обучения.
         
         Returns:
-            (результат, record_id для feedback)
+            (результат, record_id для feedback или None при ошибке)
         """
         # Проверяем выученные паттерны
         learned = self.learner.get_learned_response(command)
@@ -240,13 +243,21 @@ class ExecutableOrgan(ABC):
             self._last_record_id = record_id
             return learned, record_id
         
-        # Выполняем команду
-        result = self.execute(command, **kwargs)
-        
-        # Записываем для обучения
-        record_id = self.learner.record_usage(command, result)
-        self._last_record_id = record_id
-        
+        # Выполняем команду и обеспечиваем устойчивость
+        try:
+            result = self.execute(command, **kwargs)
+        except Exception as e:
+            logger.exception(f"Ошибка при выполнении органа '{self.name}': {e}")
+            result = f"❌ Ошибка выполнения: {e}"
+
+        # Записываем для обучения (вне зависимости от успеха)
+        try:
+            record_id = self.learner.record_usage(command, result)
+            self._last_record_id = record_id
+        except Exception as e:
+            logger.exception(f"Не удалось записать usage для органа '{self.name}': {e}")
+            record_id = None
+
         return result, record_id
     
     def feedback(self, feedback_type: FeedbackType, correction: Optional[str] = None):
@@ -512,30 +523,28 @@ class MathOrgan(ExecutableOrgan):
             changelog="Базовые арифметические операции"
         )
     
+    @staticmethod
+    def _is_pure_math_expression(command: str) -> bool:
+        """Проверить, что команда — чистое математическое выражение."""
+        if not command:
+            return False
+        stripped = command.strip()
+        if not stripped:
+            return False
+        if not MATH_EXPRESSION_PATTERN.fullmatch(stripped):
+            return False
+        return bool(MATH_DIGIT_PATTERN.search(stripped))
+
     def can_handle(self, command: str) -> float:
-        """Проверить может ли орган обработать команду"""
-        command_lower = command.lower()
-        
-        # Математические операторы
-        if re.search(r'[\d\+\-\*\/\^\=]', command):
-            return 0.7
-        
-        keywords = [
-            ("вычисл", 0.9), ("посчитай", 0.9), ("сколько", 0.7),
-            ("калькул", 0.9), ("математ", 0.8),
-            ("сумм", 0.8), ("разност", 0.8), ("произведен", 0.8),
-            ("корень", 0.8), ("степен", 0.8), ("процент", 0.8),
-        ]
-        
-        score = 0.0
-        for keyword, weight in keywords:
-            if keyword in command_lower:
-                score = max(score, weight)
-        
-        return score
-    
+        """Проверить, может ли орган обработать команду."""
+        if not self._is_pure_math_expression(command):
+            return 0.0
+        return 0.9
+
     def execute(self, command: str, **kwargs) -> str:
         """Выполнить математическую операцию"""
+        if not self._is_pure_math_expression(command):
+            return "Не найдено математическое выражение. Пример: 2 + 2 * 3"
         # Извлекаем числа и операции
         # Безопасное вычисление через ast
         import ast

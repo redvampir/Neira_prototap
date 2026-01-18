@@ -4,13 +4,111 @@ AI персонаж который может общаться с игрокам
 """
 import asyncio
 import json
-import sys
+import logging
 import os
+import sys
+from contextlib import contextmanager
+from typing import Iterator
 
 # Добавляем путь к модулям Neira
 sys.path.insert(0, os.path.dirname(__file__))
 
-from llm_providers import get_llm_response
+try:
+    from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+GAME_RESPONSE_MAX_TOKENS = 512
+GAME_RESPONSE_TEMPERATURE = 0.7
+GAME_PROVIDER_ENV = "NEIRA_GAME_PROVIDER"
+GAME_MODEL_ENV = "NEIRA_GAME_MODEL"
+LLM_PROVIDER_PRIORITY_ENV = "LLM_PROVIDER_PRIORITY"
+PROVIDER_MODEL_ENV = {
+    "ollama": "NEIRA_OLLAMA_MODEL",
+    "lmstudio": "NEIRA_LMSTUDIO_MODEL",
+    "llamacpp": "NEIRA_LLAMACPP_MODEL",
+    "groq": "NEIRA_GROQ_MODEL",
+    "openai": "NEIRA_OPENAI_MODEL",
+    "claude": "NEIRA_CLAUDE_MODEL",
+}
+
+_LLM_CLIENT: LLMClient | None = None
+_LLM_CLIENT_CONFIG: tuple[str, str] | None = None
+
+
+@contextmanager
+def _temporary_env(overrides: dict[str, str]) -> Iterator[None]:
+    previous = {key: os.getenv(key) for key in overrides}
+    for key, value in overrides.items():
+        os.environ[key] = value
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _collect_game_llm_overrides() -> dict[str, str]:
+    provider = os.getenv(GAME_PROVIDER_ENV, "").strip().lower()
+    model = os.getenv(GAME_MODEL_ENV, "").strip()
+    if not provider and not model:
+        return {}
+    if provider and provider not in PROVIDER_MODEL_ENV:
+        logger.warning("Unsupported %s value: %s", GAME_PROVIDER_ENV, provider)
+        return {}
+    overrides: dict[str, str] = {}
+    if provider:
+        overrides[LLM_PROVIDER_PRIORITY_ENV] = provider
+    if model:
+        if not provider:
+            logger.warning("%s set without %s; ignoring model override", GAME_MODEL_ENV, GAME_PROVIDER_ENV)
+            return overrides
+        overrides[PROVIDER_MODEL_ENV[provider]] = model
+    return overrides
+
+
+def _get_llm_client() -> LLMClient | None:
+    global _LLM_CLIENT, _LLM_CLIENT_CONFIG
+    if not LLM_CLIENT_AVAILABLE:
+        return None
+    config_key = (
+        os.getenv(GAME_PROVIDER_ENV, "").strip().lower(),
+        os.getenv(GAME_MODEL_ENV, "").strip(),
+    )
+    if _LLM_CLIENT is None or _LLM_CLIENT_CONFIG != config_key:
+        overrides = _collect_game_llm_overrides()
+        if overrides:
+            with _temporary_env(overrides):
+                client = build_default_llm_client()
+        else:
+            client = build_default_llm_client()
+        if isinstance(client, NullLLMClient):
+            return None
+        _LLM_CLIENT = client
+        _LLM_CLIENT_CONFIG = config_key
+    return _LLM_CLIENT
+
+
+def _generate_llm_reply(prompt: str) -> str:
+    client = _get_llm_client()
+    if client is None:
+        raise RuntimeError("LLM client unavailable")
+    response: LLMResult = client.generate(
+        prompt=prompt,
+        system_prompt="",
+        temperature=GAME_RESPONSE_TEMPERATURE,
+        max_tokens=GAME_RESPONSE_MAX_TOKENS,
+    )
+    if response.success and response.content:
+        return response.content
+    error = response.error or "unknown"
+    raise RuntimeError(error)
 
 class NeiraGameBot:
     """AI персонаж Нейра в игре"""
@@ -123,10 +221,8 @@ class NeiraGameBot:
             try:
                 # Получаем ответ от LLM
                 response = await asyncio.to_thread(
-                    get_llm_response,
-                    self.personality + "\n\n" + context,
-                    provider="ollama",
-                    model="mistral"
+                    _generate_llm_reply,
+                    self.personality + "\n\n" + context
                 )
                 
                 await self.room.broadcast({
@@ -135,9 +231,9 @@ class NeiraGameBot:
                     'message': response
                 })
                 
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, OSError) as e:
                 # Fallback если LLM не доступен
-                print(f"⚠️  Neira LLM error: {e}")
+                logger.warning("Neira LLM error: %s", e)
                 fallback_messages = [
                     f"🪄 {player_name}, попробуй написать 'подсказка' для помощи!",
                     f"✨ Я здесь, чтобы помочь! Напиши 'подсказка' или 'бонус'!",

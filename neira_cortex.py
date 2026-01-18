@@ -11,9 +11,10 @@ Neira Cortex v2.0 — Автономный когнитивный процесс
 """
 
 import json
+import logging
 import os
 import time
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Dict, Any, Tuple, List, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -21,6 +22,9 @@ from enum import Enum
 # Импорты наших компонентов
 from neural_pathways import NeuralPathwaySystem, PathwayMatch, PathwayTier
 from response_synthesizer import ResponseSynthesizer, ResponseMode
+
+
+logger = logging.getLogger(__name__)
 
 
 def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
@@ -38,21 +42,64 @@ def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[in
     return value
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _env_csv_list(name: str, default: Sequence[str]) -> List[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return list(default)
+    items = [item.strip() for item in raw.split(",") if item.strip()]
+    unique: List[str] = []
+    for item in items:
+        if item not in unique:
+            unique.append(item)
+    return unique
+
+
 DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
 CORTEX_MAX_TOKENS = _env_int("NEIRA_CORTEX_MAX_TOKENS", DEFAULT_MAX_RESPONSE_TOKENS, min_value=128)
+MAX_ORGAN_SUGGESTIONS = 3
+DEFAULT_WEB_MAX_RESULTS = 5
+DEFAULT_WEB_MAX_TOKENS = 512
+DEFAULT_WEB_ALLOWED_DOMAINS = (
+    "gramota.ru",
+    "academic.ru",
+    "dic.academic.ru",
+    "ru.wiktionary.org",
+)
+WEB_SEARCH_ENABLED = _env_bool("NEIRA_WEB_SEARCH_ENABLED", True)
+WEB_SEARCH_USE_HTML_FALLBACK = _env_bool("NEIRA_WEB_SEARCH_HTML_FALLBACK", True)
+WEB_SEARCH_MAX_RESULTS = _env_int(
+    "NEIRA_WEB_SEARCH_MAX_RESULTS",
+    DEFAULT_WEB_MAX_RESULTS,
+    min_value=1,
+    max_value=10,
+)
+WEB_SEARCH_MAX_TOKENS = _env_int(
+    "NEIRA_WEB_SEARCH_MAX_TOKENS",
+    min(DEFAULT_WEB_MAX_TOKENS, DEFAULT_MAX_RESPONSE_TOKENS),
+    min_value=128,
+    max_value=DEFAULT_MAX_RESPONSE_TOKENS,
+)
+WEB_SEARCH_ALLOWED_DOMAINS = _env_csv_list(
+    "NEIRA_WEB_ALLOWED_DOMAINS",
+    DEFAULT_WEB_ALLOWED_DOMAINS,
+)
 
 
 # Импортируем общий модуль идентичности
 from neira_identity import build_identity_prompt, IDENTITY_PROMPT, load_personality
-
-
-# LLM fallback (опционально)
-try:
-    from llm_providers import LLMManager
-    LLM_AVAILABLE = True
-except ImportError:
-    LLM_AVAILABLE = False
-    print("⚠️ LLM providers не найдены - работаем в автономном режиме")
+from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
 
 
 class IntentType(Enum):
@@ -253,27 +300,27 @@ class NeiraCortex:
         self.synthesizer = ResponseSynthesizer(fragments_file, templates_file)
         
         # LLM (опционально)
-        self.llm_manager = None
-        if use_llm and LLM_AVAILABLE:
-            try:
-                from llm_providers import create_default_manager
-                self.llm_manager = create_default_manager()
-                print("✅ LLM Consultant активирован (fallback)")
-            except Exception as e:
-                print(f"⚠️ LLM недоступен: {e}")
+        self.llm_client: LLMClient = NullLLMClient("LLM отключен")
+        self.llm_available = False
+        if use_llm:
+            self.llm_client = build_default_llm_client()
+            self.llm_available = not isinstance(self.llm_client, NullLLMClient)
         
         # Статистика
         self.total_requests = 0
         self.strategy_stats = {s: 0 for s in ResponseStrategy}
         
-        print("=" * 60)
-        print("🧠 Neira Cortex v2.0 инициализирован")
-        print("=" * 60)
-        print(f"Neural Pathways: {len(self.pathways.pathways)}")
-        print(f"Response Fragments: {len(self.synthesizer.fragments)}")
-        print(f"Response Templates: {len(self.synthesizer.templates)}")
-        print(f"LLM Consultant: {'✅ доступен' if self.llm_manager else '❌ недоступен'}")
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("Neira Cortex v2.0 инициализирован")
+        logger.info("=" * 60)
+        logger.info("Neural Pathways: %s", len(self.pathways.pathways))
+        logger.info("Response Fragments: %s", len(self.synthesizer.fragments))
+        logger.info("Response Templates: %s", len(self.synthesizer.templates))
+        logger.info("LLM Consultant: %s", "доступен" if self.llm_available else "недоступен")
+        logger.info("=" * 60)
+
+        self._hybrid_system = None
+        self._web_search_cell = None
     
     def process(
         self,
@@ -306,6 +353,13 @@ class NeiraCortex:
         
         # 1. Распознаем намерение
         intent, intent_confidence = self.intent_recognizer.recognize(user_input)
+
+        organ_hints = ""
+        if intent in (IntentType.TASK, IntentType.CODE_REQUEST):
+            organ_hints = self._build_organ_hints(user_input)
+            if organ_hints:
+                context = dict(context)
+                context["organ_hints"] = organ_hints
         
         # 2. Ищем pathway
         pathway_match = self.pathways.match(user_input, user_id)
@@ -315,7 +369,7 @@ class NeiraCortex:
             intent,
             intent_confidence,
             pathway_match,
-            has_llm=self.llm_manager is not None
+            has_llm=self.llm_available
         )
         
         self.strategy_stats[strategy] += 1
@@ -361,7 +415,7 @@ class NeiraCortex:
                 
             elif strategy == ResponseStrategy.LLM_CONSULTANT:
                 # Консультация с LLM (fallback)
-                if self.llm_manager:
+                if self.llm_available:
                     response = self._consult_llm(user_input, intent, context)
                     llm_used = True
                 else:
@@ -373,8 +427,16 @@ class NeiraCortex:
                 response = self._hybrid_response(user_input, intent, pathway_match, context)
             
         except Exception as e:
-            print(f"⚠️ Ошибка генерации ответа: {e}")
+            logger.warning("Ошибка генерации ответа: %s", e)
             response = self._fallback_response(intent)
+
+        if not response.strip():
+            web_answer, web_llm_used = self._maybe_web_search(user_input, intent)
+            if web_answer:
+                response = web_answer
+                llm_used = llm_used or web_llm_used
+            if not response.strip():
+                response = self._fallback_response(intent)
         
         # 5. Вычисляем latency
         latency_ms = (time.perf_counter() - start_time) * 1000
@@ -425,10 +487,145 @@ class NeiraCortex:
         if fragments:
             # Берем наиболее используемый
             best_fragment = max(fragments, key=lambda f: f.usage_count)
-            return best_fragment.apply_variables(**context)
+            response = best_fragment.apply_variables(**context)
+            return self._append_organ_hints(response, context)
         
         return "🤔 Интересный запрос! Дай мне секунду подумать..."
     
+    def _get_hybrid_system(self) -> Optional[object]:
+        if self._hybrid_system is not None:
+            return self._hybrid_system
+        try:
+            from neira.organs.hybrid_system import get_hybrid_organ_system
+        except ImportError:
+            return None
+        try:
+            self._hybrid_system = get_hybrid_organ_system()
+        except (RuntimeError, OSError, ValueError):
+            return None
+        return self._hybrid_system
+
+    def _get_web_search_cell(self) -> Optional[object]:
+        if self._web_search_cell is not None:
+            return self._web_search_cell
+        try:
+            from web_cell import WebSearchCell
+        except ImportError:
+            return None
+        try:
+            self._web_search_cell = WebSearchCell()
+        except (RuntimeError, OSError, ValueError, TypeError) as exc:
+            logger.warning("WebSearchCell init failed: %s", exc)
+            return None
+        return self._web_search_cell
+
+    def _format_web_results(self, results: Sequence[object]) -> str:
+        lines: List[str] = []
+        for idx, entry in enumerate(results, 1):
+            title = str(getattr(entry, "title", "")).strip()
+            snippet = str(getattr(entry, "snippet", "")).strip()
+            url = str(getattr(entry, "url", "")).strip()
+            if not (title or snippet or url):
+                continue
+            parts = [f"{idx}. {title}".strip()]
+            if snippet:
+                parts.append(snippet)
+            if url:
+                parts.append(f"\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a: {url}")
+            lines.append("\n".join(parts))
+        return "\n\n".join(lines)
+
+    def _web_search_answer(self, user_input: str) -> Tuple[str, bool]:
+        cell = self._get_web_search_cell()
+        if cell is None:
+            return "", False
+        try:
+            results, reason = cell.search(
+                user_input,
+                max_results=WEB_SEARCH_MAX_RESULTS,
+                allowed_domains=WEB_SEARCH_ALLOWED_DOMAINS,
+                use_html_fallback=WEB_SEARCH_USE_HTML_FALLBACK,
+            )
+        except (AttributeError, RuntimeError, OSError, ValueError, TypeError) as exc:
+            logger.warning("Web search failed: %s", exc)
+            return "", False
+        if not results:
+            if reason:
+                logger.info("Web search empty: %s", reason.get("reason_code"))
+            return "", False
+
+        context = self._format_web_results(results)
+        if not context:
+            return "", False
+
+        if self.llm_available:
+            system_prompt = (
+                "\u0422\u044b \u043e\u0442\u0432\u0435\u0447\u0430\u0435\u0448\u044c \u043a\u0440\u0430\u0442\u043a\u043e \u0438 \u043f\u043e \u0444\u0430\u043a\u0442\u0430\u043c. "
+                "\u0423\u043a\u0430\u0437\u044b\u0432\u0430\u0439 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438."
+            )
+            prompt = f"\u0412\u043e\u043f\u0440\u043e\u0441: {user_input}\n\n{context}\n\n\u041e\u0442\u0432\u0435\u0442:"
+            response: LLMResult = self.llm_client.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=WEB_SEARCH_MAX_TOKENS,
+                temperature=0.3,
+            )
+            if response.success and response.content:
+                return response.content, True
+            if response.error:
+                logger.info("Web search LLM error: %s", response.error)
+
+        fallback = "\u041d\u0430\u0448\u043b\u0430 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438:\n" + context
+        return fallback, False
+
+    def _maybe_web_search(self, user_input: str, intent: IntentType) -> Tuple[str, bool]:
+        if not WEB_SEARCH_ENABLED:
+            return "", False
+        if intent not in (IntentType.QUESTION, IntentType.EXPLANATION):
+            return "", False
+        return self._web_search_answer(user_input)
+
+    def _build_organ_hints(self, user_input: str) -> str:
+        system = self._get_hybrid_system()
+        if system is None:
+            return ""
+        try:
+            suggestions = system.suggest_organs(user_input, max_items=MAX_ORGAN_SUGGESTIONS)
+        except (AttributeError, RuntimeError, OSError, ValueError):
+            return ""
+        if not suggestions:
+            return ""
+        lines: List[str] = []
+        for entry in suggestions:
+            name = str(getattr(entry, "name", "")).strip()
+            if not name:
+                continue
+            description = str(getattr(entry, "description", "")).strip()
+            triggers = list(getattr(entry, "triggers", []) or [])
+            capabilities = list(getattr(entry, "capabilities", []) or [])
+            label = ""
+            if triggers:
+                label = "триггеры: " + ", ".join(triggers[:MAX_ORGAN_SUGGESTIONS])
+            elif capabilities:
+                label = "возможности: " + ", ".join(capabilities[:MAX_ORGAN_SUGGESTIONS])
+            if description and label:
+                lines.append(f"- {name}: {description} ({label})")
+            elif description:
+                lines.append(f"- {name}: {description}")
+            elif label:
+                lines.append(f"- {name}: {label}")
+            else:
+                lines.append(f"- {name}")
+        if not lines:
+            return ""
+        return "Подсказки по органам:\n" + "\n".join(lines)
+
+    def _append_organ_hints(self, response: str, context: Dict[str, Any]) -> str:
+        organ_hints = context.get("organ_hints")
+        if not organ_hints:
+            return response
+        return f"{response}\n\n{organ_hints}"
+
     def _consult_llm(
         self,
         user_input: str,
@@ -445,25 +642,27 @@ class NeiraCortex:
                 f"{IDENTITY_PROMPT}"
             )
             
-            if self.llm_manager:
-                response = self.llm_manager.generate(
-                    prompt=user_input,
-                    system_prompt=system_prompt,
-                    max_tokens=CORTEX_MAX_TOKENS,
-                    temperature=0.7
-                )
-                
-                if hasattr(response, 'content'):
-                    return response.content
-                elif isinstance(response, dict):
-                    return response.get("text", str(response))
-                else:
-                    return str(response)
-            else:
-                return self._fallback_response(intent)
+            organ_hints = context.get("organ_hints")
+            if organ_hints:
+                system_prompt = f"{system_prompt}\n\n{organ_hints}"
+
+            response: LLMResult = self.llm_client.generate(
+                prompt=user_input,
+                system_prompt=system_prompt,
+                max_tokens=CORTEX_MAX_TOKENS,
+                temperature=0.7,
+            )
+
+            if response.success and response.content:
+                return response.content
+
+            if response.error:
+                logger.warning("LLM ошибка: %s", response.error)
+
+            return self._fallback_response(intent)
             
-        except Exception as e:
-            print(f"⚠️ LLM ошибка: {e}")
+        except (RuntimeError, OSError, ValueError, TypeError) as e:
+            logger.warning("LLM ошибка: %s", e)
             return self._fallback_response(intent)
     
     def _hybrid_response(
@@ -546,10 +745,10 @@ class NeiraCortex:
     
     def _reorganize_pathways(self):
         """Реорганизация pathways"""
-        print("\n🔄 Запускаю реорганизацию Neural Pathways...")
+        logger.info("Запускаю реорганизацию Neural Pathways...")
         self.pathways.reorganize_all()
         self.pathways.save()
-        print("✅ Реорганизация завершена\n")
+        logger.info("Реорганизация завершена")
     
     def get_stats(self) -> Dict[str, Any]:
         """Получить статистику"""
@@ -567,7 +766,7 @@ class NeiraCortex:
         """Сохранить все компоненты"""
         self.pathways.save()
         self.synthesizer.save()
-        print("💾 Все компоненты сохранены")
+        logger.info("Все компоненты сохранены")
 
 
 # === Convenience функции ===
@@ -586,7 +785,7 @@ def create_cortex(
 # === Тестирование ===
 if __name__ == "__main__":
     print("\n" + "=" * 60)
-    print("🧠 Neira Cortex v2.0 Test")
+    print("Neira Cortex v2.0 Test")
     print("=" * 60 + "\n")
     
     # Создаем cortex
@@ -603,14 +802,14 @@ if __name__ == "__main__":
         ("что-то совсем новое и непонятное", "user5"),
     ]
     
-    print("📝 Обработка запросов:\n")
+    print("Обработка запросов:\n")
     
     for user_input, user_id in test_cases:
         result = cortex.process(user_input, user_id)
         
-        print(f"👤 {user_id}: \"{user_input}\"")
-        print(f"🤖 Neira: {result.response}")
-        print(f"   📊 Strategy: {result.strategy.value} | "
+        print(f"{user_id}: \"{user_input}\"")
+        print(f"Neira: {result.response}")
+        print(f"   Strategy: {result.strategy.value} | "
               f"Intent: {result.intent.value} | "
               f"Latency: {result.latency_ms:.1f}ms" +
               (f" | Tier: {result.pathway_tier.value}" if result.pathway_tier else ""))
@@ -618,7 +817,7 @@ if __name__ == "__main__":
     
     # Статистика
     print("=" * 60)
-    print("📊 Финальная статистика:")
+    print("Финальная статистика:")
     print("=" * 60)
     stats = cortex.get_stats()
     print(f"\nВсего запросов: {stats['total_requests']}")
@@ -637,4 +836,4 @@ if __name__ == "__main__":
     
     # Сохранение
     cortex.save_all()
-    print(f"\n💾 Данные сохранены")
+    print("\nДанные сохранены")

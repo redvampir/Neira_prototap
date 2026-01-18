@@ -816,19 +816,25 @@ class ResponseEngine:
     
     def get_autonomy_stats(self) -> Dict[str, Any]:
         """Статистика автономности"""
-        metrics = self.brain.get_metrics_summary(hours=24*7)  # 7 дней
+        metrics = self.brain.get_metrics_summary(hours=24 * 7)  # 7 дней
         tier_stats = self.tier_manager.get_tier_stats()
-        
-        # Считаем autonomy rate
-        total_requests = metrics.get('total_requests', 0)
-        autonomous_responses = metrics.get('autonomous_responses', 0)
-        autonomy_rate = (autonomous_responses / total_requests * 100) if total_requests > 0 else 0
-        
+
+        autonomy_rate = metrics.get('autonomy_rate_strict', metrics.get('autonomy_rate', 0))
+        autonomy_rate_weighted = metrics.get('autonomy_rate_weighted', 0)
+
         return {
             'cache': self.cache.get_stats(),
             'tiers': tier_stats,
-            'autonomy_rate_percent': round(autonomy_rate, 1),
-            'metrics': metrics
+            'autonomy_rate_percent': round(float(autonomy_rate), 1),
+            'autonomy_rate_weighted_percent': round(float(autonomy_rate_weighted), 1),
+            'definition': {
+                'autonomy_strict': 'autonomous_responses / total_requests',
+                'autonomy_weighted': '(autonomous_responses + hybrid_responses * 0.5) / total_requests',
+                'autonomous_responses': 'Ответы без LLM/веба (cortex/органы/кэш/pathways).',
+                'hybrid_responses': 'Ответы с частичным участием LLM.',
+                'llm_calls': 'Количество обращений к LLM.'
+            },
+            'metrics': metrics,
         }
     
     def evaluate_all_pathways(self) -> Dict[str, int]:

@@ -21,6 +21,9 @@ def __getattr__(name):
     elif name == "parallel_mind":
         from parallel_thinking import parallel_mind
         return parallel_mind
+    elif name == "get_brain_store":
+        from neira.brain.store import get_brain_store
+        return get_brain_store
     raise AttributeError(f"module 'neira.brain' has no attribute '{name}'")
 
 __all__ = [
@@ -28,4 +31,5 @@ __all__ = [
     "IntentType",
     "ParallelMind",
     "parallel_mind",
+    "get_brain_store",
 ]

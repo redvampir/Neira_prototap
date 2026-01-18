@@ -12,6 +12,21 @@ from typing import Any, Dict
 _personality_cache: Dict[str, Any] | None = None
 _identity_prompt_cache: str | None = None
 
+_CREATOR_ALIASES: Dict[str, Dict[str, Any]] = {
+    "pavel": {
+        "display_name": "Павел",
+        "aliases": ["павел", "pavel", "pasha", "паша"],
+    },
+    "sophia": {
+        "display_name": "София",
+        "aliases": ["софия", "sophia", "sofa", "софа", "sofya"],
+    },
+    "claude": {
+        "display_name": "Claude",
+        "aliases": ["claude", "клод"],
+    },
+}
+
 
 def load_personality() -> Dict[str, Any]:
     """
@@ -94,6 +109,10 @@ def build_identity_prompt() -> str:
         parts.append("\n=== МОИ ПРИНЦИПЫ ===")
         for pref in preferences[:5]:
             parts.append(f"• {pref}")
+
+    parts.append("\n=== ПРИВАТНОСТЬ ===")
+    parts.append("Личные данные пользователей и создателей не раскрываю.")
+    parts.append("Не обсуждаю здоровье, диагнозы, контакты и приватные сведения.")
     
     _identity_prompt_cache = "\n".join(parts)
     return _identity_prompt_cache
@@ -109,26 +128,45 @@ def get_creator_name(user_name: str | None) -> str | None:
     Returns:
         Имя создателя если найден, иначе None
     """
-    if not user_name:
+    info = resolve_creator_identity(user_name)
+    if not info:
         return None
-    
+    return info["role"]
+
+
+def resolve_creator_identity(user_text: str | None) -> Dict[str, str] | None:
+    """
+    Определяет создателя по пользовательскому тексту.
+
+    Returns:
+        Словарь с ключом, отображаемым именем и ролью или None
+    """
+    creator_key = _match_creator_key(user_text)
+    if not creator_key:
+        return None
+
     personality = load_personality()
     creators = personality.get("creators", {})
-    
-    user_lower = user_name.lower()
-    
-    # Проверяем известных создателей
-    creator_names = {
-        "pavel": ["павел", "pavel", "pasha", "паша"],
-        "sophia": ["софия", "sophia", "sofa", "софа", "sofya"],
-        "claude": ["claude", "клод"],
+    if creator_key not in creators:
+        return None
+
+    role = creators[creator_key].get("role", creator_key.capitalize())
+    display_name = _CREATOR_ALIASES[creator_key]["display_name"]
+    return {
+        "key": creator_key,
+        "display_name": display_name,
+        "role": role,
     }
-    
-    for creator_key, aliases in creator_names.items():
-        if creator_key in creators:
-            if any(alias in user_lower for alias in aliases):
-                return creators[creator_key].get("role", creator_key.capitalize())
-    
+
+
+def _match_creator_key(user_text: str | None) -> str | None:
+    if not user_text:
+        return None
+    text = user_text.lower()
+    for key, data in _CREATOR_ALIASES.items():
+        aliases = data.get("aliases", [])
+        if any(alias in text for alias in aliases):
+            return key
     return None
 
 

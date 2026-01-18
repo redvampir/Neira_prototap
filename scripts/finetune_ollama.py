@@ -8,6 +8,7 @@
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,9 +19,12 @@ class OllamaFineTuner:
     def __init__(self, base_model: str = "ministral-3:3b"):
         self.base_model = base_model
         self.project_root = Path(__file__).parent
-        self.dataset_file = self.project_root / "training_dataset.jsonl"
-        self.modelfile = self.project_root / "Modelfile"
-        self.new_model_name = "neira-cell-router:latest"
+        dataset_override = os.getenv("NEIRA_TRAINING_DATASET")
+        modelfile_override = os.getenv("NEIRA_TRAINING_MODELFILE")
+        name_override = os.getenv("NEIRA_TRAINING_MODEL_NAME")
+        self.dataset_file = Path(dataset_override) if dataset_override else (self.project_root / "training_dataset.jsonl")
+        self.modelfile = Path(modelfile_override) if modelfile_override else (self.project_root / "Modelfile")
+        self.new_model_name = name_override or "neira-cell-router:latest"
     
     def check_ollama(self) -> bool:
         """Проверить что Ollama установлен и работает."""

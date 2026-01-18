@@ -30,6 +30,15 @@ def __getattr__(name):
     elif name == "get_local_embedding":
         from neira.core.embeddings import get_local_embedding
         return get_local_embedding
+    elif name == "LLMClient":
+        from neira.core.llm_adapter import LLMClient
+        return LLMClient
+    elif name == "LLMResult":
+        from neira.core.llm_adapter import LLMResult
+        return LLMResult
+    elif name == "build_default_llm_client":
+        from neira.core.llm_adapter import build_default_llm_client
+        return build_default_llm_client
     raise AttributeError(f"module 'neira.core' has no attribute '{name}'")
 
 __all__ = [
@@ -40,4 +49,7 @@ __all__ = [
     "LLMManager",
     "ExperienceSystem",
     "get_local_embedding",
+    "LLMClient",
+    "LLMResult",
+    "build_default_llm_client",
 ]
