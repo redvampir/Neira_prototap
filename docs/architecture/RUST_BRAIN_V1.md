@@ -57,4 +57,5 @@
 
 - [RUST_BRAIN_DATA_FORMATS.md](RUST_BRAIN_DATA_FORMATS.md) — схемы данных, сериализация и правила версионирования.
 - [RUST_BRAIN_CRATES.md](RUST_BRAIN_CRATES.md) — состав модулей, границы ответственности и минимальные интерфейсы.
+- [RUST_BRAIN_MIGRATION_ROADMAP.md](RUST_BRAIN_MIGRATION_ROADMAP.md) — дорожная карта миграции данных, инварианты и план деградации.
 - [RUST_BRAIN_ROADMAP.md](RUST_BRAIN_ROADMAP.md) — этапы развития, критерии готовности и риски.
