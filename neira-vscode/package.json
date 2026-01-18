@@ -1,0 +1,608 @@
+{
+  "name": "neira-assistant",
+  "displayName": "Neira AI Assistant",
+  "description": "🧠 Локальный AI-ассистент Нейра для VS Code и Cursor. Работает через Ollama без облачных зависимостей.",
+  "version": "1.0.0",
+  "publisher": "neira",
+  "license": "MIT",
+  "icon": "media/neira-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/redvampir/Neira_prototap"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "neira",
+    "ollama",
+    "local",
+    "chat",
+    "code generation",
+    "cursor"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "neira.openChat",
+        "title": "Открыть чат с Нейрой",
+        "category": "Neira",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "neira.explainCode",
+        "title": "Объяснить выделенный код",
+        "category": "Neira",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "neira.generateCode",
+        "title": "Сгенерировать код",
+        "category": "Neira",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "neira.askAboutSelection",
+        "title": "Спросить Нейру об этом",
+        "category": "Neira",
+        "icon": "$(question)"
+      },
+      {
+        "command": "neira.checkStatus",
+        "title": "Проверить статус сервера",
+        "category": "Neira",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "neira.startServer",
+        "title": "Запустить сервер Нейры",
+        "category": "Neira",
+        "icon": "$(play)"
+      },
+      {
+        "command": "neira.stopServer",
+        "title": "Остановить сервер Нейры",
+        "category": "Neira",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "neira.restartServer",
+        "title": "Перезапустить сервер Нейры",
+        "category": "Neira",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "neira.refreshActions",
+        "title": "Обновить действия",
+        "category": "Neira",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "neira.toggleServer",
+        "title": "Вкл/Выкл сервер Нейры",
+        "category": "Neira",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "neira.showServerLog",
+        "title": "Показать лог сервера",
+        "category": "Neira",
+        "icon": "$(output)"
+      },
+      {
+        "command": "neira.runInTerminal",
+        "title": "Выполнить команду в терминале",
+        "category": "Neira",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "neira.runSelectedInTerminal",
+        "title": "Выполнить выделенное в терминале",
+        "category": "Neira",
+        "icon": "$(play)"
+      },
+      {
+        "command": "neira.fixCode",
+        "title": "Исправить код (Нейра)",
+        "category": "Neira",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "neira.improveCode",
+        "title": "Улучшить код (Нейра)",
+        "category": "Neira",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "neira.generateDocs",
+        "title": "Сгенерировать документацию",
+        "category": "Neira",
+        "icon": "$(book)"
+      },
+      {
+        "command": "neira.generateTests",
+        "title": "Сгенерировать тесты",
+        "category": "Neira",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "neira.refactorCode",
+        "title": "Рефакторинг кода",
+        "category": "Neira",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "neira.fixError",
+        "title": "Исправить ошибку (Нейра)",
+        "category": "Neira",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "neira.generateCommitMessage",
+        "title": "Сгенерировать commit message",
+        "category": "Neira",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "neira.explainChanges",
+        "title": "Объяснить изменения (diff)",
+        "category": "Neira",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "neira.toggleInlineCompletions",
+        "title": "Вкл/Выкл автодополнение",
+        "category": "Neira",
+        "icon": "$(symbol-keyword)"
+      },
+      {
+        "command": "neira.clearCompletionCache",
+        "title": "Очистить кэш автодополнения",
+        "category": "Neira",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "neira.searchInFiles",
+        "title": "Поиск в файлах (grep)",
+        "category": "Neira",
+        "icon": "$(search)"
+      },
+      {
+        "command": "neira.showProjectStructure",
+        "title": "Структура проекта",
+        "category": "Neira",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "neira.setWorkspace",
+        "title": "Установить workspace",
+        "category": "Neira",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "neira.readCurrentFile",
+        "title": "Прочитать текущий файл",
+        "category": "Neira",
+        "icon": "$(file)"
+      },
+      {
+        "command": "neira.showTools",
+        "title": "Показать инструменты",
+        "category": "Neira",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "neira.executeCommand",
+        "title": "Выполнить команду",
+        "category": "Neira",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "neira.analyzeFile",
+        "title": "Анализировать файл",
+        "category": "Neira",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "neira.systemInfo",
+        "title": "Информация о системе",
+        "category": "Neira",
+        "icon": "$(info)"
+      },
+      {
+        "command": "neira.undoEdits",
+        "title": "Отменить последние правки",
+        "category": "Neira",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "neira.editHistory",
+        "title": "История редактирований",
+        "category": "Neira",
+        "icon": "$(history)"
+      },
+      {
+        "command": "neira.indexWorkspace",
+        "title": "Индексировать workspace",
+        "category": "Neira",
+        "icon": "$(database)"
+      },
+      {
+        "command": "neira.reindexWorkspace",
+        "title": "Переиндексировать workspace",
+        "category": "Neira",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "neira.searchSymbols",
+        "title": "Поиск символов",
+        "category": "Neira",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "neira.clearSearchResults",
+        "title": "Очистить результаты поиска",
+        "category": "Neira",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "neira.getContext",
+        "title": "Получить контекст",
+        "category": "Neira",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "neira.showTokenInfo",
+        "title": "Информация о токенах",
+        "category": "Neira",
+        "icon": "$(symbol-numeric)"
+      },
+      {
+        "command": "neira.buildSmartContext",
+        "title": "Собрать умный контекст",
+        "category": "Neira",
+        "icon": "$(combine)"
+      },
+      {
+        "command": "neira.clearTokenCache",
+        "title": "Очистить кэш токенов",
+        "category": "Neira",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "neira.showIntrospection",
+        "title": "Состояние Нейры",
+        "category": "Neira",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "neira.reflect",
+        "title": "Рефлексия Нейры",
+        "category": "Neira",
+        "icon": "$(mirror)"
+      },
+      {
+        "command": "neira.toggleCuriosity",
+        "title": "Вкл/Выкл любопытство",
+        "category": "Neira",
+        "icon": "$(question)"
+      },
+      {
+        "command": "neira.rememberSelection",
+        "title": "Запомнить выделенное",
+        "category": "Neira",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "neira.searchMemory",
+        "title": "Поиск в памяти",
+        "category": "Neira",
+        "icon": "$(search-fuzzy)"
+      },
+      {
+        "command": "neira.quickFeedback",
+        "title": "Быстрая обратная связь",
+        "category": "Neira",
+        "icon": "$(feedback)"
+      },
+      {
+        "command": "neira.learn",
+        "title": "Обучить Нейру",
+        "category": "Neira",
+        "icon": "$(mortar-board)"
+      },
+      {
+        "command": "neira.learnFromUrl",
+        "title": "Обучить из URL",
+        "category": "Neira",
+        "icon": "$(link)"
+      },
+      {
+        "command": "neira.learnFromFile",
+        "title": "Обучить из файла",
+        "category": "Neira",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "neira.learningStats",
+        "title": "Статистика обучения",
+        "category": "Neira",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "neira.learnFromSelection",
+        "title": "Обучить из выделенного",
+        "category": "Neira",
+        "icon": "$(selection)"
+      }
+      ,
+      {
+        "command": "neira.refreshModels",
+        "title": "Обновить список моделей",
+        "category": "Neira",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "neira.switchModel",
+        "title": "Переключить модель",
+        "category": "Neira",
+        "icon": "$(radio-tower)"
+      }
+      ,
+      { "command": "neira.listLayers", "title": "Список слоёв моделей", "category": "Neira", "icon": "$(layers)" },
+      { "command": "neira.activateLayer", "title": "Активировать слой", "category": "Neira", "icon": "$(check)" },
+      { "command": "neira.addLayer", "title": "Добавить слой", "category": "Neira", "icon": "$(add)" },
+      { "command": "neira.deleteLayer", "title": "Удалить слой", "category": "Neira", "icon": "$(trash)" }
+      ,
+      {
+        "command": "neira.setAsCopilotModel",
+        "title": "Сделать Neira моделью для Copilot Chat",
+        "category": "Neira",
+        "icon": "$(hubot)"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "neira.neira",
+        "fullName": "Neira",
+        "name": "neira",
+        "description": "Локальный AI-ассистент Нейра (Ollama)",
+        "isSticky": true
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neira",
+          "title": "Neira",
+          "icon": "media/neira-icon.png"
+        }
+      ]
+    },
+    "views": {
+      "neira": [
+        {
+          "type": "webview",
+          "id": "neira.chatView",
+          "name": "Чат"
+        },
+        {
+          "id": "neira.actionsView",
+          "name": "Действия"
+        },
+        {
+          "id": "neira.statusView",
+          "name": "Статус"
+        },
+        {
+          "id": "neira.indexerView",
+          "name": "Индекс кода"
+        }
+        ,
+        {
+          "id": "neira.modelsView",
+          "name": "Модели"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "neira.explainCode",
+          "when": "editorHasSelection",
+          "group": "neira@1"
+        },
+        {
+          "command": "neira.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "neira@2"
+        },
+        {
+          "command": "neira.fixCode",
+          "when": "editorHasSelection",
+          "group": "neira@3"
+        },
+        {
+          "command": "neira.improveCode",
+          "when": "editorHasSelection",
+          "group": "neira@4"
+        },
+        {
+          "command": "neira.runSelectedInTerminal",
+          "when": "editorHasSelection",
+          "group": "neira@5"
+        },
+        {
+          "command": "neira.generateDocs",
+          "when": "editorHasSelection",
+          "group": "neira@6"
+        },
+        {
+          "command": "neira.generateTests",
+          "when": "editorHasSelection",
+          "group": "neira@7"
+        },
+        {
+          "command": "neira.refactorCode",
+          "when": "editorHasSelection",
+          "group": "neira@8"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "neira.generateCommitMessage",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "neira.checkStatus",
+          "when": "view == neira.chatView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "neira.learn",
+          "when": "view == neira.chatView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "neira.refreshActions",
+          "when": "view == neira.actionsView",
+          "group": "navigation"
+        },
+        {
+          "command": "neira.startServer",
+          "when": "view == neira.statusView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "neira.stopServer",
+          "when": "view == neira.statusView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "neira.restartServer",
+          "when": "view == neira.statusView",
+          "group": "navigation@3"
+        },
+        {
+          "command": "neira.reindexWorkspace",
+          "when": "view == neira.indexerView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "neira.searchSymbols",
+          "when": "view == neira.indexerView",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "neira.startServer",
+          "when": "viewItem == serverOffline",
+          "group": "inline"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "neira.openChat",
+        "key": "ctrl+shift+n",
+        "mac": "cmd+shift+n"
+      },
+      {
+        "command": "neira.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "neira.askAboutSelection",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "Neira",
+      "properties": {
+        "neira.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "URL сервера Нейры"
+        },
+        "neira.autoStartServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Автоматически запускать сервер при открытии VS Code"
+        },
+        "neira.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Путь к Python для запуска сервера"
+        },
+        "neira.projectPath": {
+          "type": "string",
+          "default": "",
+          "description": "Путь к папке проекта Neira (где находится neira_server.py)"
+        },
+        "neira.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать статус в строке состояния"
+        },
+        "neira.enableInlineCompletions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Включить автодополнение кода (Ghost Text)"
+        },
+        "neira.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать кнопки над функциями"
+        },
+        "neira.completionDelay": {
+          "type": "number",
+          "default": 300,
+          "description": "Задержка перед запросом автодополнения (мс)"
+        },
+        "neira.language": {
+          "type": "string",
+          "default": "ru",
+          "enum": ["ru", "en"],
+          "description": "Язык интерфейса"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

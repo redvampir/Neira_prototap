@@ -1,0 +1,188 @@
+{
+  "connections": {
+    "ca842bd7eea6": {
+      "connection_id": "ca842bd7eea6",
+      "source": "user_greeting",
+      "target": "response_hello",
+      "strength": 0.9,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:24:54.439178",
+      "created_at": "2026-01-02T15:24:54.439181",
+      "category": "general",
+      "protected": true,
+      "pruning_score": 0.0
+    },
+    "67debd0b63b3": {
+      "connection_id": "67debd0b63b3",
+      "source": "old_topic",
+      "target": "forgotten_response",
+      "strength": 0.05,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:24:54.439816",
+      "created_at": "2026-01-02T15:24:54.439819",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "46e95abe2358": {
+      "connection_id": "46e95abe2358",
+      "source": "frequent_topic",
+      "target": "good_response",
+      "strength": 0.75,
+      "usage_count": 2,
+      "last_used": "2026-01-02T15:24:54.441245",
+      "created_at": "2026-01-02T15:24:54.440492",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "a21409b24d01": {
+      "connection_id": "a21409b24d01",
+      "source": "user_greeting",
+      "target": "response_hello",
+      "strength": 0.9,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:25:38.161009",
+      "created_at": "2026-01-02T15:25:38.161011",
+      "category": "general",
+      "protected": true,
+      "pruning_score": 0.0
+    },
+    "d6fbbdde5bac": {
+      "connection_id": "d6fbbdde5bac",
+      "source": "old_topic",
+      "target": "forgotten_response",
+      "strength": 0.05,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:25:38.161583",
+      "created_at": "2026-01-02T15:25:38.161586",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "c48620de2e6f": {
+      "connection_id": "c48620de2e6f",
+      "source": "frequent_topic",
+      "target": "good_response",
+      "strength": 0.75,
+      "usage_count": 2,
+      "last_used": "2026-01-02T15:25:38.162806",
+      "created_at": "2026-01-02T15:25:38.162080",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "b0758dc373cb": {
+      "connection_id": "b0758dc373cb",
+      "source": "user_greeting",
+      "target": "response_hello",
+      "strength": 0.9,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:25:57.402557",
+      "created_at": "2026-01-02T15:25:57.402560",
+      "category": "general",
+      "protected": true,
+      "pruning_score": 0.0
+    },
+    "1f5390da4f72": {
+      "connection_id": "1f5390da4f72",
+      "source": "old_topic",
+      "target": "forgotten_response",
+      "strength": 0.05,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:25:57.403221",
+      "created_at": "2026-01-02T15:25:57.403224",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "89dc31c32181": {
+      "connection_id": "89dc31c32181",
+      "source": "frequent_topic",
+      "target": "good_response",
+      "strength": 0.75,
+      "usage_count": 2,
+      "last_used": "2026-01-02T15:25:57.404690",
+      "created_at": "2026-01-02T15:25:57.403811",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "a17e29f57785": {
+      "connection_id": "a17e29f57785",
+      "source": "user_greeting",
+      "target": "response_hello",
+      "strength": 0.9,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:27:56.399329",
+      "created_at": "2026-01-02T15:27:56.399332",
+      "category": "general",
+      "protected": true,
+      "pruning_score": 0.0
+    },
+    "6ffe6e4d02bc": {
+      "connection_id": "6ffe6e4d02bc",
+      "source": "old_topic",
+      "target": "forgotten_response",
+      "strength": 0.05,
+      "usage_count": 1,
+      "last_used": "2026-01-02T15:27:56.400244",
+      "created_at": "2026-01-02T15:27:56.400248",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    },
+    "928add85843b": {
+      "connection_id": "928add85843b",
+      "source": "frequent_topic",
+      "target": "good_response",
+      "strength": 0.75,
+      "usage_count": 2,
+      "last_used": "2026-01-02T15:27:56.402152",
+      "created_at": "2026-01-02T15:27:56.401085",
+      "category": "general",
+      "protected": false,
+      "pruning_score": 0.0
+    }
+  },
+  "pruning_history": [
+    {
+      "event_id": "902e36bf98ab",
+      "timestamp": "2026-01-02T15:24:54.443320",
+      "strategy": "hybrid",
+      "pruned_count": 0,
+      "total_before": 3,
+      "total_after": 3,
+      "pruned_ids": []
+    },
+    {
+      "event_id": "b432170b588e",
+      "timestamp": "2026-01-02T15:25:38.165220",
+      "strategy": "hybrid",
+      "pruned_count": 0,
+      "total_before": 6,
+      "total_after": 6,
+      "pruned_ids": []
+    },
+    {
+      "event_id": "cebbbf114179",
+      "timestamp": "2026-01-02T15:25:57.407676",
+      "strategy": "hybrid",
+      "pruned_count": 0,
+      "total_before": 9,
+      "total_after": 9,
+      "pruned_ids": []
+    },
+    {
+      "event_id": "da25b4b7ec41",
+      "timestamp": "2026-01-02T15:27:56.405652",
+      "strategy": "hybrid",
+      "pruned_count": 0,
+      "total_before": 12,
+      "total_after": 12,
+      "pruned_ids": []
+    }
+  ],
+  "total_pruned": 0,
+  "last_pruning": "2026-01-02T15:27:56.405666"
+}

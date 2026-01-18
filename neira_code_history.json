@@ -1,0 +1,68 @@
+[
+  {
+    "id": "gen_20251212_104817",
+    "request": "Создай функцию sort_numbers на Python",
+    "generated_code": "# Создай функцию sort_numbers на Python\n# TODO: Реализовать\npass",
+    "language": "python",
+    "template_used": null,
+    "timestamp": "2025-12-12T10:48:17.009718",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  },
+  {
+    "id": "gen_20251212_104817",
+    "request": "Создай класс Person на Python",
+    "generated_code": "class person:\n    \"\"\"\n    Создай класс Person на Python\n    \"\"\"\n    \n    def __init__(self, name):\n            self.name = name\n    \n    def process(self, ):\n        \"\"\"\n        Обработка\n        \"\"\"\n            pass",
+    "language": "python",
+    "template_used": "python_class",
+    "timestamp": "2025-12-12T10:48:17.011785",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  },
+  {
+    "id": "gen_20251212_104817",
+    "request": "Создай HTML страницу с заголовком 'Привет'",
+    "generated_code": "<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Моя страница</title>\n</head>\n<body>\n    <h1>Заголовок</h1>\n</body>\n</html>",
+    "language": "html",
+    "template_used": "html_page",
+    "timestamp": "2025-12-12T10:48:17.014203",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  },
+  {
+    "id": "gen_20251212_104826",
+    "request": "Создай функцию sort_numbers на Python",
+    "generated_code": "# Создай функцию sort_numbers на Python\n# TODO: Реализовать\npass",
+    "language": "python",
+    "template_used": null,
+    "timestamp": "2025-12-12T10:48:26.192558",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  },
+  {
+    "id": "gen_20251212_104826",
+    "request": "Создай класс Person на Python",
+    "generated_code": "class person:\n    \"\"\"\n    Создай класс Person на Python\n    \"\"\"\n    \n    def __init__(self, name):\n            self.name = name\n    \n    def process(self, ):\n        \"\"\"\n        Обработка\n        \"\"\"\n            pass",
+    "language": "python",
+    "template_used": "python_class",
+    "timestamp": "2025-12-12T10:48:26.196201",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  },
+  {
+    "id": "gen_20251212_104826",
+    "request": "Создай HTML страницу с заголовком 'Привет'",
+    "generated_code": "<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Моя страница</title>\n</head>\n<body>\n    <h1>Заголовок</h1>\n</body>\n</html>",
+    "language": "html",
+    "template_used": "html_page",
+    "timestamp": "2025-12-12T10:48:26.198992",
+    "user_rating": null,
+    "corrections": [],
+    "final_code": null
+  }
+]

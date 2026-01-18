@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Neira">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="Neira AI Assistant - персональный AI помощник">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+    <title>Neira AI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🧠 Neira AI</h1>
+            <div class="header-controls">
+                <button class="stats-toggle" id="statsToggle" title="Показать статистику">📊</button>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Chat Section -->
+            <div class="chat-section">
+                <div class="chat-container">
+                    <div class="messages" id="messages">
+                        <div class="message system">
+                            <div class="message-content">
+                                Привет! Я Neira, AI-ассистент с поддержкой 6 моделей (3 локальных + 3 облачных).
+                                Чем могу помочь?
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stage-indicator" id="stageIndicator" style="display: none;">
+                        <div class="stage-icon">⚙️</div>
+                        <div class="stage-text" id="stageText"></div>
+                    </div>
+
+                    <div class="input-container">
+                        <textarea
+                            id="userInput"
+                            placeholder="Введите сообщение... (Enter для отправки, Shift+Enter для новой строки)"
+                            rows="3"
+                        ></textarea>
+                        <button id="sendButton" class="send-button">
+                            <span>Отправить</span>
+                            <span class="shortcut">⏎</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Sidebar -->
+            <div class="stats-sidebar">
+                <div class="stats-section">
+                    <h3>📊 Статистика</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Текущая модель:</span>
+                        <span class="stat-value" id="currentModel">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Переключений:</span>
+                        <span class="stat-value" id="modelSwitches">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">VRAM:</span>
+                        <span class="stat-value" id="vramUsage">0 / 8 GB</span>
+                    </div>
+                </div>
+
+                <div class="stats-section">
+                    <h3>🤖 Модели</h3>
+                    <div class="model-status">
+                        <h4>Локальные:</h4>
+                        <div class="model-item">
+                            <span class="model-indicator" id="modelCode"></span>
+                            <span>Code (7B)</span>
+                        </div>
+                        <div class="model-item">
+                            <span class="model-indicator" id="modelReason"></span>
+                            <span>Reason (7B)</span>
+                        </div>
+                        <div class="model-item">
+                            <span class="model-indicator" id="modelPersonality"></span>
+                            <span>Personality</span>
+                        </div>
+                    </div>
+                    <div class="model-status">
+                        <h4>Облачные:</h4>
+                        <div class="model-item">
+                            <span class="model-indicator" id="cloudCode"></span>
+                            <span>Code (480B)</span>
+                        </div>
+                        <div class="model-item">
+                            <span class="model-indicator" id="cloudUniversal"></span>
+                            <span>Universal (671B)</span>
+                        </div>
+                        <div class="model-item">
+                            <span class="model-indicator" id="cloudVision"></span>
+                            <span>Vision (235B)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-section">
+                    <h3>💾 Память</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Записей:</span>
+                        <span class="stat-value" id="memoryTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Контекст:</span>
+                        <span class="stat-value" id="memoryContext">0</span>
+                    </div>
+                </div>
+
+                <div class="stats-section">
+                    <h3>🎯 Опыт</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Задач:</span>
+                        <span class="stat-value" id="expTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Рейтинг:</span>
+                        <span class="stat-value" id="expScore">-</span>
+                    </div>
+                </div>
+
+                <button id="refreshStats" class="refresh-button">🔄 Обновить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

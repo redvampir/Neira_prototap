@@ -1,0 +1,174 @@
+{
+  "topics": {
+    "программирование на Python": {
+      "topic_id": "программирование на Python",
+      "name": "technical",
+      "category": 0.8,
+      "activation": 0.49383567972745496,
+      "base_activation": 1.0,
+      "inhibited_by": [
+        "чувства и эмоции",
+        "создание игры",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_5077",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_8627",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_2644",
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:24:54.364797",
+      "activation_count": 1
+    },
+    "чувства и эмоции": {
+      "topic_id": "чувства и эмоции",
+      "name": "emotional",
+      "category": 0.5,
+      "activation": 0.5198270312920577,
+      "base_activation": 1.0,
+      "inhibited_by": [
+        "создание игры",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_5077",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_8627",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_2644",
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:24:54.365326",
+      "activation_count": 1
+    },
+    "создание игры": {
+      "topic_id": "создание игры",
+      "name": "creative",
+      "category": 0.3,
+      "activation": 0.5471863487284818,
+      "base_activation": 1.0,
+      "inhibited_by": [
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_5077",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_8627",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_2644",
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:24:54.366022",
+      "activation_count": 1
+    },
+    "python_prog": {
+      "topic_id": "python_prog",
+      "name": "программирование на Python",
+      "category": "technical",
+      "activation": 0.75765625,
+      "base_activation": 0.8,
+      "inhibited_by": [
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-04T06:10:00.091545",
+      "activation_count": 4
+    },
+    "feelings": {
+      "topic_id": "feelings",
+      "name": "чувства и эмоции",
+      "category": "emotional",
+      "activation": 0.733125,
+      "base_activation": 0.5,
+      "inhibited_by": [
+        "game_dev"
+      ],
+      "last_activated": "2026-01-04T06:10:00.092538",
+      "activation_count": 4
+    },
+    "game_dev": {
+      "topic_id": "game_dev",
+      "name": "создание игры",
+      "category": "creative",
+      "activation": 0.44999999999999996,
+      "base_activation": 0.3,
+      "inhibited_by": [],
+      "last_activated": "2026-01-04T06:10:00.093212",
+      "activation_count": 4
+    },
+    "input_5077": {
+      "topic_id": "input_5077",
+      "name": "Помоги мне написать функцию на Python",
+      "category": "technical",
+      "activation": 0.3365384241783105,
+      "base_activation": 0.8,
+      "inhibited_by": [
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_8627",
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_2644",
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:25:38.227616",
+      "activation_count": 1
+    },
+    "input_8627": {
+      "topic_id": "input_8627",
+      "name": "Помоги мне написать функцию на Python",
+      "category": "technical",
+      "activation": 0.49217011126403815,
+      "base_activation": 0.8,
+      "inhibited_by": [
+        "python_prog",
+        "feelings",
+        "game_dev",
+        "input_2644",
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:25:57.444827",
+      "activation_count": 1
+    },
+    "input_2644": {
+      "topic_id": "input_2644",
+      "name": "Помоги мне написать функцию на Python",
+      "category": "technical",
+      "activation": 0.7197734375,
+      "base_activation": 0.8,
+      "inhibited_by": [
+        "python_prog",
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-02T15:27:56.456190",
+      "activation_count": 1
+    }
+  }
+}

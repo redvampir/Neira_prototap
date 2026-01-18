@@ -1,0 +1,32 @@
+{
+  "sources": [
+    "training_data\\english\\basics.txt",
+    "training_data\\english\\phrases.txt"
+  ],
+  "result": {
+    "total": 2,
+    "success": 2,
+    "failed": 0,
+    "total_words": 138,
+    "results": [
+      {
+        "success": true,
+        "title": "basics.txt",
+        "source_type": "file",
+        "word_count": 84,
+        "chunks": 1,
+        "summary": null,
+        "message": "Изучила: basics.txt (84 слов)"
+      },
+      {
+        "success": true,
+        "title": "phrases.txt",
+        "source_type": "file",
+        "word_count": 54,
+        "chunks": 1,
+        "summary": null,
+        "message": "Изучила: phrases.txt (54 слов)"
+      }
+    ]
+  }
+}

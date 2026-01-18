@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "alerts": [
+    {
+      "id": "metric_disk",
+      "severity": "warning",
+      "source": "metrics",
+      "message": "disk повышен: 93.2%",
+      "timestamp": "2025-12-11T12:30:50.030991",
+      "resolved": false,
+      "resolution": null
+    },
+    {
+      "id": "error_ValueError:test",
+      "severity": "error",
+      "source": "test",
+      "message": "Повторяющаяся ошибка (3x): ValueError - Invalid input",
+      "timestamp": "2025-12-11T12:30:50.033377",
+      "resolved": false,
+      "resolution": null
+    },
+    {
+      "id": "metric_disk",
+      "severity": "warning",
+      "source": "metrics",
+      "message": "disk повышен: 93.2%",
+      "timestamp": "2025-12-11T12:37:56.743300",
+      "resolved": false,
+      "resolution": null
+    },
+    {
+      "id": "metric_disk",
+      "severity": "warning",
+      "source": "metrics",
+      "message": "disk повышен: 93.2%",
+      "timestamp": "2025-12-11T12:38:14.749094",
+      "resolved": false,
+      "resolution": null
+    }
+  ]
+}

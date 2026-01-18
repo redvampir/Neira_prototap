@@ -1,0 +1,86 @@
+# Cursor AI Rules for Neira Project
+# This file is automatically read by Cursor AI
+
+# CRITICAL: Read these rules before ANY code generation
+
+## STOP RULES - VIOLATIONS WILL BREAK THE BUILD
+
+1. NEVER create Python files in project root
+   - Use: neira/, scripts/, tests/
+   - If unsure, ask the user
+
+2. NEVER create a file without searching first
+   - Search: "class ClassName" or "def function_name"
+   - If similar exists, extend it instead
+
+3. NEVER use bare except or except Exception without logging
+   - Always specify: except (ValueError, TypeError) as e:
+   - Always log: logger.warning(f"Description: {e}")
+
+4. NEVER write functions longer than 60 lines
+   - Split into smaller functions immediately
+   - Extract helper methods
+
+5. NEVER hardcode numbers
+   - Use neira/config.py for all constants
+   - Import: from neira.config import CONSTANT_NAME
+
+## FILE PLACEMENT
+
+| Type | Correct Path |
+|------|-------------|
+| Core logic | neira/core/, neira/brain/, neira/organs/ |
+| Utilities | neira/utils/ |
+| Constants | neira/config.py |
+| CLI scripts | scripts/ |
+| Unit tests | tests/unit/ |
+| Integration tests | tests/integration/ |
+
+## REQUIRED CODE PATTERNS
+
+```python
+# Type hints required
+def process(text: str, context: dict | None = None) -> str:
+    """
+    Brief description.
+    
+    Args:
+        text: Input text
+        context: Optional context
+        
+    Returns:
+        Processed text
+    """
+
+# Exception handling
+try:
+    risky_operation()
+except (ValueError, KeyError) as e:
+    logger.warning(f"Operation failed: {e}")
+    # handle or re-raise
+
+# Imports from config
+from neira.config import MEMORY_MAX_LONG_TERM, LLM_DEFAULT_TIMEOUT
+```
+
+## BEFORE GENERATING CODE
+
+Ask yourself:
+1. Does this file belong in the root? → NO, move to neira/ or scripts/
+2. Does similar code already exist? → Search first
+3. Is my function > 60 lines? → Split it
+4. Am I using bare except? → Add specific types
+5. Am I hardcoding numbers? → Use config.py
+
+## VALIDATION COMMAND
+
+After generating code, suggest running:
+```bash
+python scripts/validate_code.py <filename>
+```
+
+## LANGUAGE
+
+- Code identifiers: English
+- Comments/docstrings: Russian
+- User-facing messages: Russian

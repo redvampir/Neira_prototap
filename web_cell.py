@@ -1,202 +1,350 @@
-"""
-Neira Web Cell v0.3 — Поиск в интернете
-Позволяет искать информацию и учиться из сети.
-
-Использует DuckDuckGo (бесплатно, без API ключей).
-pip install duckduckgo-search
+﻿"""
+Neira Web Cell v0.4
 """
 
-import importlib
+from __future__ import annotations
+
 import importlib.util
-from urllib.parse import urlparse
+import json
+import logging
+import re
+import sys
+from dataclasses import dataclass
+from html import unescape
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-REQUESTS_AVAILABLE = importlib.util.find_spec("requests") is not None
+from neira.utils.web_search_utils import (
+    env_bool,
+    env_int,
+    env_str,
+    is_allowed_domain,
+    normalize_domains,
+    resolve_ddg_url,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _module_available(name: str) -> bool:
+    if name in sys.modules:
+        return True
+    return importlib.util.find_spec(name) is not None
+
+
+REQUESTS_AVAILABLE = _module_available("requests")
+DDGS_AVAILABLE = _module_available("ddgs")
+
 if REQUESTS_AVAILABLE:
     import requests
 else:
-    class _RequestsStub:
-        def post(self, *args, **kwargs):
-            raise ImportError("requests не установлен")
+    requests = None  # type: ignore
 
-    requests = _RequestsStub()
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
-
-# Попробуем импортировать duckduckgo
-DDGS_AVAILABLE = importlib.util.find_spec("duckduckgo_search") is not None
 if DDGS_AVAILABLE:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
+    try:
+        from ddgs.exceptions import DDGSException
+    except (ImportError, AttributeError):
+        DDGSException = None  # type: ignore
 else:
-    print("⚠️ duckduckgo-search не установлен. Выполни: pip install duckduckgo-search")
+    DDGS = None  # type: ignore
+    DDGSException = None  # type: ignore
 
-_cells_spec = importlib.util.find_spec("cells")
-if _cells_spec is None:
-    raise ImportError("Модуль cells обязателен для работы web_cell")
+if REQUESTS_AVAILABLE and requests is not None:
+    _request_exc = getattr(requests, "RequestException", Exception)
+    REQUESTS_ERROR = (_request_exc, Exception)
+else:
+    REQUESTS_ERROR = (RuntimeError, OSError, Exception)
 
-from cells import Cell, CellResult, MemoryCell, OLLAMA_URL, TIMEOUT  # type: ignore
-_cells_module = importlib.import_module("cells")
-_model_chat_spec = getattr(_cells_module, "MODEL_CHAT", None)
-_model_reason_spec = getattr(_cells_module, "MODEL_REASON", None)
-MODEL = _model_chat_spec or _model_reason_spec
-if MODEL is None:
-    raise ImportError("Не найдены MODEL_CHAT или MODEL_REASON в cells")
+DDGS_ERROR = (RuntimeError, OSError, ValueError, TypeError, AttributeError)
+if DDGSException is not None:
+    DDGS_ERROR = DDGS_ERROR + (DDGSException,)
+REQUESTS_PARSE_ERROR = REQUESTS_ERROR + (ValueError, TypeError)
 
-LOCAL_URL_ALLOWLIST = {"localhost", "127.0.0.1", "::1"}
-MAX_QUERY_LENGTH = 256
-FORBIDDEN_QUERY_SUBSTRINGS = ["http://", "https://", "<script", "</script", "file://", "\n"]
+from cells import (
+    DEFAULT_MAX_RESPONSE_TOKENS,
+    OLLAMA_NUM_CTX,
+    Cell,
+    CellResult,
+    MemoryCell,
+    MODEL_REASON,
+    OLLAMA_URL,
+    TIMEOUT,
+    _MODEL_LAYERS,
+    _merge_system_prompt,
+)
+
+DDG_HTML_URL = "https://html.duckduckgo.com/html/"
+DEFAULT_MAX_RESULTS = 5
+DEFAULT_LEARN_RESULTS = 7
+MAX_REQUEST_TIMEOUT = 60
+DEFAULT_REQUEST_TIMEOUT = env_int("NEIRA_WEB_REQUEST_TIMEOUT", 10, min_value=1, max_value=MAX_REQUEST_TIMEOUT)
+DEFAULT_SUMMARY_MAX_TOKENS = 2048
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36"
+WEB_SEARCH_BACKEND = env_str("NEIRA_WEB_SEARCH_BACKEND", "auto").lower()
+if WEB_SEARCH_BACKEND not in {"auto", "ddgs", "html"}:
+    WEB_SEARCH_BACKEND = "auto"
+WEB_SEARCH_DOMAIN_FALLBACK = env_bool("NEIRA_WEB_SEARCH_DOMAIN_FALLBACK", True)
+
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+DDG_RESULT_RE = re.compile(r'<div[^>]*class="result__body"[^>]*>(.*?)</div>', re.S)
+DDG_TITLE_RE = re.compile(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+DDG_SNIPPET_RE = re.compile(r'class="result__snippet"[^>]*>(.*?)</', re.S)
+
+
+def _build_ollama_options(temperature: float, max_tokens: int) -> Dict[str, Any]:
+    options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+    if OLLAMA_NUM_CTX:
+        options["num_ctx"] = OLLAMA_NUM_CTX
+    if _MODEL_LAYERS is not None:
+        adapter = _MODEL_LAYERS.get_active_adapter(MODEL_REASON)
+        if adapter:
+            options["adapter"] = adapter
+    return options
+
+
+def _merge_layer_system_prompt(base_prompt: str) -> str:
+    if _MODEL_LAYERS is None:
+        return base_prompt
+    layer_prompt = _MODEL_LAYERS.get_active_prompt(MODEL_REASON)
+    return _merge_system_prompt(base_prompt, layer_prompt)
+
+
+def _build_reason(reason_code: str, reason_detail: str) -> Dict[str, str]:
+    return {"reason_code": reason_code, "reason_detail": reason_detail}
+
+
+def _strip_html(text: str) -> str:
+    return HTML_TAG_RE.sub("", unescape(text or "")).strip()
+
+
+def _parse_ddg_html(html_text: str, max_results: int) -> List["SearchResult"]:
+    results: List[SearchResult] = []
+    for block in DDG_RESULT_RE.findall(html_text):
+        title_match = DDG_TITLE_RE.search(block)
+        if not title_match:
+            continue
+        url = resolve_ddg_url(unescape(title_match.group(1)))
+        title = _strip_html(title_match.group(2))
+        snippet_match = DDG_SNIPPET_RE.search(block)
+        snippet = _strip_html(snippet_match.group(1) if snippet_match else "")
+        results.append(SearchResult(title=title, url=url, snippet=snippet))
+        if len(results) >= max_results:
+            break
+    return results
 
 
 @dataclass
 class SearchResult:
-    """Результат поиска"""
+    """\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 \u043f\u043e\u0438\u0441\u043a\u0430."""
+
     title: str
     url: str
     snippet: str
-    
+
 
 class WebSearchCell(Cell):
-    """Клетка поиска в интернете"""
-    
+    """\u041a\u043b\u0435\u0442\u043a\u0430 \u0432\u0435\u0431-\u043f\u043e\u0438\u0441\u043a\u0430."""
+
     name = "web_search"
-    system_prompt = """Ты — исследователь. Анализируй результаты поиска и извлекай полезную информацию.
-Будь точной, указывай источники."""
-    
-    def __init__(self, memory: Optional[MemoryCell] = None, model_manager=None):
-        super().__init__(memory, model_manager)
-        self.ddgs = DDGS() if DDGS_AVAILABLE else None
+    system_prompt = (
+        "\u0422\u044b \u0438\u0449\u0435\u0448\u044c \u043e\u0442\u0432\u0435\u0442 \u0438 \u043a\u0440\u0430\u0442\u043a\u043e \u043e\u0431\u043e\u0431\u0449\u0430\u0435\u0448\u044c \u0441\u0443\u0442\u044c. "
+        "\u041e\u043f\u0438\u0440\u0430\u0439\u0441\u044f \u043d\u0430 \u0444\u0430\u043a\u0442\u044b \u0438 \u0443\u043a\u0430\u0437\u044b\u0432\u0430\u0439 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438."
+    )
 
-    def _sanitize_query(self, query: str) -> str:
-        cleaned = query.strip()
-        if not cleaned:
-            raise ValueError("Пустой поисковый запрос")
-        if len(cleaned) > MAX_QUERY_LENGTH:
-            raise ValueError("Слишком длинный запрос")
-        lowered = cleaned.lower()
-        if any(substr in lowered for substr in FORBIDDEN_QUERY_SUBSTRINGS):
-            raise ValueError("Запрос содержит потенциально опасный ввод")
-        return cleaned
+    def __init__(self, memory: Optional[MemoryCell] = None):
+        super().__init__(memory)
+        self.ddgs = None
+        self._ddg_error: Optional[str] = None
+        self._use_ddgs = WEB_SEARCH_BACKEND in {"auto", "ddgs"}
+        if not self._use_ddgs:
+            self._ddg_error = "ddgs disabled"
+        if self._use_ddgs and DDGS_AVAILABLE and DDGS is not None:
+            try:
+                self.ddgs = DDGS()
+            except DDGS_ERROR as exc:
+                self.ddgs = None
+                self._ddg_error = str(exc)
+                logger.warning("DDGS init failed: %s", exc)
 
-    def _validate_local_url(self, url: str) -> str:
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("Недопустимая схема OLLAMA_URL")
-        if host.lower() not in LOCAL_URL_ALLOWLIST:
-            raise ValueError("Небезопасный OLLAMA_URL: разрешены только локальные адреса")
-        return url
-
-    def search(self, query: str, max_results: int = 5) -> Tuple[List[SearchResult], Dict[str, str]]:
-        """Поиск в DuckDuckGo"""
+    def _search_ddgs(
+        self,
+        query: str,
+        max_results: int,
+        allowed_domains: Sequence[str],
+    ) -> Tuple[List[SearchResult], Dict[str, str]]:
         if not self.ddgs:
-            reason = {
-                "reason_code": "ddg_unavailable",
-                "reason_detail": "duckduckgo-search не установлен"
-            }
-            print("❌ Поиск недоступен (установи duckduckgo-search)")
-            return [], reason
-
+            reason_detail = self._ddg_error or "ddgs module not available"
+            return [], _build_reason("ddg_unavailable", reason_detail)
         try:
-            safe_query = self._sanitize_query(query)
-            results = []
-            for r in self.ddgs.text(safe_query, max_results=max_results):
-                results.append(SearchResult(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    snippet=r.get("body", "")
-                ))
-            return results, {}
-        except Exception as e:
-            reason = {
-                "reason_code": "ddg_error",
-                "reason_detail": str(e)
-            }
-            print(f"❌ Ошибка поиска: {e}")
-            return [], reason
-    
-    def search_and_summarize(self, query: str) -> CellResult:
-        """Поиск + суммаризация результатов"""
-        
+            results: List[SearchResult] = []
+            for item in self.ddgs.text(query, max_results=max_results):
+                url = resolve_ddg_url(str(item.get("href", "")))
+                if not url or not is_allowed_domain(url, allowed_domains):
+                    continue
+                results.append(
+                    SearchResult(
+                        title=str(item.get("title", "")),
+                        url=url,
+                        snippet=str(item.get("body", "")),
+                    )
+                )
+                if len(results) >= max_results:
+                    break
+            if results:
+                return results, {}
+            return [], _build_reason("no_results", "no results from ddgs")
+        except DDGS_ERROR as exc:
+            return [], _build_reason("ddg_error", str(exc))
+
+    def _search_ddg_html(
+        self,
+        query: str,
+        max_results: int,
+        allowed_domains: Sequence[str],
+    ) -> Tuple[List[SearchResult], Dict[str, str]]:
+        if not REQUESTS_AVAILABLE or requests is None:
+            return [], _build_reason("requests_unavailable", "requests module not available")
         try:
-            safe_query = self._sanitize_query(query)
-        except ValueError as err:
-            return CellResult(
-                content=f"Запрос отклонён: {err}",
-                confidence=0.0,
-                cell_name=self.name,
-                metadata={"query": query, "reason_code": "invalid_query", "reason_detail": str(err)}
+            response = requests.get(
+                DDG_HTML_URL,
+                params={"q": query},
+                headers={"User-Agent": DEFAULT_USER_AGENT},
+                timeout=DEFAULT_REQUEST_TIMEOUT,
             )
+            response.raise_for_status()
+        except REQUESTS_ERROR as exc:
+            return [], _build_reason("requests_error", str(exc))
+        results = _parse_ddg_html(response.text, max_results)
+        filtered = [r for r in results if is_allowed_domain(r.url, allowed_domains)]
+        if filtered:
+            return filtered, {}
+        return [], _build_reason("no_results", "no results after domain filter")
 
-        print(f"🔎 Ищу: {safe_query}")
-        results, reason = self.search(safe_query)
+    def _search_with_domains(
+        self,
+        query: str,
+        max_results: int,
+        allowed_domains: Sequence[str],
+        searchers: Sequence,
+    ) -> Tuple[List[SearchResult], Dict[str, str]]:
+        if not allowed_domains or not searchers:
+            return [], _build_reason("no_results", "no domain queries")
+        aggregated: List[SearchResult] = []
+        seen: set[str] = set()
+        last_reason: Dict[str, str] = {}
+        for domain in allowed_domains:
+            domain_query = f"site:{domain} {query}"
+            for searcher in searchers:
+                results, reason = searcher(domain_query, max_results, allowed_domains)
+                if results:
+                    for item in results:
+                        if item.url in seen:
+                            continue
+                        seen.add(item.url)
+                        aggregated.append(item)
+                        if len(aggregated) >= max_results:
+                            return aggregated, {}
+                if reason:
+                    last_reason = reason
+            if aggregated:
+                return aggregated, {}
+        return [], last_reason or _build_reason("no_results", "no domain results")
 
-        if not results:
-            reason_code = reason.get("reason_code", "no_results")
-            reason_detail = reason.get("reason_detail", "результатов нет")
-            return CellResult(
-                content=f"Не удалось найти информацию (причина: {reason_code}).",
-                confidence=0.1,
-                cell_name=self.name,
-                metadata={
-                    "query": query,
-                    "reason_code": reason_code,
-                    "reason_detail": reason_detail
-                }
+    def search(
+        self,
+        query: str,
+        max_results: int = DEFAULT_MAX_RESULTS,
+        allowed_domains: Optional[Sequence[str]] = None,
+        use_html_fallback: bool = False,
+    ) -> Tuple[List[SearchResult], Dict[str, str]]:
+        """\u0418\u0449\u0435\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 (results, reason)."""
+
+        allowed = normalize_domains(allowed_domains)
+        searchers: List = []
+        if self._use_ddgs:
+            searchers.append(self._search_ddgs)
+        use_html = use_html_fallback or WEB_SEARCH_BACKEND == "html"
+        if use_html:
+            searchers.append(self._search_ddg_html)
+        if not searchers:
+            return [], _build_reason("search_unavailable", "no search backend")
+
+        last_reason: Dict[str, str] = {}
+        for searcher in searchers:
+            results, reason = searcher(query, max_results, allowed)
+            if results:
+                return results, {}
+            if reason:
+                last_reason = reason
+
+        if WEB_SEARCH_DOMAIN_FALLBACK and allowed:
+            domain_results, domain_reason = self._search_with_domains(
+                query, max_results, allowed, searchers
             )
+            if domain_results:
+                return domain_results, {}
+            if domain_reason:
+                last_reason = domain_reason
 
-        # Формируем контекст из результатов
-        context = "Результаты поиска:\n\n"
-        for i, r in enumerate(results, 1):
-            context += f"{i}. **{r.title}**\n"
-            context += f"   {r.snippet}\n"
-            context += f"   Источник: {r.url}\n\n"
+        return [], last_reason or _build_reason("no_results", "no results")
 
-        if not REQUESTS_AVAILABLE:
-            return CellResult(
-                content="Не удалось получить сводку (причина: requests_missing).",
-                confidence=0.05,
-                cell_name=self.name,
-                metadata={
-                    "query": query,
-                    "reason_code": "requests_missing",
-                    "reason_detail": "requests не установлен",
-                    "sources": [r.url for r in results],
-                    "results_count": len(results)
-                }
-            )
+    def _build_context(self, results: List[SearchResult]) -> str:
+        lines = ["\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430:\n"]
+        for idx, result in enumerate(results, 1):
+            lines.append(f"{idx}. {result.title}\n{result.snippet}\n\u0421\u0441\u044b\u043b\u043a\u0430: {result.url}\n")
+        return "\n".join(lines)
 
-        # Просим LLM обработать
-        prompt = f"""Запрос пользователя: {safe_query}
-
-{context}
-
-Проанализируй результаты и дай полезный ответ. Укажи источники."""
-
+    def _summarize(self, query: str, context: str) -> Tuple[str, Dict[str, str]]:
+        if not REQUESTS_AVAILABLE or requests is None:
+            return "", _build_reason("requests_unavailable", "requests module not available")
+        prompt = (
+            "\u0412\u043e\u043f\u0440\u043e\u0441: "
+            f"{query}\n\n{context}\n\n"
+            "\u0421\u043e\u0441\u0442\u0430\u0432\u044c \u043a\u0440\u0430\u0442\u043a\u0438\u0439 \u043e\u0442\u0432\u0435\u0442 \u0441 \u0443\u043a\u0430\u0437\u0430\u043d\u0438\u0435\u043c \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u043e\u0432."
+        )
         try:
             response = requests.post(
-                self._validate_local_url(OLLAMA_URL),
+                OLLAMA_URL,
                 json={
-                    "model": MODEL,
+                    "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": self.system_prompt,
+                    "system": _merge_layer_system_prompt(self.system_prompt),
                     "stream": False,
-                    "options": {"temperature": 0.5, "num_predict": 2048}
+                    "options": _build_ollama_options(
+                        0.5, min(DEFAULT_MAX_RESPONSE_TOKENS, DEFAULT_SUMMARY_MAX_TOKENS)
+                    ),
                 },
-                timeout=TIMEOUT
+                timeout=TIMEOUT,
             )
-            answer = response.json().get("response", "")
-        except Exception as e:
-            return CellResult(
-                content="Не удалось получить сводку (причина: requests_error).",
-                confidence=0.05,
-                cell_name=self.name,
-                metadata={
-                    "query": query,
-                    "reason_code": "requests_error",
-                    "reason_detail": str(e),
-                    "sources": [r.url for r in results],
-                    "results_count": len(results)
-                }
+            data = response.json()
+        except REQUESTS_PARSE_ERROR as exc:
+            return "", _build_reason("requests_error", str(exc))
+        return str(data.get("response", "")), {}
+
+    def search_and_summarize(self, query: str) -> CellResult:
+        """\u041f\u043e\u0438\u0441\u043a + \u043a\u0440\u0430\u0442\u043a\u043e\u0435 \u043e\u0431\u043e\u0431\u0449\u0435\u043d\u0438\u0435."""
+
+        results, reason = self.search(query, max_results=DEFAULT_MAX_RESULTS)
+        if not results:
+            reason = reason or _build_reason("no_results", "no results")
+            code = reason.get("reason_code", "unknown")
+            detail = reason.get("reason_detail", "")
+            content = (
+                "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0432\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0432\u0435\u0431-\u043f\u043e\u0438\u0441\u043a "
+                f"(\u043f\u0440\u0438\u0447\u0438\u043d\u0430: {code}; reason_code: {code}). {detail}"
             )
+            return CellResult(content=content, confidence=0.1, cell_name=self.name, metadata=reason)
+
+        context = self._build_context(results)
+        answer, summary_reason = self._summarize(query, context)
+        if summary_reason:
+            code = summary_reason.get("reason_code", "unknown")
+            detail = summary_reason.get("reason_detail", "")
+            content = (
+                "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u0442\u044c \u043a\u0440\u0430\u0442\u043a\u0438\u0439 \u043e\u0442\u0432\u0435\u0442 "
+                f"(reason_code: {code}). {detail}"
+            )
+            return CellResult(content=content, confidence=0.1, cell_name=self.name, metadata=summary_reason)
 
         return CellResult(
             content=answer,
@@ -205,124 +353,93 @@ class WebSearchCell(Cell):
             metadata={
                 "query": query,
                 "sources": [r.url for r in results],
-                "results_count": len(results)
-            }
+                "results_count": len(results),
+            },
         )
-    
-    def learn_topic(self, topic: str) -> Tuple[List[Dict], Dict[str, str]]:
-        """Изучить тему и извлечь факты для памяти"""
-        
-        try:
-            safe_topic = self._sanitize_query(topic)
-        except ValueError as err:
-            return [], {"reason_code": "invalid_query", "reason_detail": str(err)}
 
-        print(f"📖 Изучаю тему: {safe_topic}")
+    def learn_topic(
+        self,
+        topic: str,
+        max_results: int = DEFAULT_LEARN_RESULTS,
+        allowed_domains: Optional[Sequence[str]] = None,
+        use_html_fallback: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+        """\u0421\u043e\u0431\u0438\u0440\u0430\u0435\u0442 \u0444\u0430\u043a\u0442\u044b \u043f\u043e \u0442\u0435\u043c\u0435."""
 
-        # Поиск
-        results, reason = self.search(safe_topic, max_results=7)
+        results, reason = self.search(
+            topic,
+            max_results=max_results,
+            allowed_domains=allowed_domains,
+            use_html_fallback=use_html_fallback,
+        )
         if not results:
-            return [], reason
+            return [], reason or _build_reason("no_results", "no results")
+        if not REQUESTS_AVAILABLE or requests is None:
+            return [], _build_reason("requests_unavailable", "requests module not available")
 
-        if not REQUESTS_AVAILABLE:
-            return [], {
-                "reason_code": "requests_missing",
-                "reason_detail": "requests не установлен"
-            }
-
-        # Собираем весь текст
         all_text = "\n".join([f"{r.title}: {r.snippet}" for r in results])
-
-        # Извлекаем факты
-        prompt = f"""Тема: {safe_topic}
-
-Информация из интернета:
-{all_text}
-
-Извлеки ключевые факты для запоминания.
-Формат JSON:
-{{"facts": [
-    {{"text": "факт", "importance": 0.0-1.0}},
-    ...
-]}}
-
-ТОЛЬКО JSON:"""
-
-        if not REQUESTS_AVAILABLE:
-            return [], {
-                "reason_code": "requests_missing",
-                "reason_detail": "requests не установлен"
-            }
-
+        prompt = (
+            "\u0422\u0435\u043c\u0430: "
+            f"{topic}\n\n"
+            "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438:\n"
+            f"{all_text}\n\n"
+            "\u0412\u044b\u0434\u0435\u043b\u0438 \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0435 \u0444\u0430\u043a\u0442\u044b. \u041e\u0442\u0432\u0435\u0442 \u0441\u0442\u0440\u043e\u0433\u043e JSON:\n"
+            "{\"facts\": [{\"text\": \"...\", \"importance\": 0.0}] }"
+        )
         try:
             response = requests.post(
-                self._validate_local_url(OLLAMA_URL),
+                OLLAMA_URL,
                 json={
-                    "model": MODEL,
+                    "model": MODEL_REASON,
                     "prompt": prompt,
-                    "system": "Ты — экстрактор знаний. Извлекай точные факты.",
+                    "system": _merge_layer_system_prompt("\u0422\u043e\u043b\u044c\u043a\u043e JSON."),
                     "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": 1024}
+                    "options": _build_ollama_options(0.3, min(DEFAULT_MAX_RESPONSE_TOKENS, 1024)),
                 },
-                timeout=TIMEOUT
+                timeout=TIMEOUT,
             )
             result = response.json().get("response", "")
-        except Exception as e:
-            return [], {"reason_code": "requests_error", "reason_detail": str(e)}
-        
-        # Парсим JSON
-        parse_error: Optional[str] = None
+        except REQUESTS_PARSE_ERROR as exc:
+            return [], _build_reason("requests_error", str(exc))
+
+        start = result.find("{")
+        end = result.rfind("}") + 1
+        if start < 0 or end <= start:
+            return [], _build_reason("parse_error", "no JSON in response")
         try:
-            import json
-            start = result.find("{")
-            end = result.rfind("}") + 1
-            if start >= 0 and end > start:
-                data = json.loads(result[start:end])
-                facts = data.get("facts", [])
+            data = json.loads(result[start:end])
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            return [], _build_reason("parse_error", str(exc))
+        facts = data.get("facts", []) if isinstance(data, dict) else []
+        for fact in facts:
+            fact["source"] = "web"
+            fact["category"] = "learned"
+            fact["topic"] = topic
+        return facts, {}
 
-                # Добавляем метаданные
-                for fact in facts:
-                    fact["source"] = "web"
-                    fact["category"] = "learned"
-                    fact["topic"] = topic
-
-                print(f"📚 Извлечено фактов: {len(facts)}")
-                return facts, {}
-        except Exception as e:
-            parse_error = str(e)
-            print(f"⚠️ Ошибка парсинга: {parse_error}")
-
-        return [], {"reason_code": "parse_error", "reason_detail": parse_error or "unknown"}
-    
-    def process(self, query: str, request_id: Optional[str] = None) -> CellResult:
-        """Основной метод — поиск и ответ"""
+    def process(self, query: str) -> CellResult:
         return self.search_and_summarize(query)
 
 
 class WebLearnerCell(Cell):
-    """Клетка обучения из интернета — ищет, учит, запоминает"""
-    
+    """\u041a\u043b\u0435\u0442\u043a\u0430 \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f \u0441 \u0432\u0435\u0431\u0430."""
+
     name = "web_learner"
-    
+
     def __init__(self, memory: MemoryCell):
         super().__init__(memory)
         self.searcher = WebSearchCell(memory)
-    
+
     def learn(self, topic: str) -> CellResult:
-        """Изучить тему и сохранить в память"""
-
         facts, reason = self.searcher.learn_topic(topic)
-
         if not facts:
-            reason_code = reason.get("reason_code", "no_results")
-            return CellResult(
-                content=f"Не удалось найти информацию по теме: {topic} (причина: {reason_code}).",
-                confidence=0.2,
-                cell_name=self.name,
-                metadata={"topic": topic, **reason}
+            meta = reason or {}
+            content = (
+                "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043d\u0430\u0439\u0442\u0438 \u0434\u0430\u043d\u043d\u044b\u0435 \u043f\u043e \u0442\u0435\u043c\u0435: "
+                f"{topic}"
             )
-        
-        # Сохраняем в память
+            return CellResult(content=content, confidence=0.2, cell_name=self.name, metadata=meta)
+
         saved = 0
         for fact in facts:
             if fact.get("importance", 0) >= 0.5:
@@ -330,37 +447,36 @@ class WebLearnerCell(Cell):
                     text=fact["text"],
                     importance=fact.get("importance", 0.6),
                     category="learned",
-                    source="web"
+                    source="web",
                 )
                 saved += 1
-        
-        summary = f"Изучена тема: {topic}\n"
-        summary += f"Найдено фактов: {len(facts)}\n"
-        summary += f"Сохранено в память: {saved}\n\n"
-        summary += "Ключевые факты:\n"
+
+        summary = (
+            "\u0422\u0435\u043c\u0430: "
+            f"{topic}\n"
+            f"\u0424\u0430\u043a\u0442\u043e\u0432: {len(facts)}\n"
+            f"\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e: {saved}\n\n"
+            "\u041f\u0440\u0438\u043c\u0435\u0440\u044b:\n"
+        )
         for fact in facts[:5]:
-            summary += f"• {fact['text']}\n"
-        
+            summary += f"- {fact['text']}\n"
+
         return CellResult(
             content=summary,
             confidence=0.8,
             cell_name=self.name,
-            metadata={"topic": topic, "facts_found": len(facts), "facts_saved": saved}
+            metadata={"topic": topic, "facts_found": len(facts), "facts_saved": saved},
         )
-    
-    def process(self, topic: str, request_id: Optional[str] = None) -> CellResult:
+
+    def process(self, topic: str) -> CellResult:
         return self.learn(topic)
 
 
-# === ТЕСТ ===
 if __name__ == "__main__":
     print("=" * 50)
-    print("Тест WebSearchCell")
+    print("WebSearchCell")
     print("=" * 50)
 
     cell = WebSearchCell()
-    result = cell.process("Python dataclass примеры")
-    print(f"\nРезультат:\n{result.content}")
-
-    if result.metadata:
-        print(f"Метаданные: {result.metadata}")
+    result = cell.process("\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043f\u043e\u0438\u0441\u043a\u0430")
+    print(result.content)

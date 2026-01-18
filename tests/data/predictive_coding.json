@@ -1,0 +1,235 @@
+{
+  "predictions": [
+    {
+      "prediction_id": "64352405f8e3",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T06:09:49.893450",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "82abe423e428",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4339622641509434,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T06:09:49.895238",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "afc17e52e5f2",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4339622641509434,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T06:23:38.108901",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "57f36c76a179",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4642857142857143,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T06:23:38.110620",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "43f1ccedbb4f",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4642857142857143,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T06:25:07.584420",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "967298f3b993",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T06:25:07.586649",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "a003fb8fa32e",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.4915254237288136,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T06:45:44.378810",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "d2e497dce1f3",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5161290322580646,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T06:45:44.380632",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "58703aec037c",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5161290322580646,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T07:08:05.513585",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "b552daa5a839",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5384615384615384,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T07:08:05.516104",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "aa947d6d928a",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5384615384615384,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T07:21:17.024744",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "1692d35d206e",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5588235294117647,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T07:21:17.026762",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "a0501f96a23e",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5588235294117647,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T07:26:03.631962",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "0d0546689ad2",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5774647887323943,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T07:26:03.633789",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "56a3d0975028",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5774647887323943,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-04T07:45:23.605588",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "0130618c3552",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5945945945945946,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-04T07:45:23.609302",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    }
+  ],
+  "patterns": {
+    "greeting_followup": {
+      "pattern_id": "greeting_followup",
+      "trigger": "greeting",
+      "prediction_type": "follow_up",
+      "likely_outcomes": {
+        "how_are_you": 0.5945945945945946,
+        "help_request": 0.2027027027027027,
+        "small_talk": 0.13513513513513517,
+        "direct_question": 0.06756756756756759
+      },
+      "success_count": 8,
+      "total_count": 8
+    },
+    "technical_clarification": {
+      "pattern_id": "technical_clarification",
+      "trigger": "technical_question",
+      "prediction_type": "follow_up",
+      "likely_outcomes": {
+        "clarification": 0.4,
+        "example_request": 0.3,
+        "thanks": 0.2,
+        "new_question": 0.1
+      },
+      "success_count": 8,
+      "total_count": 8
+    },
+    "emotional_support": {
+      "pattern_id": "emotional_support",
+      "trigger": "emotional_message",
+      "prediction_type": "user_intent",
+      "likely_outcomes": {
+        "needs_support": 0.5,
+        "venting": 0.3,
+        "advice_seeking": 0.2
+      },
+      "success_count": 0,
+      "total_count": 0
+    },
+    "why_question": {
+      "pattern_id": "why_question",
+      "trigger": "why_question",
+      "prediction_type": "response_type",
+      "likely_outcomes": {
+        "explanation": 0.6,
+        "reasoning": 0.3,
+        "example": 0.1
+      },
+      "success_count": 0,
+      "total_count": 0
+    }
+  },
+  "total_predictions": 16,
+  "successful_predictions": 8,
+  "avg_prediction_error": 0.3317102156445311
+}

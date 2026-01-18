@@ -1,0 +1,39 @@
+{
+  "topics": {
+    "python_prog": {
+      "topic_id": "python_prog",
+      "name": "программирование на Python",
+      "category": "technical",
+      "activation": 0.75765625,
+      "base_activation": 0.8,
+      "inhibited_by": [
+        "feelings",
+        "game_dev"
+      ],
+      "last_activated": "2026-01-04T07:45:23.595302",
+      "activation_count": 8
+    },
+    "feelings": {
+      "topic_id": "feelings",
+      "name": "чувства и эмоции",
+      "category": "emotional",
+      "activation": 0.733125,
+      "base_activation": 0.5,
+      "inhibited_by": [
+        "game_dev"
+      ],
+      "last_activated": "2026-01-04T07:45:23.596067",
+      "activation_count": 8
+    },
+    "game_dev": {
+      "topic_id": "game_dev",
+      "name": "создание игры",
+      "category": "creative",
+      "activation": 0.44999999999999996,
+      "base_activation": 0.3,
+      "inhibited_by": [],
+      "last_activated": "2026-01-04T07:45:23.596833",
+      "activation_count": 8
+    }
+  }
+}

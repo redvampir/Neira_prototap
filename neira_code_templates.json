@@ -1,0 +1,110 @@
+{
+  "python_function": {
+    "id": "python_function",
+    "language": "python",
+    "pattern": "функция",
+    "template": "def {function_name}({parameters}):\n    \"\"\"\n    {description}\n    \"\"\"\n    {body}\n    return {return_value}",
+    "variables": [
+      "function_name",
+      "parameters",
+      "description",
+      "body",
+      "return_value"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "python_class": {
+    "id": "python_class",
+    "language": "python",
+    "pattern": "класс",
+    "template": "class {class_name}:\n    \"\"\"\n    {description}\n    \"\"\"\n    \n    def __init__(self, {init_params}):\n        {init_body}\n    \n    def {method_name}(self, {method_params}):\n        \"\"\"\n        {method_description}\n        \"\"\"\n        {method_body}",
+    "variables": [
+      "class_name",
+      "description",
+      "init_params",
+      "init_body",
+      "method_name",
+      "method_params",
+      "method_description",
+      "method_body"
+    ],
+    "complexity": "medium",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "python_list_comprehension": {
+    "id": "python_list_comprehension",
+    "language": "python",
+    "pattern": "list comprehension",
+    "template": "{result} = [{expression} for {item} in {iterable} if {condition}]",
+    "variables": [
+      "result",
+      "expression",
+      "item",
+      "iterable",
+      "condition"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "js_function": {
+    "id": "js_function",
+    "language": "javascript",
+    "pattern": "функция",
+    "template": "function {function_name}({parameters}) {{\n    // {description}\n    {body}\n    return {return_value};\n}}",
+    "variables": [
+      "function_name",
+      "parameters",
+      "description",
+      "body",
+      "return_value"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "js_arrow_function": {
+    "id": "js_arrow_function",
+    "language": "javascript",
+    "pattern": "arrow function",
+    "template": "const {name} = ({parameters}) => {body};",
+    "variables": [
+      "name",
+      "parameters",
+      "body"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "html_page": {
+    "id": "html_page",
+    "language": "html",
+    "pattern": "html страница",
+    "template": "<!DOCTYPE html>\n<html lang=\"ru\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{title}</title>\n</head>\n<body>\n    {content}\n</body>\n</html>",
+    "variables": [
+      "title",
+      "content"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  },
+  "sql_select": {
+    "id": "sql_select",
+    "language": "sql",
+    "pattern": "выборка данных",
+    "template": "SELECT {columns}\nFROM {table}\nWHERE {condition};",
+    "variables": [
+      "columns",
+      "table",
+      "condition"
+    ],
+    "complexity": "simple",
+    "success_count": 0,
+    "failure_count": 0
+  }
+}

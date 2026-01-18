@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Neira specific
+neira_memory.json
+neira_experience.json
+neira_evolution.json
+neira_prompt_versions.json
+neira_prompt_tests.json
+neira_cell_registry.json
+neira_ab_tests.json
+neira_model_versions.json
+neira_authorized_users.json
+neira_tg_settings.json
+neira_user_profiles.json
+backups/
+training_data/
+models/
+generated/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+.env
+
+# Node / Next.js
+node_modules/
+.next/
+out/

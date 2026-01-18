@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neira AI (8001)</title>
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Переопределяем адрес backend, если порт 8000 занят (например Apache).
+    window.NEIRA_API_URL = 'http://127.0.0.1:8001/api';
+    window.NEIRA_WS_URL = 'ws://127.0.0.1:8001/ws/chat';
+  </script>
+</head>
+<body>
+  <!-- Используем тот же DOM, что и в index.html -->
+  <div class="container">
+    <header class="header">
+      <h1>🧠 Neira AI</h1>
+      <div class="header-controls">
+        <button class="artifact-toggle" id="artifactToggle" title="Артефакты">🎨</button>
+        <button class="control-panel-toggle" id="controlPanelToggle" title="Панель управления">⚙️</button>
+        <button class="stats-toggle" id="statsToggle" title="Показать статистику">📊</button>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-indicator" id="statusIndicator"></span>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <div class="chat-section">
+        <div class="chat-container">
+          <div class="messages" id="messages">
+            <div class="message system">
+              <div class="message-content">
+                Привет! Я Neira. Backend запущен на <b>127.0.0.1:8001</b>.<br>
+                💡 Попроси меня создать игровой интерфейс: "Создай UI инвентаря для RPG"
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-indicator" id="stageIndicator" style="display: none;">
+            <div class="stage-icon">⚙️</div>
+            <div class="stage-text" id="stageText"></div>
+          </div>
+
+          <div class="input-container">
+            <textarea id="userInput" placeholder="Введите сообщение..." rows="3"></textarea>
+            <button id="sendButton" class="send-button">
+              <span>Отправить</span>
+              <span class="shortcut">⏎</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Artifact Viewer -->
+      <aside class="artifact-viewer" id="artifactViewer">
+        <div class="artifact-header">
+          <h2>🎨 Артефакт</h2>
+          <div class="artifact-controls">
+            <button class="artifact-btn" id="artifactRefresh" title="Обновить">🔄</button>
+            <button class="artifact-btn" id="artifactExpand" title="Во весь экран">⛶</button>
+            <button class="artifact-btn" id="artifactExport" title="Экспорт HTML">💾</button>
+            <button class="artifact-btn" id="artifactClose" title="Закрыть">✕</button>
+          </div>
+        </div>
+        <div class="artifact-info" id="artifactInfo">
+          <span class="artifact-template">Шаблон: <b id="templateName">—</b></span>
+          <span class="artifact-id">ID: <code id="artifactId">—</code></span>
+        </div>
+        <div class="artifact-rating" id="artifactRating" style="display: none;">
+          <span class="rating-label">Оценка:</span>
+          <div class="stars" id="starsContainer">
+            <span class="star" data-rating="1">☆</span>
+            <span class="star" data-rating="2">☆</span>
+            <span class="star" data-rating="3">☆</span>
+            <span class="star" data-rating="4">☆</span>
+            <span class="star" data-rating="5">☆</span>
+          </div>
+          <span class="rating-value" id="ratingValue">—</span>
+        </div>
+        <iframe 
+          id="artifactFrame" 
+          class="artifact-frame" 
+          sandbox="allow-scripts allow-same-origin"
+          title="Neira Artifact"
+        ></iframe>
+        <div class="artifact-empty" id="artifactEmpty">
+          <div class="empty-icon">🎨</div>
+          <p>Артефакт появится здесь</p>
+          <small>Попросите Neira создать игровой интерфейс</small>
+        </div>
+      </aside>
+
+      <aside class="control-panel" id="controlPanel">
+        <div class="panel-header">
+          <h2>⚙️ Панель управления</h2>
+          <button class="close-button" id="closeControlPanel">✕</button>
+        </div>
+        <div class="panel-content">
+          <!-- Модель -->
+          <div class="control-group">
+            <h3>🤖 Модель</h3>
+            <label>
+              <span>Основная модель:</span>
+              <select id="mainModelSelect">
+                <option value="auto">Auto (по умолчанию)</option>
+              </select>
+            </label>
+            <label>
+              <span>Температура:</span>
+              <input type="range" id="temperatureSlider" min="0" max="20" step="1" value="7">
+              <span id="temperatureValue">0.7</span>
+            </label>
+          </div>
+
+          <!-- Контекст -->
+          <div class="control-group">
+            <h3>📚 Контекст</h3>
+            <label>
+              <span>Размер окна:</span>
+              <input type="range" id="contextSizeSlider" min="2" max="20" step="1" value="10">
+              <span id="contextSizeValue">10</span>
+            </label>
+            <label>
+              <span>Макс. токенов:</span>
+              <input type="number" id="maxTokensInput" min="512" max="32768" step="512" value="4096">
+            </label>
+          </div>
+
+          <!-- Режимы работы -->
+          <div class="control-group">
+            <h3>🎯 Режимы</h3>
+            <label class="checkbox-label">
+              <input type="checkbox" id="streamMode" checked>
+              <span>Streaming ответы</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="debugMode">
+              <span>Debug режим</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="autoMemoryMode" checked>
+              <span>Авто-сохранение памяти</span>
+            </label>
+          </div>
+
+          <!-- Системные действия -->
+          <div class="control-group">
+            <h3>🔧 Система</h3>
+            <button class="action-button" id="clearContextBtn">🗑️ Очистить контекст</button>
+            <button class="action-button" id="resetMemoryBtn">♻️ Сбросить память</button>
+            <button class="action-button" id="exportSettingsBtn">💾 Экспорт настроек</button>
+            <button class="action-button" id="importSettingsBtn">📂 Импорт настроек</button>
+          </div>
+
+          <!-- Логи -->
+          <div class="control-group">
+            <h3>📋 Логи</h3>
+            <div class="log-viewer" id="logViewer">
+              <div class="log-entry">Система запущена</div>
+            </div>
+            <button class="action-button" id="clearLogsBtn">Очистить логи</button>
+          </div>
+        </div>
+      </aside>
+
+      <aside class="stats-sidebar">
+        <div class="stats-header">
+          <h2>Статистика</h2>
+          <button class="refresh-button" id="refreshStats">🔄</button>
+        </div>
+        <div class="stats-content">
+          <div class="stat-group">
+            <h3>Модель</h3>
+            <div class="stat-item"><span>Current:</span> <span id="currentModel">-</span></div>
+            <div class="stat-item"><span>Switches:</span> <span id="modelSwitches">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Память</h3>
+            <div class="stat-item"><span>Total:</span> <span id="memoryTotal">-</span></div>
+            <div class="stat-item"><span>Context:</span> <span id="memoryContext">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Опыт</h3>
+            <div class="stat-item"><span>Total:</span> <span id="expTotal">-</span></div>
+            <div class="stat-item"><span>Score:</span> <span id="expScore">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Код/Причина/Личность</h3>
+            <div class="stat-item"><span>Code:</span> <span id="modelCode">-</span></div>
+            <div class="stat-item"><span>Reason:</span> <span id="modelReason">-</span></div>
+            <div class="stat-item"><span>Personality:</span> <span id="modelPersonality">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>Cloud</h3>
+            <div class="stat-item"><span>Code:</span> <span id="cloudCode">-</span></div>
+            <div class="stat-item"><span>Universal:</span> <span id="cloudUniversal">-</span></div>
+            <div class="stat-item"><span>Vision:</span> <span id="cloudVision">-</span></div>
+          </div>
+          <div class="stat-group">
+            <h3>VRAM</h3>
+            <div class="stat-item"><span>Usage:</span> <span id="vramUsage">-</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

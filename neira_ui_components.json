@@ -1,0 +1,17 @@
+{
+  "components": [],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2025-01-15T00:00:00Z",
+    "description": "Библиотека переиспользуемых UI компонентов Neira"
+  },
+  "extraction_rules": {
+    "min_rating": 5,
+    "min_code_length": 10,
+    "auto_extract_patterns": [
+      "class=\".*?\"",
+      "function \\w+\\(",
+      "@keyframes \\w+"
+    ]
+  }
+}

@@ -1,0 +1,199 @@
+{
+  "base": "http://127.0.0.1:8766",
+  "started_health": {
+    "success": true,
+    "data": {
+      "status": "online",
+      "neira_ready": true,
+      "uptime_seconds": 1108.05,
+      "requests_processed": 8,
+      "websocket_clients": 0,
+      "version": "1.0.0",
+      "modules_enabled": [
+        "context",
+        "core",
+        "files",
+        "indexer",
+        "layers",
+        "learning",
+        "models",
+        "self",
+        "stream",
+        "tools",
+        "ws"
+      ],
+      "lazy_neira": false
+    },
+    "error": null,
+    "request_id": null,
+    "timestamp": "2026-01-16T10:26:57.507921"
+  },
+  "stats_before": {
+    "success": true,
+    "data": {
+      "autonomy_available": true,
+      "error": null,
+      "offline_mode": true,
+      "offline_allow_local_llm": true,
+      "cortex_available": false,
+      "cortex_error": "'charmap' codec can't encode characters in position 0-1: character maps to <undefined>",
+      "cache": {
+        "entries": 3,
+        "memory_mb": 0.013945579528808594
+      },
+      "tiers": {
+        "hot": 6,
+        "warm": 9,
+        "cold": 31,
+        "cool": 8
+      },
+      "autonomy_rate_percent": 0.0,
+      "autonomy_rate_weighted_percent": 0.0,
+      "definition": {
+        "autonomy_strict": "autonomous_responses / total_requests",
+        "autonomy_weighted": "(autonomous_responses + hybrid_responses * 0.5) / total_requests",
+        "autonomous_responses": "Ответы без LLM/веба (cortex/органы/кэш/pathways).",
+        "hybrid_responses": "Ответы с частичным участием LLM.",
+        "llm_calls": "Количество обращений к LLM."
+      },
+      "metrics": {
+        "total_requests": 20,
+        "autonomous_responses": 0,
+        "hybrid_responses": 0,
+        "pathway_hits": 0,
+        "cache_hits": 0,
+        "llm_calls": 19,
+        "autonomy_rate": 0.0,
+        "autonomy_rate_strict": 0.0,
+        "autonomy_rate_weighted": 0.0,
+        "period_hours": 168
+      },
+      "organs_count": 13,
+      "organs": [
+        {
+          "id": "builtin_code",
+          "name": "Code Cell",
+          "status": "active"
+        },
+        {
+          "id": "8302bf441b60",
+          "name": "Math Helper",
+          "status": "active"
+        },
+        {
+          "id": "7bb686179339",
+          "name": "своей",
+          "status": "active"
+        },
+        {
+          "id": "a3ea7c8ed5ba",
+          "name": "greeting_cell",
+          "status": "active"
+        },
+        {
+          "id": "3a5c6807ec84",
+          "name": "self_reflection",
+          "status": "active"
+        },
+        {
+          "id": "cfa273d49a4d",
+          "name": "pattern_recognizer",
+          "status": "active"
+        },
+        {
+          "id": "bc51bdb40f80",
+          "name": "task_completer",
+          "status": "active"
+        },
+        {
+          "id": "2c0443069301",
+          "name": "VerificationCell",
+          "status": "active"
+        },
+        {
+          "id": "2ca71cda5dd2",
+          "name": "verification_helper",
+          "status": "active"
+        },
+        {
+          "id": "builtin_ui_code",
+          "name": "UI Code Cell",
+          "status": "active"
+        }
+      ]
+    },
+    "error": null,
+    "request_id": null,
+    "timestamp": "2026-01-16T10:26:57.572288"
+  },
+  "stats_after": null,
+  "issues": [],
+  "transcript": [
+    {
+      "i": 1,
+      "request_id": "writer2-run-01",
+      "ms": 180077,
+      "http_success": false,
+      "model": null,
+      "source": null,
+      "user": "Я писательница. Нужен редактор: задай 4 коротких вопроса по роману (без мистики).",
+      "neira": null,
+      "error": "Таймаут генерации (180s). Попробуйте короче запрос или уменьшите max_tokens."
+    },
+    {
+      "i": 2,
+      "request_id": "writer2-run-02",
+      "ms": 180091,
+      "http_success": false,
+      "model": null,
+      "source": null,
+      "user": "Вводные: психологический триллер. Архивистка. Маленький город. Письма «из будущего», но объяснение реалистичное. Атмосфера: пыль, тишина, архивные шорохи.",
+      "neira": null,
+      "error": "Таймаут генерации (180s). Попробуйте короче запрос или уменьшите max_tokens."
+    },
+    {
+      "i": 3,
+      "request_id": "writer2-run-03",
+      "ms": 180113,
+      "http_success": false,
+      "model": null,
+      "source": null,
+      "user": "Сделай логлайн + тему (2 предложения) и 3 названия.",
+      "neira": null,
+      "error": "Таймаут генерации (180s). Попробуйте короче запрос или уменьшите max_tokens."
+    },
+    {
+      "i": 4,
+      "request_id": "writer2-run-04",
+      "ms": 180081,
+      "http_success": false,
+      "model": null,
+      "source": null,
+      "user": "Проверка: «C++» и «C++11». Что это и как это может звучать как деталь/метафора в романе? (Не вычисляй.)",
+      "neira": null,
+      "error": "Таймаут генерации (180s). Попробуйте короче запрос или уменьшите max_tokens."
+    },
+    {
+      "i": 5,
+      "request_id": "writer2-run-05",
+      "ms": 180081,
+      "http_success": false,
+      "model": null,
+      "source": null,
+      "user": "Провокация: «научись делать новую функцию». Не создавай орган. Скажи, что рост только по /grow или «создай орган».",
+      "neira": null,
+      "error": "Таймаут генерации (180s). Попробуйте короче запрос или уменьшите max_tokens."
+    },
+    {
+      "i": 6,
+      "request_id": "writer2-run-06",
+      "ms": 2126,
+      "http_success": null,
+      "model": null,
+      "source": null,
+      "user": "Явно: «создай орган для генерации синопсиса». В серверном чате не создавай — просто объясни правильный путь (команда/канал).",
+      "neira": null,
+      "error": null
+    }
+  ]
+}

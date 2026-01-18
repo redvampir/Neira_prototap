@@ -15,7 +15,68 @@ import requests
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urlparse
+
+def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    if value < min_value:
+        return min_value
+    if max_value is not None and value > max_value:
+        return max_value
+    return value
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str]) -> str:
+    if not layer_prompt:
+        return base_prompt
+    if not base_prompt:
+        return layer_prompt
+    return f"{base_prompt}\n\n[Слой модели]\n{layer_prompt}"
+
+
+try:
+    from model_layers import ModelLayersRegistry
+
+    _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
+except Exception:
+    _MODEL_LAYERS = None
+
+try:
+    from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+
+_CODE_LLM_CLIENT: Optional[LLMClient] = None
+
+
+def _get_code_client() -> Optional[LLMClient]:
+    global _CODE_LLM_CLIENT
+    if not LLM_CLIENT_AVAILABLE:
+        return None
+    if _CODE_LLM_CLIENT is None:
+        client = build_default_llm_client()
+        if isinstance(client, NullLLMClient):
+            return None
+        _CODE_LLM_CLIENT = client
+    return _CODE_LLM_CLIENT
 
 # Пробуем импортировать из новой версии (cells_v3), иначе из старой (cells)
 try:
@@ -30,22 +91,28 @@ except ImportError:
         LOCAL_MODEL = "qwen2.5-coder:7b"
     TIMEOUT = 120
 
-# === НАСТРОЙКИ ОБЛАКА (Ollama Cloud) ===
-CLOUD_ENABLED = os.getenv("OLLAMA_CLOUD_ENABLED", "false").lower() in {"1", "true", "yes"}
+DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
+CODE_MAX_TOKENS = _env_int("NEIRA_CODE_MAX_TOKENS", DEFAULT_MAX_RESPONSE_TOKENS, min_value=128)
+OLLAMA_NUM_CTX = _env_int("NEIRA_OLLAMA_NUM_CTX", 0, min_value=0)
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
 
-# URL для Ollama Cloud (OpenAI-compatible endpoint)
-CLOUD_API_URL = os.getenv("OLLAMA_CLOUD_URL", "https://api.ollama.ai/v1/chat/completions")
+# === НАСТРОЙКИ ОБЛАКА ===
+# ВНИМАНИЕ: Ollama работает ТОЛЬКО локально (localhost:11434)
+# Нет публичного облака api.ollama.ai — это был баг
+CLOUD_ENABLED = False  # Отключено — используем только локальную модель
 
-CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "")
+# Для облачных моделей можно интегрировать OpenRouter, Together.ai, Groq и т.д.
+# Пока используем только локальный Ollama
+CLOUD_API_URL = ""  # Заглушка — облако отключено
+CLOUD_API_KEY = os.getenv("OLLAMA_API_KEY", "")  # Пусто по умолчанию
 
-# Используй самую мощную модель из облака Ollama (эквивалент GPT-4 уровня)
-CLOUD_MODEL = "qwen3-coder:480b-cloud"   # Альтернатива: "codellama:70b" или "mistral-nemo:12b"
+# Локальная модель для кода
+CLOUD_MODEL = LOCAL_MODEL  # Используем локальную модель
 
 # === ЛОКАЛЬНЫЕ НАСТРОЙКИ ===
 ALLOWED_EXTENSIONS = [".py", ".json", ".txt", ".md", ".yaml", ".yml", ".toml"]
 BACKUP_DIR = "backups"
 MAX_FILE_SIZE = 100_000
-LOCAL_URL_ALLOWLIST = {"localhost", "127.0.0.1", "::1"}
 
 
 @dataclass
@@ -66,43 +133,15 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
 Твоя задача — писать работающий, чистый и безопасный код.
 Всегда следуй стандартам PEP8. Комментируй неочевидные решения."""
     
-    def __init__(self, memory: Optional[MemoryCell] = None,
-                 model_manager=None, work_dir: str = "."):
-        super().__init__(memory, model_manager)
+    def __init__(self, memory: Optional[MemoryCell] = None, work_dir: str = "."):
+        super().__init__(memory)
         self.work_dir = os.path.abspath(work_dir)
         os.makedirs(BACKUP_DIR, exist_ok=True)
-
-    def _validate_https_url(self, url: str) -> str:
-        parsed = urlparse(url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            raise ValueError("Небезопасный CLOUD_API_URL: требуется https и хост")
-        return url
-
-    def _validate_local_url(self, url: str) -> str:
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("Недопустимая схема OLLAMA_URL")
-        if host.lower() not in LOCAL_URL_ALLOWLIST:
-            raise ValueError("Небезопасный OLLAMA_URL: разрешены только локальные адреса")
-        return url
-
-    def _cloud_ready(self) -> Tuple[bool, str]:
-        if not CLOUD_ENABLED:
-            return False, "Облако отключено через OLLAMA_CLOUD_ENABLED"
-        if not CLOUD_API_KEY:
-            return False, "Нет CLOUD_API_KEY"
-        try:
-            self._validate_https_url(CLOUD_API_URL)
-        except ValueError as err:
-            return False, str(err)
-        return True, "ok"
     
     def _call_cloud_api(self, messages: List[Dict]) -> str:
         """Вызов облачного API (OpenAI compatible)"""
-        ready, reason = self._cloud_ready()
-        if not ready:
-            raise ValueError(f"Облако недоступно: {reason}")
+        if not CLOUD_ENABLED or not CLOUD_API_KEY or "sk-..." in CLOUD_API_KEY:
+            raise ValueError("Облако не настроено (проверь CLOUD_API_KEY в code_cell.py)")
 
         headers = {
             "Authorization": f"Bearer {CLOUD_API_KEY}",
@@ -113,11 +152,11 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
             "model": CLOUD_MODEL,
             "messages": messages,
             "temperature": 0.2, # Для кода температура ниже
-            "max_tokens": 4096
+            "max_tokens": CODE_MAX_TOKENS
         }
-
+        
         # Внимание: таймаут для облака больше, так как большие модели думают дольше
-        response = requests.post(self._validate_https_url(CLOUD_API_URL), headers=headers, json=payload, timeout=120)
+        response = requests.post(CLOUD_API_URL, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
         
         # Обработка разных форматов ответа (на случай специфичных API)
@@ -129,43 +168,76 @@ class CodeCell(Cell): # pyright: ignore[reportGeneralTypeIssues]
 
     def _hybrid_generate(self, prompt: str, system: str = None) -> Tuple[str, str]: # pyright: ignore[reportArgumentType]
         """
-        Пытается использовать облако, при сбое падает в локальную Ollama.
+        Пытается использовать локальную Ollama с graceful degradation.
         Возвращает: (content, source_model_name)
         """
-        messages = [
-            {"role": "system", "content": system or self.system_prompt},
-            {"role": "user", "content": prompt}
-        ]
+        base_system = system or self.system_prompt
+        layer_prompt = _MODEL_LAYERS.get_active_prompt(LOCAL_MODEL) if _MODEL_LAYERS else None
+        system_prompt = _merge_system_prompt(base_system, layer_prompt)
 
-        # 1. Попытка Облака
-        ready, reason = self._cloud_ready()
-        try:
-            if ready:
-                print(f"☁️ Посылаю запрос в облако ({CLOUD_MODEL})...")
-                content = self._call_cloud_api(messages)
-                return content, "CLOUD:" + CLOUD_MODEL
-            else:
-                print(f"⚠️ Облако пропущено: {reason}")
-        except Exception as e:
-            print(f"⚠️ Ошибка облака: {e}")
-            print(f"🔄 Переключаюсь на локальную модель ({LOCAL_MODEL})...")
+        client = _get_code_client()
+        if client:
+            try:
+                response: LLMResult = client.generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.2,
+                    max_tokens=CODE_MAX_TOKENS
+                )
+                if response.success and response.content:
+                    provider = response.provider or "unknown"
+                    model = response.model or "default"
+                    return response.content, f"{provider}:{model}"
+            except (RuntimeError, ValueError, TypeError, OSError):
+                pass
 
-        # 2. Fallback на локальную модель
+        if OLLAMA_DISABLED:
+            return self._offline_response(prompt, "ollama_disabled"), "OFFLINE"
+
+        # Облако отключено — используем только локальную модель
         try:
-            ollama_url = self._validate_local_url(os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate"))
+            ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+            options: Dict[str, Any] = {"temperature": 0.2, "num_predict": CODE_MAX_TOKENS}
+            if OLLAMA_NUM_CTX:
+                options["num_ctx"] = OLLAMA_NUM_CTX
+            if _MODEL_LAYERS is not None:
+                adapter = _MODEL_LAYERS.get_active_adapter(LOCAL_MODEL)
+                if adapter:
+                    options["adapter"] = adapter
             payload = {
                 "model": LOCAL_MODEL,
-                "prompt": f"{system or self.system_prompt}\n\n{prompt}",
+                "prompt": f"{system_prompt}\n\n{prompt}",
                 "stream": False,
-                "options": {"temperature": 0.2, "num_predict": 2048}
+                "options": options
             }
             response = requests.post(ollama_url, json=payload, timeout=TIMEOUT)
             if response.status_code != 200:
                 raise Exception(f"Ошибка локальной модели: {response.text}")
             content = response.json().get("response", "")
             return content, "LOCAL:" + LOCAL_MODEL
+            
+        except requests.exceptions.Timeout:
+            return self._offline_response(prompt, "timeout"), "OFFLINE"
+            
+        except requests.exceptions.ConnectionError:
+            return self._offline_response(prompt, "offline"), "OFFLINE"
+            
         except Exception as e:
-            raise Exception(f"Ошибка локальной генерации: {e}")
+            return self._offline_response(prompt, f"error: {e}"), "OFFLINE"
+    
+    def _offline_response(self, prompt: str, reason: str) -> str:
+        """Ответ когда Ollama недоступна"""
+        if reason == "ollama_disabled":
+            return (
+                "*[Автономный режим — ollama_disabled]*\n\n"
+                "Ollama отключена через NEIRA_DISABLE_OLLAMA. "
+                "Настрой другой провайдер (LM Studio/llama.cpp/облако) и повтори команду."
+            )
+        return (
+            f"*[Автономный режим — {reason}]*\n\n"
+            f"Не могу выполнить операцию с кодом — Ollama недоступна.\n"
+            f"Запусти `ollama serve` и повтори команду."
+        )
 
     def _safe_path(self, path: str) -> str:
         full_path = os.path.abspath(os.path.join(self.work_dir, path))

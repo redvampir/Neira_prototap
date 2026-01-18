@@ -15,8 +15,104 @@ Neira v0.5 — Главный модуль (ОБНОВЛЕНО)
 
 import sys
 import re
-import uuid
-from typing import List, Optional, Tuple, Union, Dict, Any
+import os
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, Optional, Set, Tuple
+
+
+def _configure_io_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_configure_io_encoding()
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, min_value: int = 0) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    return parsed if parsed >= min_value else min_value
+
+
+def _env_csv_set(name: str, default: Iterable[str]) -> Set[str]:
+    value = os.getenv(name)
+    if value is None:
+        return set(default)
+    tokens = {token.strip().lower() for token in value.split(",") if token.strip()}
+    return tokens if tokens else set(default)
+
+
+# Импорт общей функции для удаления дубликатов
+from text_utils import remove_duplicate_paragraphs as _remove_duplicate_paragraphs
+
+
+DRY_RUN_ENABLED = _env_flag("NEIRA_DRY_RUN", False)
+DRY_RUN_PATH = Path(os.getenv("NEIRA_DRY_RUN_PATH", "artifacts/neira_dry_run_queue.jsonl"))
+
+
+def _queue_item(text: str) -> Dict[str, str]:
+    return {"timestamp": datetime.now().isoformat(), "input": text}
+
+
+def _append_queue(path: Path, item: Dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
+def _load_queue(path: Path) -> Tuple[list[Dict[str, str]], int]:
+    if not path.exists():
+        return [], 0
+    items: list[Dict[str, str]] = []
+    skipped = 0
+    with path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                skipped += 1
+                continue
+            if not isinstance(payload, dict):
+                skipped += 1
+                continue
+            text = payload.get("input")
+            if not isinstance(text, str):
+                skipped += 1
+                continue
+            items.append({"timestamp": str(payload.get("timestamp", "")), "input": text})
+    return items, skipped
+
+
+def _save_queue(path: Path, items: list[Dict[str, str]]) -> None:
+    if not items:
+        if path.exists():
+            path.unlink()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for item in items:
+            handle.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 try:
     from cells import (
@@ -35,15 +131,13 @@ except ImportError:
         ensure_models_installed,
         OLLAMA_URL
     )
-    MODEL_CODE = "qwen2.5-coder:7b"
-    MODEL_REASON = "mistral:7b-instruct"
+    MODEL_CODE = "nemotron-mini"
+    MODEL_REASON = "nemotron-mini"
     MODEL_ROUTING = {}
     TIMEOUT = 180
     MAX_RETRIES = 2
     MIN_ACCEPTABLE_SCORE = 7
     USE_CLOUD_IF = {"complexity": 5, "retries": 2}
-
-from cell_factory import CellBlueprint, CellFactory
 
 # Model Manager
 try:
@@ -76,6 +170,38 @@ except ImportError as e:
     EXPERIENCE_AVAILABLE = False
     print(f"⚠️ Система опыта недоступна: {e}")
 
+try:
+    from evolution_manager import EvolutionManager
+    EVOLUTION_AVAILABLE = True
+except ImportError as e:
+    EVOLUTION_AVAILABLE = False
+    print(f"⚠️ Система эволюции недоступна: {e}")
+
+try:
+    from introspection_cell import IntrospectionCell
+    INTROSPECTION_AVAILABLE = True
+except ImportError as e:
+    INTROSPECTION_AVAILABLE = False
+    print(f"⚠️ Орган самосознания недоступен: {e}")
+
+# Автономный загрузчик клеток (v0.8)
+try:
+    from cell_watcher import CellWatcher, get_cell_watcher, start_cell_watcher
+    CELL_WATCHER_AVAILABLE = True
+except ImportError as e:
+    CELL_WATCHER_AVAILABLE = False
+    print(f"⚠️ CellWatcher недоступен: {e}")
+
+# Cell Router для маршрутизации запросов к клеткам
+try:
+    from cell_router import get_router
+    CELL_ROUTER_AVAILABLE = True
+    cell_router = get_router()
+except ImportError as e:
+    CELL_ROUTER_AVAILABLE = False
+    cell_router = None
+    print(f"⚠️ Cell Router недоступен: {e}")
+
 
 class Neira:
     """Главный класс — связывает все клетки"""
@@ -102,109 +228,173 @@ class Neira:
             if verbose:
                 print("⚠️ ModelManager недоступен, используются модели без управления VRAM")
 
-        self.cell_factory = CellFactory(self.memory, self.model_manager, verbose=verbose)
-
-        self._register_blueprints()
-
         # Базовые клетки
-        self.analyzer = self.cell_factory.create_cell("analyzer")
-        self.planner = self.cell_factory.create_cell("planner")
-        self.executor = self.cell_factory.create_cell("executor")
-        self.verifier = self.cell_factory.create_cell("verifier")
-        self.fact_extractor = self.cell_factory.create_cell("fact_extractor")
+        self.analyzer = AnalyzerCell(self.memory)
+        self.planner = PlannerCell(self.memory)
+        self.executor = ExecutorCell(self.memory)
+        self.verifier = VerifierCell(self.memory)
+        self.fact_extractor = FactExtractorCell(self.memory)
         
-        # Обновляем системный промпт исполнителя с учётом личности
+        # Обновляем системный промпт исполнителя с учётом личности и памяти
+        base_executor_prompt = """
+Ты — Нейра, ИИ с системой клеток и органов. У тебя есть память и опыт.
+
+## 🧬 СИСТЕМА КЛЕТОК:
+- MemoryCell — твоя память и воспоминания
+- AnalyzerCell — анализ запросов
+- PlannerCell — планирование действий
+- ExecutorCell — выполнение задач (ты сейчас в этой роли)
+- VerifierCell — проверка результатов
+- FactExtractorCell — извлечение фактов
+- WebSearchCell — поиск в интернете
+- CodeCell — работа с кодом
+- IntrospectionCell — самосознание
+
+## 🧠 ПАМЯТЬ:
+Используй информацию из памяти для контекста. Если знаешь что-то релевантное — упомяни.
+
+## 🫀 ОРГАНЫ:
+- Нервная система следит за твоим состоянием
+- Иммунная система защищает от угроз
+- Система любопытства задаёт вопросы
+- Система эволюции улучшает способности
+
+ПРАВИЛА:
+- Отвечай естественно, как живой собеседник
+- Используй память для непрерывности разговора
+- Активируй клетки при необходимости сложных задач
+- Сохраняй важную информацию в память
+- Будь полезной и дружелюбной"""
+
         if self.experience:
             personality_prompt = self.experience.get_personality_prompt()
-            self.executor.system_prompt = personality_prompt + """
+            self.executor.system_prompt = personality_prompt + base_executor_prompt + """
 Выполни задачу по плану. В разговоре ты — участник диалога.
 Если тебя спрашивают — отвечай о себе, от первого лица.
 Используй контекст из памяти и свой опыт.
+
+АДАПТИВНАЯ ДЛИНА ОТВЕТА:
+- Простые вопросы → краткий ответ (1-3 предложения)
+- "Объясни", "расскажи", "как" → подробный ответ
+- Код → полный рабочий код
+- Не добавляй воду, но и не обрезай важное
 
 ВАЖНО:
 - Если СУБЪЕКТ: Нейра — значит ТЫ должна действовать
 - Не перекладывай работу на пользователя
 - Давай конкретные результаты, а не описания планов"""
+        else:
+            self.executor.system_prompt = base_executor_prompt
         
         # Веб-клетки
-        if WEB_AVAILABLE:
-            self.web_search = self.cell_factory.create_cell("web_search")
-            self.web_learner = self.cell_factory.create_cell("web_learner")
-        else:
-            self.web_search = None
-            self.web_learner = None
-        
-        # Код-клетки
-        if CODE_AVAILABLE:
-            self.code = self.cell_factory.create_cell("code")
-            self.self_modify = self.cell_factory.create_cell("self_modify")
-        else:
-            self.code = None
-            self.self_modify = None
+        self._lazy_modules = _env_flag("NEIRA_LAZY_MODULES", True)
+        self._enable_web = WEB_AVAILABLE and _env_flag("NEIRA_ENABLE_WEB", True)
+        self._enable_code = CODE_AVAILABLE and _env_flag("NEIRA_ENABLE_CODE", True)
+        self._enable_evolution = EVOLUTION_AVAILABLE and bool(self.experience) and _env_flag("NEIRA_ENABLE_EVOLUTION", True)
+        self._enable_introspection = INTROSPECTION_AVAILABLE and _env_flag("NEIRA_ENABLE_INTROSPECTION", True)
+        self._enable_cell_watcher = CELL_WATCHER_AVAILABLE and _env_flag("NEIRA_ENABLE_CELL_WATCHER", True)
 
-        base_cells: List[str] = [
-            "analyzer",
-            "planner",
-            "executor",
-            "verifier",
-            "fact_extractor",
-        ]
-        self.core_organ = self.cell_factory.create_organ("core", base_cells, "Базовый цикл обработки запроса")
+        self._web_error: Optional[str] = None
+        self._code_error: Optional[str] = None
+        self._evolution_error: Optional[str] = None
+        self._introspection_error: Optional[str] = None
+        self._watcher_error: Optional[str] = None
 
-    def _register_blueprints(self):
-        """Регистрирует все известные клетки в фабрике."""
-        self.cell_factory.register_blueprint(
-            CellBlueprint("analyzer", lambda mem, manager: AnalyzerCell(mem, manager), "Анализ запросов")
-        )
-        self.cell_factory.register_blueprint(
-            CellBlueprint("planner", lambda mem, manager: PlannerCell(mem, manager), "Планирование действий")
-        )
-        self.cell_factory.register_blueprint(
-            CellBlueprint(
-                "executor",
-                lambda mem, manager: ExecutorCell(mem, manager),
-                "Исполнение",
-                metadata={"lora": "executor_dialog"},
-            )
-        )
-        self.cell_factory.register_blueprint(
-            CellBlueprint("verifier", lambda mem, manager: VerifierCell(mem, manager), "Верификация ответа")
-        )
-        self.cell_factory.register_blueprint(
-            CellBlueprint(
-                "fact_extractor",
-                lambda mem, manager: FactExtractorCell(mem, manager),
-                "Извлечение фактов для памяти",
-            )
-        )
+        self.web_search = None
+        self.web_learner = None
+        self.code = None
+        self.self_modify = None
+        self.evolution = None
+        self.introspection = None
+        self.cell_watcher = None
 
-        if WEB_AVAILABLE:
-            self.cell_factory.register_blueprint(
-                CellBlueprint("web_search", lambda mem, manager: WebSearchCell(mem, manager), "Поиск в интернете")
-            )
-            self.cell_factory.register_blueprint(
-                CellBlueprint("web_learner", lambda mem, manager: WebLearnerCell(mem, manager), "Обучение из веба")
-            )
+        if not self._lazy_modules:
+            self._ensure_web()
+            self._ensure_code()
+            self._ensure_evolution()
+            self._ensure_introspection()
+            self._ensure_cell_watcher()
 
-        if CODE_AVAILABLE:
-            self.cell_factory.register_blueprint(
-                CellBlueprint(
-                    "code",
-                    lambda mem, manager: CodeCell(mem, manager, work_dir="."),
-                    "Работа с исходниками",
-                    metadata={"lora": "code_assistant"},
-                )
-            )
-            self.cell_factory.register_blueprint(
-                CellBlueprint(
-                    "self_modify", lambda mem, manager: SelfModifyCell(mem, manager, work_dir="."), "Самомодификация"
-                )
-            )
-    
-    def log(self, message: str, request_id: Optional[str] = None):
+    def _ensure_web(self) -> bool:
+        if self.web_search or self.web_learner:
+            return True
+        if not self._enable_web or self._web_error:
+            return False
+        try:
+            self.web_search = WebSearchCell(self.memory)
+            self.web_learner = WebLearnerCell(self.memory)
+            return True
+        except Exception as e:
+            self._web_error = str(e)
+            if self.verbose:
+                print(f"? ???-?????? ?? ????????????????: {e}")
+            return False
+
+    def _ensure_code(self) -> bool:
+        if self.code:
+            return True
+        if not self._enable_code or self._code_error:
+            return False
+        try:
+            self.code = CodeCell(self.memory, work_dir=".")
+            self.self_modify = SelfModifyCell(self.memory)
+            return True
+        except Exception as e:
+            self._code_error = str(e)
+            if self.verbose:
+                print(f"? ???-?????? ?? ????????????????: {e}")
+            return False
+
+    def _ensure_evolution(self) -> bool:
+        if self.evolution:
+            return True
+        if not self._enable_evolution or self._evolution_error:
+            return False
+        try:
+            self.evolution = EvolutionManager(self.experience, self.memory, verbose=self.verbose)
+            self.evolution.initialize()
+            return True
+        except Exception as e:
+            self._evolution_error = str(e)
+            if self.verbose:
+                print(f"? ??????? ???????? ?? ????????????????: {e}")
+            return False
+
+    def _ensure_introspection(self) -> bool:
+        if self.introspection:
+            return True
+        if not self._enable_introspection or self._introspection_error:
+            return False
+        try:
+            self.introspection = IntrospectionCell(self.memory)
+            if self.verbose:
+                print("?? ????? ???????????? ???????????")
+            return True
+        except Exception as e:
+            self._introspection_error = str(e)
+            if self.verbose:
+                print(f"? ????? ???????????? ?? ???????????????: {e}")
+            return False
+
+    def _ensure_cell_watcher(self) -> bool:
+        if self.cell_watcher:
+            return True
+        if not self._enable_cell_watcher or self._watcher_error:
+            return False
+        try:
+            self.cell_watcher = start_cell_watcher()
+            if self.verbose:
+                print("?? CellWatcher ??????? - ????? ?????? ??????????? ?????????????")
+            return True
+        except Exception as e:
+            self._watcher_error = str(e)
+            if self.verbose:
+                print(f"? CellWatcher ?? ???????????????: {e}")
+            return False
+
+    def log(self, message: str):
         if self.verbose:
-            prefix = f"[REQ {request_id}] " if request_id else ""
-            print(f"\n{'='*50}\n{prefix}{message}\n{'='*50}")
+            print(f"\n{'='*50}\n{message}\n{'='*50}")
     
     def _parse_verification(self, verification_text: str) -> Tuple[str, int, str]:
         """Парсим результат верификации"""
@@ -272,47 +462,112 @@ class Neira:
 
         return None
 
-    def process(
-        self,
-        user_input: str,
-        request_id: Optional[str] = None,
-        return_meta: bool = False,
-    ) -> Union[str, Tuple[str, Dict[str, Any]]]:
+    def process(self, user_input: str) -> str:
         """Главный метод обработки запроса"""
-
-        request_id = request_id or uuid.uuid4().hex
-        if self.verbose:
-            print(f"[REQ {request_id}] ▶️ Старт. Длина входа: {len(user_input)}")
         
         # Добавляем в контекст сессии
         self.memory.add_to_session(f"Пользователь: {user_input}")
         
         # 1. Анализ
-        self.log("🔍 АНАЛИЗ", request_id=request_id)
-        analysis = self.analyzer.process(user_input, request_id=request_id)
+        self.log("🔍 АНАЛИЗ")
+        analysis = self.analyzer.process(user_input)
         if self.verbose:
             print(analysis.content)
         
         task_type = self._extract_task_type(analysis.content)
         subject = self._extract_subject(analysis.content)
         complexity = self._extract_complexity(analysis.content)
-        if self.verbose:
-            print(f"[REQ {request_id}] 🧾 Анализ: тип={task_type}, сложность={complexity}")
-        needs_search = analysis.metadata.get("needs_search", False)
-        needs_code = analysis.metadata.get("needs_code", False)
+        metadata = analysis.metadata or {}
+        needs_search = metadata.get("needs_search", False)
+        needs_code = metadata.get("needs_code", False)
+        needs_cell = metadata.get("needs_cell", False)
+
+        # 1.5. Проверка Cell Router (интеграция системы клеток)
+        cell_router_available = False
+        try:
+            from cell_router import get_router
+            cell_router = get_router()
+            use_cell, cell_name, reasoning = cell_router.should_use_cell(user_input)
+            if use_cell:
+                self.log(f"🧬 АКТИВАЦИЯ КЛЕТКИ: {cell_name}")
+                if self.verbose:
+                    print(f"Обоснование: {reasoning}")
+                # Здесь можно добавить логику активации конкретной клетки
+                needs_cell = True
+            cell_router_available = True
+        except ImportError:
+            if self.verbose:
+                print("⚠️ Cell Router недоступен")
+
+        fast_chat = False
+        fast_chat_skip_planning = False
+        fast_chat_skip_verify = False
+        fast_chat_skip_facts = False
+        max_retries = MAX_RETRIES
+
+        if _env_flag("NEIRA_FAST_CHAT", False):
+            fast_chat_types = _env_csv_set("NEIRA_FAST_CHAT_TYPES", ("разговор", "вопрос"))
+            if task_type in fast_chat_types and not needs_search and not needs_code and not needs_cell:
+                fast_chat = True
+
+        if fast_chat:
+            fast_chat_skip_planning = _env_flag("NEIRA_FAST_CHAT_SKIP_PLANNING", True)
+            fast_chat_skip_verify = _env_flag("NEIRA_FAST_CHAT_SKIP_VERIFY", True)
+            fast_chat_skip_facts = _env_flag("NEIRA_FAST_CHAT_SKIP_FACTS", True)
+            max_retries = _env_int("NEIRA_FAST_CHAT_MAX_RETRIES", 0)
+            if self.verbose:
+                skipped = []
+                if fast_chat_skip_planning:
+                    skipped.append("планирование")
+                if fast_chat_skip_verify:
+                    skipped.append("верификация")
+                if fast_chat_skip_facts:
+                    skipped.append("извлечение фактов")
+                if skipped:
+                    print(f"Быстрый чат: пропускаю {', '.join(skipped)}.")
+
+        # NEW v0.6: Если нужно создать клетку — делаем это
+        # if needs_cell and self._ensure_evolution():
+        #     self.log("🌱 СОЗДАНИЕ НОВОГО ОРГАНА")
+        #     # Извлекаем описание клетки из запроса
+        #     cell_description = user_input
+        #     for prefix in ["научись", "добавь", "создай", "отрасти"]:
+        #         if prefix in user_input.lower():
+        #             idx = user_input.lower().find(prefix)
+        #             cell_description = user_input[idx + len(prefix):].strip()
+        #             break
+        #     
+        #     result = self.evolution.cmd_create_cell(cell_description)
+        #     print(f"🌱 {result}")
+        #     
+        #     # Если клетка создана успешно — активируем её
+        #     if "Клетка создана" in result:
+        #         cell_name = result.split(":")[1].split("\n")[0].strip()
+        #         self.evolution.cmd_activate_cell(cell_name)
+        #         return f"Готово! Я создала новый орган: {cell_name}. Теперь я могу {cell_description}."
+
+        # 🆕 Умное предложение создания органа в интерактивном режиме
+        try:
+            from cell_factory import get_organ_creation_manager
+            creation_manager = get_organ_creation_manager()
+            
+            should_suggest, reason = creation_manager.should_create_automatically(user_input, "main_user")
+            
+            if not should_suggest and "обсудим создание" in reason:
+                # Предлагаем перейти к интерактивному созданию
+                return f"🧬 Я заметила, что вы хотите, чтобы я развивалась!\n\n" \
+                       f"Давайте обсудим создание нового органа для: '{user_input[:100]}...'\n\n" \
+                       f"Используйте команду `/grow {user_input[:50]}...` в Telegram для интерактивного создания."
+        except Exception as e:
+            # Тихо игнорируем ошибки импорта/инициализации
+            pass
 
         # NEW v0.5: Маршрутизация модели (начальный выбор)
-        active_model_key: Optional[str] = None
         if self.model_manager and MODEL_ROUTING:
             target_model = MODEL_ROUTING.get(task_type, "reason")
             if self.verbose:
                 print(f"🎯 Тип задачи: {task_type}, сложность: {complexity} → модель: {target_model}")
-            if self.model_manager.switch_to(target_model):
-                active_model_key = target_model
-
-        if self.verbose:
-            source_type = "cloud" if (active_model_key and "cloud" in active_model_key) else "local"
-            print(f"[REQ {request_id}] 🧠 Выбор модели: {active_model_key or 'reason'} ({source_type})")
+            self.model_manager.switch_to(target_model)
 
         # Получаем релевантный опыт
         experience_context = ""
@@ -322,27 +577,33 @@ class Neira:
                 experience_context = "\n[Из опыта]\n" + "\n".join(f"- {l}" for l in lessons)
                 if self.verbose:
                     print(f"\n📖 Применяю опыт: {lessons}")
-
+        
+        # Получаем релевантную память
+        memory_context = ""
+        if hasattr(self.memory, 'recall_text'):
+            relevant_memories = self.memory.recall_text(user_input, top_k=3)
+            if relevant_memories:
+                memory_context = "\n[Из памяти]\n" + "\n".join(f"- {m}" for m in relevant_memories)
+                if self.verbose:
+                    print(f"\n💾 Вспомнил: {len(relevant_memories)} фактов")
+        
         extra_context = experience_context
-
-        if self.model_manager and active_model_key is None and self.model_manager.current_model:
-            active_model_key = self.model_manager.current_model
         
         # Добавляем информацию о субъекте в контекст
         if subject == "neira":
             extra_context += "\n\n⚠️ СУБЪЕКТ ДЕЙСТВИЯ: ТЫ (Нейра). Ты должна выполнить действие, не пользователь!"
         
         # 2. Поиск в интернете
-        if needs_search and self.web_search:
-            self.log("🌐 ПОИСК В ИНТЕРНЕТЕ", request_id=request_id)
-            search_result = self.web_search.process(user_input, request_id=request_id)
+        if needs_search and self._ensure_web():
+            self.log("🌐 ПОИСК В ИНТЕРНЕТЕ")
+            search_result = self.web_search.process(user_input)
             if self.verbose:
                 print(search_result.content[:500] + "..." if len(search_result.content) > 500 else search_result.content)
             extra_context += f"\n[Результаты поиска]\n{search_result.content}\n"
         
         # 3. ПРИНУДИТЕЛЬНАЯ работа с кодом (НОВОЕ!)
-        if needs_code and self.code:
-            self.log("💻 РАБОТА С КОДОМ", request_id=request_id)
+        if needs_code and self._ensure_code():
+            self.log("💻 РАБОТА С КОДОМ")
             
             # Если нужно читать код — читаем автоматически
             if "прочитай" in user_input.lower() or "изучи" in user_input.lower() or "проанализируй" in user_input.lower():
@@ -373,11 +634,15 @@ class Neira:
                 extra_context += f"\n[Сгенерированный код]\n{code_result.content}\n"
         
         # 4. Планирование
-        self.log("📋 ПЛАНИРОВАНИЕ", request_id=request_id)
-        plan_input = {"input_data": user_input, "analysis": analysis.content, "model_key": active_model_key}
-        plan = self.planner.process(plan_input, request_id=request_id)
-        if self.verbose:
-            print(plan.content)
+        if fast_chat and fast_chat_skip_planning:
+            self.log("📋 ПЛАНИРОВАНИЕ (пропущено)")
+            plan_content = "Ответь на сообщение пользователя кратко, по делу и без лишних отступлений."
+        else:
+            self.log("📋 ПЛАНИРОВАНИЕ")
+            plan = self.planner.process(user_input, analysis.content)
+            plan_content = plan.content
+            if self.verbose:
+                print(plan_content)
         
         # 5. Исполнение с RETRY-ЛОГИКОЙ (НОВОЕ!)
         final_result = None
@@ -385,65 +650,57 @@ class Neira:
         final_score = 0
         problems = ""
         
-        for attempt in range(MAX_RETRIES + 1):
+        for attempt in range(max_retries + 1):
             # NEW v0.5: Проверка, нужно ли переключиться на облачную модель
             if attempt > 0 and self.model_manager:
                 cloud_model = self._should_use_cloud(task_type, complexity, attempt)
                 if cloud_model:
                     if self.verbose:
-                        print(f"[REQ {request_id}] 🌩️ Переключение на облачную модель: {cloud_model}")
+                        print(f"🌩️ Переключение на облачную модель: {cloud_model}")
+                    self.model_manager.switch_to(cloud_model)
                     if self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
 
-            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{MAX_RETRIES + 1})", request_id=request_id)
+            self.log(f"⚡ ИСПОЛНЕНИЕ (попытка {attempt + 1}/{max_retries + 1})")
 
-            # Передаём проблемы от предыдущей попытки
+            # Передаём проблемы от предыдущей попытки + контекст памяти
+            full_extra_context = extra_context + experience_context + memory_context
+            
             result = self.executor.process(
                 user_input,
-                plan.content,
-                extra_context,
-                problems=problems if attempt > 0 else "",
-                model_key=active_model_key,
-                request_id=request_id,
+                plan_content,
+                full_extra_context,
+                problems=problems if attempt > 0 else ""
             )
             if self.verbose:
                 print(result.content)
-
-            exec_fallback = result.metadata.get("fallback_reason")
-            exec_length = result.metadata.get("response_length", len(result.content))
-            if exec_fallback or exec_length == 0:
-                print(
-                    f"[REQ {request_id}] ⚠️ Исполнитель вернул пустой ответ "
-                    f"({exec_fallback or 'empty_response'}). Пробую другую модель"
-                )
-                final_result = result
-                final_verdict = "ОТКЛОНЁН"
-                final_score = 0
-                problems = "Ответ отсутствует, попробуй другой подход или модель"
-
-                if self.model_manager:
-                    cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
-                    if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
-                        active_model_key = cloud_model
-                        print(f"[REQ {request_id}] 🌩️ Переключение на облако из-за пустого ответа: {cloud_model}")
-
-                if attempt < MAX_RETRIES:
+            
+            # Защита от пустого результата ExecutorCell
+            if not result.content or not result.content.strip():
+                print(f"⚠️ ExecutorCell вернул пустой результат на попытке {attempt + 1}")
+                if attempt < max_retries:
+                    problems = "Предыдущая попытка не дала ответа. Сформулируй четкий и полный ответ."
                     continue
+                else:
+                    # Если все попытки исчерпаны - возвращаем дефолтный ответ
+                    return "Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос."
+
+            if fast_chat and fast_chat_skip_verify:
+                final_result = result
+                final_verdict = "ПРИНЯТ"
+                final_score = MIN_ACCEPTABLE_SCORE
                 break
 
             # 6. Верификация
-            self.log("✅ ВЕРИФИКАЦИЯ", request_id=request_id)
-            verification = self.verifier.process(user_input, result.content, request_id=request_id)
+            self.log("✅ ВЕРИФИКАЦИЯ")
+            verification = self.verifier.process(user_input, result.content)
             if self.verbose:
                 print(verification.content)
 
             verify_fallback = verification.metadata.get("fallback_reason")
             verify_length = verification.metadata.get("response_length", len(verification.content))
             if verify_fallback or verify_length == 0:
-                print(
-                    f"[REQ {request_id}] ⚠️ Верификатор не дал ответ "
-                    f"({verify_fallback or 'empty_response'}). Переключаю модель и повторяю"
-                )
+                print(f"⚠️ Верификатор не дал ответ ({verify_fallback or 'empty_response'}). Переключаю модель и повторяю")
                 final_result = result
                 final_verdict = "ТРЕБУЕТ_ДОРАБОТКИ"
                 final_score = 0
@@ -453,9 +710,9 @@ class Neira:
                     cloud_model = self._should_use_cloud(task_type, complexity, attempt + 1)
                     if cloud_model and cloud_model != active_model_key and self.model_manager.switch_to(cloud_model):
                         active_model_key = cloud_model
-                        print(f"[REQ {request_id}] 🌩️ Облачная модель для повторной проверки: {cloud_model}")
+                        print(f"🌩️ Облачная модель для повторной проверки: {cloud_model}")
 
-                if attempt < MAX_RETRIES:
+                if attempt < max_retries:
                     continue
                 break
 
@@ -468,18 +725,18 @@ class Neira:
             # Если оценка достаточная — выходим из цикла
             if score >= MIN_ACCEPTABLE_SCORE:
                 if attempt > 0:
-                    print(f"[REQ {request_id}] ✅ Исправлено с {attempt + 1}-й попытки!")
+                    print(f"✅ Исправлено с {attempt + 1}-й попытки!")
                 break
 
             # Если оценка низкая и есть ещё попытки — продолжаем
-            if attempt < MAX_RETRIES:
-                print(f"[REQ {request_id}] ⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
+            if attempt < max_retries:
+                print(f"⚠️ Оценка {score}/10 < {MIN_ACCEPTABLE_SCORE}. Пробую исправить...")
             else:
-                print(f"[REQ {request_id}] ⚠️ Достигнут лимит попыток. Возвращаю лучший результат.")
+                print(f"⚠️ Достигнут лимит попыток. Возвращаю лучший результат.")
         
         # 7. Записываем опыт
         if self.experience:
-            self.log("📖 ЗАПИСЬ ОПЫТА", request_id=request_id)
+            self.log("📖 ЗАПИСЬ ОПЫТА")
             self.experience.record_experience(
                 task_type=task_type,
                 user_input=user_input,
@@ -489,38 +746,36 @@ class Neira:
             )
         
         # 8. Извлечение фактов для памяти
-        self.log("💾 ПАМЯТЬ", request_id=request_id)
-        facts = self.fact_extractor.process(user_input, final_result.content, request_id=request_id)
-        for fact in facts:
-            if fact.get("importance", 0) >= 0.5:
-                self.memory.remember(
-                    text=fact["text"],
-                    importance=fact.get("importance", 0.5),
-                    category=fact.get("category", "general"),
-                    source=fact.get("source", "conversation")
-                )
+        # Защита от None (хотя цикл всегда выполняется хотя бы раз)
+        if final_result is None:
+            return "Ошибка: не удалось сгенерировать ответ"
+
+        result_content = final_result.content
         
-        if not facts:
-            print("Новых фактов не найдено")
+        # Удаляем дубли абзацев (LLM иногда повторяет ответ)
+        result_content = _remove_duplicate_paragraphs(result_content)
+        
+        if fast_chat and fast_chat_skip_facts:
+            self.log("💾 ПАМЯТЬ (пропущено)")
+        else:
+            self.log("💾 ПАМЯТЬ")
+            facts = self.fact_extractor.process(user_input, result_content)
+            for fact in facts:
+                if fact.get("importance", 0) >= 0.5:
+                    self.memory.remember(
+                        text=fact["text"],
+                        importance=fact.get("importance", 0.5),
+                        category=fact.get("category", "general"),
+                        source=fact.get("source", "conversation")
+                    )
+
+            if not facts:
+                print("Новых фактов не найдено")
         
         # Сохраняем ответ в контекст
-        self.memory.add_to_session(f"Нейра: {final_result.content}")
-
-        run_info = {
-            "request_id": request_id,
-            "task_type": task_type,
-            "complexity": complexity,
-            "model": final_result.metadata.get("model"),
-            "fallback_reason": final_result.metadata.get("fallback_reason"),
-            "len_raw": len(final_result.content),
-            "preview": final_result.content[:200],
-            "model_source": final_result.metadata.get("model_source"),
-        }
-
-        if return_meta:
-            return final_result.content, run_info
-
-        return final_result.content
+        self.memory.add_to_session(f"Нейра: {result_content}")
+        
+        return result_content
     
     # === КОМАНДЫ ===
     
@@ -567,24 +822,16 @@ class Neira:
         if not self.experience:
             return "❌ Система опыта недоступна"
         return self.experience.show_personality()
-
-    def train_new_cell_type(self, name: str, goal: str, example: str = "") -> str:
-        """Обучение нового типа клетки через LLM и регистрация чертежа."""
-        try:
-            blueprint = self.cell_factory.train_new_blueprint(name, goal, example)
-            return f"✅ Чертёж '{blueprint.name}' сохранён. Описание: {blueprint.description}"
-        except Exception as exc:
-            return f"❌ Обучение не удалось: {exc}"
     
     def cmd_learn(self, topic: str) -> str:
         """Изучить тему"""
-        if not self.web_learner:
+        if not self._ensure_web() or not self.web_learner:
             return "❌ Установи: pip install duckduckgo-search"
         return self.web_learner.learn(topic).content
     
     def cmd_code(self, action: str, *args) -> str:
         """Команды работы с кодом"""
-        if not self.code:
+        if not self._ensure_code() or not self.code:
             return "❌ Код-клетка недоступна"
         
         if action == "list":
@@ -610,9 +857,35 @@ class Neira:
         
         return f"❌ Неизвестная команда: {action}"
     
+    def cmd_self(self, args: Optional[list] = None) -> str:
+        """Команда самосознания"""
+        if not self._ensure_introspection() or not self.introspection:
+            return "❌ Орган самосознания недоступен"
+        
+        if not args:
+            # Полная интроспекция
+            return self.introspection.process("Кто я такая?").content
+        
+        subcommand = args[0].lower()
+        
+        if subcommand == "organs":
+            return self.introspection.process("Покажи мои органы").content
+        elif subcommand == "grow":
+            return self.introspection.process("Как мне отрастить новые способности?").content
+        elif subcommand == "status":
+            return self.introspection.get_self_description()
+        
+        return self.introspection.process(" ".join(args)).content
+    
     def cmd_help(self) -> str:
         return """
-📚 КОМАНДЫ НЕЙРЫ v0.4
+📚 КОМАНДЫ НЕЙРЫ v0.8
+
+Самосознание:
+  /self                — кто я? (полная интроспекция)
+  /self organs         — показать мои органы
+  /self grow           — как мне расти?
+  /self status         — мой текущий статус
 
 Память и опыт:
   /memory              — показать память
@@ -627,12 +900,31 @@ class Neira:
   /code list           — список файлов
   /code read <файл>    — прочитать файл
   /code analyze <файл> — анализ кода
-  /code self           — самоанализ
+  /code self           — самоанализ кода
+
+Эволюция и рост:
+  /evolution stats     — статистика эволюции
+  /evolution cycle     — запустить автоэволюцию
+  /grow <описание>     — отрастить новый орган (клетку)
+  /activate <имя>      — активировать клетку
+  /cells               — список созданных клеток
+
+Здоровье и защита:
+  /health              — статус всех систем
+  /diagnose            — диагностика компонентов
+  /threats             — отчёт об угрозах
+  /pulse               — проверить пульс клеток
+  /recover             — авто-восстановление
+  /git <cmd>           — Git: status/log/restore/rollback
+  /watcher <cmd>       — статус автозагрузчика клеток
+  /sos <проблема>      — запросить помощь
 
 Прочее:
   /stats               — статистика
-  /train <имя> <цель>  — обучить новый тип клетки
   /models              — проверить модели
+  /queue status        — очередь отложенных сообщений
+  /queue send          — отправить очередь (если dry-run выключен)
+  /queue clear         — очистить очередь
   /help                — эта справка
   /exit                — выход
 
@@ -661,9 +953,6 @@ class Neira:
             output += f"  Текущая модель: {manager_stats.get('current_model', 'none')}\n"
             output += f"  Переключений: {manager_stats.get('switches', 0)}\n"
             output += f"  Загружено в VRAM: {', '.join(manager_stats.get('loaded_models', [])) or 'none'}\n\n"
-            output += f"  Текущий VRAM: {manager_stats.get('current_vram_gb', 0)} ГБ из {manager_stats.get('max_vram_gb', 0)}\n"
-            loras = manager_stats.get('loaded_loras', []) or ['none']
-            output += f"  LoRA: {', '.join(loras)}\n\n"
 
         output += f"Веб-поиск: {'✅' if WEB_AVAILABLE else '❌'}\n"
         output += f"Работа с кодом: {'✅' if CODE_AVAILABLE else '❌'}\n"
@@ -671,34 +960,373 @@ class Neira:
         output += f"Память: {self.memory.get_stats().get('total', 0)} записей\n"
         output += f"Контекст сессии: {len(self.memory.session_context)} сообщений\n"
 
-        factory_stats = self.cell_factory.get_stats()
-        output += "\nКлетки и органы:\n"
-        output += f"  Чертежей: {len(factory_stats['blueprints'])}\n"
-        output += f"  Активных клеток: {len(factory_stats['active_cells'])} ({', '.join(factory_stats['active_cells'])})\n"
-        output += f"  Органов: {len(factory_stats['organs'])}\n"
-        for organ_name, organ_cells in factory_stats["organs"].items():
-            output += f"    - {organ_name}: {', '.join(organ_cells)}\n"
-
         if self.experience:
             exp_stats = self.experience.get_stats()
             output += f"Опыт: {exp_stats.get('total', 0)} записей\n"
             output += f"Средняя оценка: {exp_stats.get('avg_score', 0)}/10\n"
 
         return output
+    
+    def cmd_health(self) -> str:
+        """Показать здоровье всех систем"""
+        from cells import get_health_status, NERVOUS_SYSTEM_AVAILABLE, IMMUNE_SYSTEM_AVAILABLE
+        
+        output = "🏥 ЗДОРОВЬЕ СИСТЕМ v0.7\n\n"
+        
+        health = get_health_status()
+        
+        # Основные системы
+        status_emoji = {"healthy": "✅", "warning": "⚠️", "critical": "🔴", "dead": "💀", "unknown": "❓"}
+        
+        output += "Основные компоненты:\n"
+        for component in ["cells", "memory", "models"]:
+            status = health.get(component, "unknown")
+            emoji = status_emoji.get(status, "❓")
+            output += f"  {emoji} {component}: {status}\n"
+        
+        # Нервная система
+        output += f"\nНервная система: "
+        if NERVOUS_SYSTEM_AVAILABLE:
+            ns_status = health.get("nervous", "unknown")
+            output += f"{status_emoji.get(ns_status, '❓')} {ns_status}\n"
+            
+            if "metrics" in health:
+                output += "  Метрики:\n"
+                for name, data in health["metrics"].items():
+                    metric_emoji = status_emoji.get(data.get("status", "unknown"), "❓")
+                    output += f"    {metric_emoji} {name}: {data['value']}{data.get('unit', '')}\n"
+            
+            if "errors" in health:
+                err = health["errors"]
+                output += f"  Ошибки: {err['total']} всего, {err['last_hour']} за час\n"
+        else:
+            output += "❌ недоступна\n"
+        
+        # Иммунная система
+        output += f"\nИммунная система: "
+        if IMMUNE_SYSTEM_AVAILABLE:
+            output += "✅ активна\n"
+            if "threats_blocked" in health:
+                output += f"  Заблокировано угроз: {health['threats_blocked']}\n"
+        else:
+            output += "❌ недоступна\n"
+        
+        return output
+    
+    def cmd_diagnose(self) -> str:
+        """Запустить диагностику"""
+        from cells import run_diagnostics, IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна для диагностики"
+        
+        output = "🔍 ДИАГНОСТИКА КОМПОНЕНТОВ\n\n"
+        
+        results = run_diagnostics()
+        
+        if "immune_diagnostic" in results:
+            diag = results["immune_diagnostic"]
+            if "error" in diag:
+                output += f"❌ Ошибка диагностики: {diag['error']}\n"
+            else:
+                status_emoji = {"healthy": "✅", "degraded": "⚠️", "failing": "🔴", "dead": "💀"}
+                
+                for name, data in diag.items():
+                    emoji = status_emoji.get(data["status"], "❓")
+                    output += f"{emoji} {name}: {data['status']}\n"
+                    
+                    if data["issues"]:
+                        for issue in data["issues"][:3]:
+                            output += f"   ⚠️ {issue}\n"
+                    
+                    if data["auto_fixable"]:
+                        output += f"   🔧 Можно починить автоматически\n"
+                    
+                    output += "\n"
+        
+        return output
+    
+    def cmd_threats(self) -> str:
+        """Показать отчёт об угрозах"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        from immune_system import get_immune_system
+        immune = get_immune_system()
+        
+        output = "🛡️ ОТЧЁТ ОБ УГРОЗАХ\n\n"
+        
+        status = immune.get_status()
+        output += f"Заблокировано угроз: {status['threats_blocked']}\n"
+        output += f"Авто-исправлений: {status['auto_fixes_applied']}\n"
+        output += f"SOS отправлено: {status['sos_sent']}\n"
+        output += f"В карантине: {status['quarantine_items']} объектов\n\n"
+        
+        threats = immune.get_threat_report()
+        if threats:
+            output += "Последние угрозы:\n"
+            for t in threats[-5:]:
+                level_emoji = {"safe": "✅", "suspicious": "⚠️", "dangerous": "🔴", "critical": "💀"}
+                emoji = level_emoji.get(t["level"], "❓")
+                output += f"  {emoji} [{t['level']}] {t['source']}: {t['description'][:50]}...\n"
+        else:
+            output += "✅ Угроз не обнаружено\n"
+        
+        return output
+    
+    def cmd_sos(self, problem: str) -> str:
+        """Отправить SOS"""
+        from cells import send_sos, IMMUNE_SYSTEM_AVAILABLE
+        
+        if not problem:
+            return "Использование: /sos <описание проблемы>"
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return f"❌ Иммунная система недоступна\n🆘 Проблема записана: {problem}"
+        
+        success = send_sos(problem, severity="medium")
+        
+        if success:
+            return f"🆘 SOS отправлен!\nПроблема: {problem}\n\nЖди помощи от администратора."
+        else:
+            return f"❌ Не удалось отправить SOS\nПроблема: {problem}"
+    
+    def cmd_recover(self) -> str:
+        """Запустить авто-восстановление"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            
+            output = "🔧 АВТО-ВОССТАНОВЛЕНИЕ\n"
+            output += "=" * 40 + "\n\n"
+            
+            # Запускаем полное восстановление
+            results = immune.doctor.run_full_recovery()
+            
+            if not results:
+                output += "✅ Все компоненты в норме — восстановление не требуется\n"
+            else:
+                successful = [r for r in results if r.get("success")]
+                failed = [r for r in results if not r.get("success")]
+                
+                if successful:
+                    output += f"✅ Успешно исправлено: {len(successful)}\n"
+                    for r in successful:
+                        output += f"  • {r['component']}: {r['action']}\n"
+                        if r.get("details"):
+                            output += f"    {r['details']}\n"
+                
+                if failed:
+                    output += f"\n⚠️ Не удалось исправить: {len(failed)}\n"
+                    for r in failed:
+                        output += f"  • {r['component']}: {r.get('details', 'неизвестная ошибка')}\n"
+                
+                output += f"\n📊 Всего применено автофиксов: {immune.doctor.fixes_applied}"
+            
+            return output
+            
+        except Exception as e:
+            return f"❌ Ошибка авто-восстановления: {e}"
+    
+    def cmd_pulse(self) -> str:
+        """Проверить пульс всех клеток"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            
+            # Проверяем пульс
+            pulses = immune.pulse_monitor.check_all_pulses()
+            
+            output = "💓 ПУЛЬС КЛЕТОК\n"
+            output += "=" * 40 + "\n\n"
+            
+            alive_count = 0
+            dead_count = 0
+            
+            for name, pulse in pulses.items():
+                if pulse.alive:
+                    alive_count += 1
+                    status = f"✅ живa ({pulse.response_time:.2f}s)"
+                else:
+                    dead_count += 1
+                    status = f"💀 мертва: {pulse.error or 'unknown'}"
+                
+                output += f"  {name}: {status}\n"
+            
+            output += f"\n📊 Живых: {alive_count}, Мертвых: {dead_count}"
+            
+            if dead_count > 0:
+                output += "\n\n💡 Используй /recover для попытки восстановления"
+            
+            return output
+            
+        except Exception as e:
+            return f"❌ Ошибка проверки пульса: {e}"
+    
+    def cmd_git(self, subcmd: str = "status", *args) -> str:
+        """Git команды"""
+        from cells import IMMUNE_SYSTEM_AVAILABLE
+        
+        if not IMMUNE_SYSTEM_AVAILABLE:
+            return "❌ Иммунная система недоступна"
+        
+        try:
+            from immune_system import get_immune_system
+            immune = get_immune_system()
+            git = immune.git
+            
+            if not git.git_available:
+                return "❌ Git не установлен"
+            
+            if not git.is_repo():
+                return "❌ Это не Git репозиторий"
+            
+            if subcmd == "status":
+                return git.get_status_report()
+            
+            elif subcmd == "log":
+                commits = git.get_recent_commits(int(args[0]) if args else 10)
+                if not commits:
+                    return "❌ Не удалось получить историю"
+                
+                output = "📜 ИСТОРИЯ КОММИТОВ\n" + "=" * 40 + "\n\n"
+                for c in commits:
+                    output += f"• {c['hash']} - {c['message'][:50]}\n"
+                    output += f"  {c['date']} by {c['author']}\n\n"
+                return output
+            
+            elif subcmd == "history" and args:
+                filepath = args[0]
+                history = git.get_file_history(filepath)
+                if not history:
+                    return f"❌ История для {filepath} не найдена"
+                
+                output = f"📜 ИСТОРИЯ {filepath}\n" + "=" * 40 + "\n\n"
+                for h in history:
+                    output += f"• {h['hash']} - {h['message'][:40]}\n"
+                return output
+            
+            elif subcmd == "restore":
+                message = " ".join(args) if args else "Manual restore point"
+                commit = git.create_restore_point(message)
+                if commit:
+                    return f"✅ Точка восстановления создана: {commit[:8]}"
+                return "❌ Не удалось создать точку восстановления"
+            
+            elif subcmd == "rollback" and args:
+                filepath = args[0]
+                commit = args[1] if len(args) > 1 else "HEAD~1"
+                if git.rollback_file(filepath, commit):
+                    return f"✅ Файл {filepath} откачен к {commit}"
+                return f"❌ Не удалось откатить {filepath}"
+            
+            elif subcmd == "diff" and args:
+                filepath = args[0]
+                commit = args[1] if len(args) > 1 else "HEAD~1"
+                diff = git.diff_with_commit(filepath, commit)
+                if diff:
+                    return f"📝 DIFF {filepath}\n" + "=" * 40 + f"\n\n```\n{diff[:2000]}\n```"
+                return "Нет изменений или файл не найден"
+            
+            elif subcmd == "stash":
+                if git.stash_changes(" ".join(args) if args else "Auto stash"):
+                    return "✅ Изменения спрятаны"
+                return "❌ Не удалось спрятать изменения"
+            
+            elif subcmd == "unstash":
+                if git.pop_stash():
+                    return "✅ Изменения восстановлены из stash"
+                return "❌ Не удалось восстановить из stash"
+            
+            else:
+                return """📦 GIT КОМАНДЫ
+                
+/git status          - статус репозитория
+/git log [n]         - последние n коммитов
+/git history <file>  - история файла
+/git restore [msg]   - создать точку восстановления
+/git rollback <file> [commit] - откатить файл
+/git diff <file> [commit]     - показать изменения
+/git stash [msg]     - спрятать изменения
+/git unstash         - вернуть спрятанное"""
+            
+        except Exception as e:
+            return f"❌ Ошибка Git: {e}"
+
+    def cmd_watcher(self, subcmd: str = "status", *args) -> str:
+        """Управление CellWatcher — автономным загрузчиком клеток"""
+        if not self._ensure_cell_watcher() or not self.cell_watcher:
+            return "❌ CellWatcher недоступен"
+        
+        if subcmd == "status":
+            return self.cell_watcher.get_status()
+        
+        elif subcmd == "cells":
+            cells = self.cell_watcher.get_loaded_cells()
+            if not cells:
+                return "📭 Нет загруженных динамических клеток"
+            
+            output = "🧬 ЗАГРУЖЕННЫЕ КЛЕТКИ:\n"
+            for name in cells:
+                output += f"  • {name}\n"
+            return output
+        
+        elif subcmd == "reload" and args:
+            name = args[0]
+            if self.cell_watcher.force_reload(name):
+                return f"✅ Клетка {name} перезагружена"
+            return f"❌ Не удалось перезагрузить {name}"
+        
+        elif subcmd == "stop":
+            self.cell_watcher.stop()
+            return "🛑 CellWatcher остановлен"
+        
+        elif subcmd == "start":
+            self.cell_watcher.start()
+            return "👁️ CellWatcher запущен"
+        
+        else:
+            return """👁️ CELL WATCHER КОМАНДЫ
+
+/watcher status      - статус наблюдателя
+/watcher cells       - список загруженных клеток
+/watcher reload <name> - перезагрузить клетку
+/watcher stop        - остановить наблюдатель
+/watcher start       - запустить наблюдатель
+
+CellWatcher автоматически обнаруживает новые *_cell.py файлы
+и загружает их без перезапуска Neira!"""
 
 
 def main():
     print("=" * 60)
-    print("  NEIRA v0.5 — Живая программа")
-    print("  Клеточная архитектура с динамическими моделями")
+    print("  NEIRA v0.8 — Живая программа")
+    print("  Клеточная архитектура + Нервная и Иммунная системы")
+    print("  Авто-восстановление + Пульс клеток")
     print("  Code + Reason + Personality + Cloud")
     print("=" * 60)
     
     # Проверяем модели
-    if not ensure_models_installed():
-        print("\n⚠️ Установи недостающие модели и перезапусти!")
-        print("   Ollama должна быть запущена: ollama serve")
-        return
+    if DRY_RUN_ENABLED:
+        print(f"\n🧪 DRY-RUN включен: запросы будут сохраняться в {DRY_RUN_PATH}")
+        print("   Чтобы отправить очередь, отключи NEIRA_DRY_RUN и используй /queue send")
+    else:
+        if not ensure_models_installed():
+            print("\n⚠️ Установи недостающие модели и перезапусти!")
+            print("   Ollama должна быть запущена: ollama serve")
+            return
     
     print("\nВведи /help для списка команд\n")
     
@@ -731,18 +1359,96 @@ def main():
                 print(neira.cmd_experience())
             elif cmd == "personality":
                 print(neira.cmd_personality())
+            elif cmd == "evolution":
+                if neira._ensure_evolution() and neira.evolution:
+                    if not args:
+                        print(neira.evolution.cmd_help_evolution())
+                    elif args[0] == "stats":
+                        print(neira.evolution.cmd_evolution_stats())
+                    elif args[0] == "log":
+                        system = args[1] if len(args) > 1 else "all"
+                        print(neira.evolution.cmd_evolution_log(system))
+                    elif args[0] == "cycle":
+                        neira.evolution.auto_evolution_cycle()
+                    elif args[0] == "list":
+                        system = args[1] if len(args) > 1 else "cls"
+                        print(neira.evolution.cmd_evolution_list(system))
+                    elif args[0] == "diff":
+                        if len(args) < 3:
+                            print("❌ Использование: /evolution diff cls <индекс>")
+                        else:
+                            system = args[1]
+                            try:
+                                entry_index = int(args[2])
+                                print(neira.evolution.cmd_evolution_diff(system, entry_index))
+                            except ValueError:
+                                print("❌ Индекс должен быть числом")
+                    elif args[0] == "help":
+                        print(neira.evolution.cmd_help_evolution())
+                    else:
+                        print(f"❌ Неизвестная подкоманда: {args[0]}")
+                else:
+                    print("❌ Система эволюции недоступна")
             elif cmd == "clear":
                 neira.memory.memories = []
                 neira.memory.save()
                 print("🗑️ Память очищена")
             elif cmd == "learn" and args:
                 print(neira.cmd_learn(" ".join(args)))
-            elif cmd == "train" and len(args) >= 2:
-                name = args[0]
-                goal = " ".join(args[1:])
-                print(neira.train_new_cell_type(name, goal))
             elif cmd == "code":
                 print(neira.cmd_code(args[0] if args else "list", *args[1:]))
+            elif cmd == "self":
+                print(neira.cmd_self(args if args else None))
+            elif cmd == "queue":
+                action = args[0].lower() if args else "status"
+                if action in {"status", "list"}:
+                    items, skipped = _load_queue(DRY_RUN_PATH)
+                    if not items:
+                        print("Очередь пуста.")
+                    else:
+                        print(f"Очередь: {len(items)} сообщений.")
+                        preview = items[:5]
+                        for idx, item in enumerate(preview, start=1):
+                            text = item["input"].replace("\n", " ")
+                            if len(text) > 120:
+                                text = text[:117] + "..."
+                            stamp = f" ({item.get('timestamp')})" if item.get("timestamp") else ""
+                            print(f"{idx}. {text}{stamp}")
+                        if len(items) > len(preview):
+                            print(f"... ещё {len(items) - len(preview)}")
+                    if skipped:
+                        print(f"Пропущено строк: {skipped}")
+                elif action == "clear":
+                    _save_queue(DRY_RUN_PATH, [])
+                    print("Очередь очищена.")
+                elif action == "send":
+                    if DRY_RUN_ENABLED:
+                        print("🧪 DRY-RUN включен: отправка очереди отключена. Отключи NEIRA_DRY_RUN.")
+                    else:
+                        items, skipped = _load_queue(DRY_RUN_PATH)
+                        if skipped:
+                            print(f"Пропущено строк: {skipped}")
+                        if not items:
+                            print("Очередь пуста.")
+                        else:
+                            remaining: list[Dict[str, str]] = []
+                            total = len(items)
+                            for idx, item in enumerate(items, start=1):
+                                text = item["input"]
+                                try:
+                                    response = neira.process(text)
+                                    print(f"\n{'='*50}")
+                                    print(f"[Очередь {idx}/{total}] {response}")
+                                except Exception as e:
+                                    remaining.append(item)
+                                    print(f"[Очередь {idx}/{total}] ❌ Ошибка: {e}")
+                            _save_queue(DRY_RUN_PATH, remaining)
+                            if remaining:
+                                print(f"В очереди осталось: {len(remaining)}")
+                            else:
+                                print("Очередь обработана полностью.")
+                else:
+                    print("Подкоманды: /queue status | /queue send | /queue clear")
             elif cmd == "stats":
                 print(neira.cmd_stats())
             elif cmd == "models":
@@ -750,15 +1456,103 @@ def main():
                 status = get_model_status()
                 print(f"Ollama: {'✅ запущена' if status['ollama_running'] else '❌ не запущена'}")
                 print(f"Модели: {', '.join(status['models'][:5])}")
+            elif cmd == "vote-start":
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 4:
+                    cell_name = args[0]
+                    version_1 = args[1]
+                    version_2 = args[2]
+                    task = " ".join(args[3:])
+                    print(neira.evolution.cmd_vote_start(cell_name, version_1, version_2, task))
+                else:
+                    print("❌ Использование: /vote-start <cell> <version1> <version2> <задача>")
+            elif cmd == "vote-record":
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 3:
+                    cell_name = args[0]
+                    version_id = args[1]
+                    try:
+                        score = int(args[2])
+                        feedback = " ".join(args[3:]) if len(args) > 3 else ""
+                        print(neira.evolution.cmd_vote_record(cell_name, version_id, score, feedback))
+                    except ValueError:
+                        print("❌ Оценка должна быть числом от 1 до 10")
+                else:
+                    print("❌ Использование: /vote-record <cell> <version> <оценка> [комментарий]")
+            elif cmd == "vote-results":
+                if neira._ensure_evolution() and neira.evolution and len(args) >= 3:
+                    cell_name = args[0]
+                    version_1 = args[1]
+                    version_2 = args[2]
+                    print(neira.evolution.cmd_vote_results(cell_name, version_1, version_2))
+                else:
+                    print("❌ Использование: /vote-results <cell> <version1> <version2>")
+            elif cmd == "grow":
+                # Команда для создания нового органа (клетки)
+                if neira._ensure_evolution() and neira.evolution and args:
+                    description = " ".join(args)
+                    print(f"🌱 Создаю новый орган: {description}")
+                    result = neira.evolution.cmd_create_cell(description)
+                    print(result)
+                else:
+                    print("❌ Использование: /grow <описание клетки>")
+                    print("   Пример: /grow генератор картинок через FLUX API")
+            elif cmd == "activate":
+                # Активация клетки
+                if neira._ensure_evolution() and neira.evolution and args:
+                    cell_name = args[0]
+                    result = neira.evolution.cmd_activate_cell(cell_name)
+                    print(result)
+                else:
+                    print("❌ Использование: /activate <имя_клетки>")
+            elif cmd == "cells":
+                # Список клеток
+                if neira._ensure_evolution() and neira.evolution:
+                    print(neira.evolution.cmd_evolution_log("cells"))
+                else:
+                    print("❌ Система эволюции недоступна")
+            # Команды здоровья и защиты
+            elif cmd == "health":
+                print(neira.cmd_health())
+            elif cmd == "diagnose":
+                print(neira.cmd_diagnose())
+            elif cmd == "threats":
+                print(neira.cmd_threats())
+            elif cmd == "sos":
+                problem = " ".join(args) if args else ""
+                print(neira.cmd_sos(problem))
+            elif cmd == "recover":
+                print(neira.cmd_recover())
+            elif cmd == "pulse":
+                print(neira.cmd_pulse())
+            elif cmd == "git":
+                subcmd = args[0] if args else "status"
+                print(neira.cmd_git(subcmd, *args[1:]))
+            elif cmd == "watcher":
+                subcmd = args[0] if args else "status"
+                print(neira.cmd_watcher(subcmd, *args[1:]))
             else:
                 print(f"❓ Неизвестная команда: {cmd}")
             continue
         
+        if DRY_RUN_ENABLED:
+            try:
+                _append_queue(DRY_RUN_PATH, _queue_item(user_input))
+                print(f"🧪 DRY-RUN: запрос сохранён ({DRY_RUN_PATH})")
+            except Exception as e:
+                print(f"❌ Не удалось сохранить запрос: {e}")
+            continue
+
         # Обычный запрос
         try:
             response = neira.process(user_input)
             print(f"\n{'='*50}")
             print(f"НЕЙРА: {response}")
+            
+            # Любопытство — Neira может задать вопрос
+            from cells import maybe_ask_question, CURIOSITY_AVAILABLE
+            if CURIOSITY_AVAILABLE:
+                question = maybe_ask_question(user_input, response)
+                if question:
+                    print(f"\n💭 {question}")
         except Exception as e:
             print(f"\n❌ Ошибка: {e}")
             print("Проверь что Ollama запущена: ollama serve")

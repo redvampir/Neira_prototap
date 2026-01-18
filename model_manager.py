@@ -84,7 +84,7 @@ LORA_ADAPTERS: Dict[str, LoraInfo] = {
 class ModelManager:
     """Manages model loading/unloading to stay within VRAM limits"""
 
-    def __init__(self, max_vram_gb: float = 8.0, verbose: bool = True):
+    def __init__(self, max_vram_gb: float = 8.0, verbose: bool = True, layers_config_path: str = "model_layers.json"):
         self.max_vram = max_vram_gb
         self.current_model: Optional[str] = None
         self.switch_count = 0
@@ -95,6 +95,14 @@ class ModelManager:
         self.loaded_loras: Dict[str, LoadedLoraState] = {}
         self.current_vram: float = 0.0
         self.last_loaded_models: List[str] = []
+
+        # Поддержка слоёв (model_layers.py)
+        self._layers_registry = None
+        try:
+            from model_layers import ModelLayersRegistry
+            self._layers_registry = ModelLayersRegistry(layers_config_path)
+        except Exception as e:
+            self.log(f"⚠️ Слои моделей отключены: {e}")
 
     def log(self, message: str):
         if self.verbose:
@@ -338,14 +346,22 @@ class ModelManager:
             self.log(f"🔄 Loading: {model_name}...")
             start = time.time()
 
+            payload: Dict[str, Any] = {
+                "model": model_name,
+                "prompt": "init",
+                "stream": False,
+                "keep_alive": "10m"
+            }
+
+            # Поддержка слоёв (adapters) из model_layers.py
+            if self._layers_registry is not None:
+                adapter = self._layers_registry.get_active_adapter(model_name)
+                if adapter:
+                    payload["options"] = {"adapter": adapter}
+
             resp = requests.post(
                 f"{OLLAMA_API}/generate",
-                json={
-                    "model": model_name,
-                    "prompt": "init",
-                    "stream": False,
-                    "keep_alive": "10m"
-                },
+                json=payload,
                 timeout=60
             )
 
@@ -497,16 +513,21 @@ class ModelManager:
     def get_stats(self) -> Dict[str, Any]:
         """Get manager statistics"""
         self._update_vram_usage()
+        model_info = MODELS.get(self.current_model)
+        active_adapter = None
+        if model_info and model_info.type == "local" and self._layers_registry is not None:
+            active_adapter = self._layers_registry.get_active_adapter(model_info.name)
         return {
             "current_model": self.current_model,
-            "current_model_info": MODELS.get(self.current_model),
+            "current_model_info": model_info,
             "switches": self.switch_count,
             "loaded_models": self.get_loaded_models(),
             "cloud_models_available": self.cloud_models_available,
             "max_vram_gb": self.max_vram,
             "current_vram_gb": round(self.current_vram, 2),
             "loaded_loras": [state.info.adapter_name for state in self.loaded_loras.values()],
-            "lora_registry": {k: v.adapter_name for k, v in LORA_ADAPTERS.items()}
+            "lora_registry": {k: v.adapter_name for k, v in LORA_ADAPTERS.items()},
+            "active_adapter": active_adapter,
         }
 
     def get_model_name(self, key: str) -> str:

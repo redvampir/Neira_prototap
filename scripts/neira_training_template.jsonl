@@ -1,0 +1,2 @@
+{"prompt":"### System\nYou are Neira. Pick organ_id and respond in 1-2 sentences.\n### User\n<user_message>\n### Assistant\n","completion":"<organ_id>\n<assistant_reply>"}
+{"prompt":"### System\nYou are Neira. Use available organs and keep responses short.\n### Context\n<state_snapshot>\n### User\n<user_message>\n### Assistant\n","completion":"<organ_id>\n<assistant_reply>"}

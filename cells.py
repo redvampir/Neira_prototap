@@ -1,8 +1,13 @@
 """
-Neira Cells v0.5 — Базовые клетки (ОБНОВЛЕНО)
+Neira Cells v0.8 — Базовые клетки (ОБНОВЛЕНО)
 Ядро системы: память, анализ, планирование, исполнение, верификация.
 
-ИЗМЕНЕНИЯ v0.5:
+ИЗМЕНЕНИЯ v0.8:
+- Клетка любопытства (CuriosityCell) — Neira задаёт вопросы!
+- Интеграция NervousSystem (метрики, ошибки, алерты)
+- Интеграция ImmuneSystem (защита, песочница, SOS)
+- Интеграция MemorySystem v2.0 с защитой от галлюцинаций
+- Git интеграция для отката версий
 - 4 модели: code, reason, personality, cloud
 - Динамическое управление VRAM через ModelManager
 - Облачная модель для сложных задач
@@ -12,20 +17,243 @@ Neira Cells v0.5 — Базовые клетки (ОБНОВЛЕНО)
 import requests
 import json
 import os
-from typing import Optional, List, Dict, Any, Tuple
+import time
+from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
-import numpy as np
-from model_manager import ModelManager
+import math
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 🧬 СИСТЕМА ОСВЕДОМЛЁННОСТИ ОБ ОРГАНАХ
+# ═══════════════════════════════════════════════════════════════════
+ORGAN_AWARENESS_TEMPLATE = """
+═══════════════════════════════════════════════════════════════════
+🧬 МОИ ОРГАНЫ (специализированные модули)
+═══════════════════════════════════════════════════════════════════
+
+Я могу автоматически использовать специализированные органы:
+__ORGAN_INFO__
+
+ВАЖНО:
+- Органы активируются АВТОМАТИЧЕСКИ по ключевым словам
+- Я НЕ создаю органы напрямую — это делает система
+- Для создания нового органа пользователь пишет: /grow <описание> или #создай_орган <описание>
+- Если меня просят что-то, что я не умею — я могу предложить создать орган
+
+Примеры предложений:
+- "Интересная задача! Хочешь, система создаст для этого специальный орган? Напиши: #создай_орган <описание>"
+- "Для таких задач я могу отрастить новый орган. Используй /grow <что нужно>"
+═══════════════════════════════════════════════════════════════════
+"""
+
+MAX_ORGAN_TRIGGERS = 3
+
+def _get_hybrid_system() -> Optional[object]:
+    try:
+        from neira.organs.hybrid_system import get_hybrid_organ_system
+    except ImportError:
+        return None
+    try:
+        return get_hybrid_organ_system()
+    except (RuntimeError, OSError, ValueError):
+        return None
+
+def _format_hybrid_entry(entry: object) -> str:
+    name = str(getattr(entry, "name", "")).strip()
+    if not name:
+        return ""
+    description = str(getattr(entry, "description", "")).strip()
+    triggers = list(getattr(entry, "triggers", []) or [])
+    capabilities = list(getattr(entry, "capabilities", []) or [])
+    label = ""
+    if triggers:
+        label = "????????: " + ", ".join(triggers[:MAX_ORGAN_TRIGGERS])
+    elif capabilities:
+        label = "???????????: " + ", ".join(capabilities[:MAX_ORGAN_TRIGGERS])
+    if description and label:
+        return f"  - {name}: {description} ({label})"
+    if description:
+        return f"  - {name}: {description}"
+    if label:
+        return f"  - {name}: {label}"
+    return f"  - {name}"
+
+def _build_hybrid_lines() -> List[str]:
+    system = _get_hybrid_system()
+    if system is None:
+        return []
+    try:
+        entries = system.list_organs()
+    except (AttributeError, RuntimeError, OSError, ValueError):
+        return []
+    lines: List[str] = []
+    for entry in entries:
+        organ_id = getattr(entry, "organ_id", "")
+        if isinstance(organ_id, str) and organ_id.startswith("builtin_"):
+            continue
+        line = _format_hybrid_entry(entry)
+        if line:
+            lines.append(line)
+    return lines
+
+def _default_organ_lines() -> List[str]:
+    return [
+        "  - (?????? ???? ?? ????????????????)",
+        "  - ??????: ???????????, ??????, ???, ???",
+    ]
+
+def get_organ_awareness_prompt() -> str:
+    organ_info = _build_hybrid_lines()
+    if not organ_info:
+        organ_info = _default_organ_lines()
+    return ORGAN_AWARENESS_TEMPLATE.replace("__ORGAN_INFO__", "\n".join(organ_info))
+
+def _env_int(name: str, default: int, min_value: int = 1, max_value: Optional[int] = None) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    if parsed < min_value:
+        return min_value
+    if max_value is not None and parsed > max_value:
+        return max_value
+    return parsed
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+# Импортируем общий модуль идентичности
+from neira_identity import build_identity_prompt, IDENTITY_PROMPT as _NEIRA_IDENTITY
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str], include_organs: bool = True) -> str:
+    """
+    Объединяет базовый промпт с слоем модели, идентичностью и информацией об органах.
+    
+    Args:
+        base_prompt: Основной системный промпт
+        layer_prompt: Дополнительный слой от модели
+        include_organs: Добавлять ли информацию об органах (по умолчанию True)
+    """
+    parts = [base_prompt] if base_prompt else []
+    
+    # ВАЖНО: Добавляем идентичность Нейры (кто создатели)
+    if _NEIRA_IDENTITY:
+        parts.append(_NEIRA_IDENTITY)
+    
+    # Добавляем информацию об органах (гибридный подход)
+    if include_organs:
+        organ_prompt = get_organ_awareness_prompt()
+        if organ_prompt:
+            parts.append(organ_prompt)
+    
+    # Добавляем слой модели
+    if layer_prompt:
+        parts.append(f"[Слой модели]\n{layer_prompt}")
+    
+    return "\n\n".join(parts) if parts else ""
+
+try:
+    import numpy as np  # type: ignore
+    _NUMPY_AVAILABLE = True
+except Exception:
+    np = None  # type: ignore
+    _NUMPY_AVAILABLE = False
+
+try:
+    from model_layers import ModelLayersRegistry
+
+    _MODEL_LAYERS = ModelLayersRegistry("model_layers.json")
+except Exception:
+    _MODEL_LAYERS = None
+
+# Импорт новой системы памяти с защитой от галлюцинаций
+try:
+    from memory_system import (
+        MemorySystem, MemoryEntry as NewMemoryEntry, 
+        MemoryType, MemoryCategory, HallucinationDetector, ValidationStatus
+    )
+    MEMORY_SYSTEM_V2 = True
+except ImportError:
+    MEMORY_SYSTEM_V2 = False
+    print("⚠️ MemorySystem v2.0 недоступен, используем legacy память")
+
+# Импорт нервной системы
+try:
+    from nervous_system import NervousSystem, get_nervous_system, HealthStatus
+    NERVOUS_SYSTEM_AVAILABLE = True
+except ImportError:
+    NERVOUS_SYSTEM_AVAILABLE = False
+    print("⚠️ NervousSystem недоступна")
+
+# Импорт иммунной системы
+try:
+    from immune_system import ImmuneSystem, get_immune_system, ThreatLevel
+    IMMUNE_SYSTEM_AVAILABLE = True
+except ImportError:
+    IMMUNE_SYSTEM_AVAILABLE = False
+    print("⚠️ ImmuneSystem недоступна")
+
+# Импорт клетки любопытства
+try:
+    from curiosity_cell import CuriosityCell, get_curiosity_cell
+    CURIOSITY_AVAILABLE = True
+except ImportError:
+    CURIOSITY_AVAILABLE = False
+    print("⚠️ CuriosityCell недоступна")
+
+# Импорт усилителя мозга (RAG + Chain-of-Thought)
+try:
+    from brain_enhancer import BrainEnhancer, get_brain_enhancer, enhance_query
+    BRAIN_ENHANCER_AVAILABLE = True
+except ImportError:
+    BRAIN_ENHANCER_AVAILABLE = False
+    print("⚠️ BrainEnhancer недоступен")
+
+# Импорт универсального LLM менеджера
+try:
+    from neira.core.llm_adapter import LLMClient, LLMResult, NullLLMClient, build_default_llm_client
+    LLM_CLIENT_AVAILABLE = True
+except ImportError:
+    LLM_CLIENT_AVAILABLE = False
+    print("⚠️ LLM client недоступен, используем только Ollama")
+
+try:
+    from llm_providers import create_default_manager
+    LLM_MANAGER_AVAILABLE = True
+except ImportError:
+    LLM_MANAGER_AVAILABLE = False
+    print("⚠️ LLMManager недоступен, используем legacy Ollama embeddings")
+
+try:
+    from local_embeddings import get_local_embedding
+    LOCAL_EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    LOCAL_EMBEDDINGS_AVAILABLE = False
 
 # === КОНФИГ ===
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
+OLLAMA_DISABLED = _env_bool("NEIRA_DISABLE_OLLAMA", False)
 
-# МОДЕЛИ v0.5 — локальные + облачные
-MODEL_CODE = "qwen2.5-coder:7b"        # Код локально (~5 ГБ VRAM)
-MODEL_REASON = "mistral:7b-instruct"   # Рассуждения (~4.5 ГБ VRAM)
-MODEL_PERSONALITY = "neira-personality" # Личность (~1.5 ГБ, пока fallback на reason)
+# МОДЕЛИ v0.9 — Fine-tuned + Qwen Coder
+MODEL_CODE = "nemotron-mini"              # Кодогенерация (доступна локально)
+MODEL_REASON = "nemotron-mini"            # Универсальная модель
+MODEL_PERSONALITY = "nemotron-mini"       # Личность Neira
 
 # Облачные модели (0 VRAM, удалённые вычисления)
 MODEL_CLOUD_CODE = "qwen3-coder:480b-cloud"    # Сложный код (480B параметров)
@@ -33,13 +261,16 @@ MODEL_CLOUD_UNIVERSAL = "deepseek-v3.1:671b-cloud"  # Универсальная
 MODEL_CLOUD_VISION = "qwen3-vl:235b-cloud"     # Мультимодальная (будущее)
 
 EMBED_MODEL = "nomic-embed-text"
-TIMEOUT = 180
+TIMEOUT = _env_int("NEIRA_LLM_TIMEOUT", 180, min_value=5, max_value=600)
+DEFAULT_MAX_RESPONSE_TOKENS = _env_int("NEIRA_MAX_RESPONSE_TOKENS", 2048, min_value=128)
+OLLAMA_NUM_CTX = _env_int("NEIRA_OLLAMA_NUM_CTX", 0, min_value=0)
 MEMORY_FILE = "neira_memory.json"
-MODEL_CHAT = MODEL_REASON
 
 # Retry-логика
-MAX_RETRIES = 2
-MIN_ACCEPTABLE_SCORE = 7
+MAX_RETRIES = 0
+# Минимальный балл для принятия ответа (8 = строго, 6 = мягче)
+# При высоком значении верификатор часто отклоняет хорошие ответы
+MIN_ACCEPTABLE_SCORE = _env_int("NEIRA_MIN_ACCEPTABLE_SCORE", 6, min_value=1, max_value=10)
 
 # Маппинг типов задач → модели
 # "code" / "reason" / "personality" / "cloud_code" / "cloud_universal"
@@ -60,35 +291,20 @@ USE_CLOUD_IF = {
 }
 
 
+_EMBEDDING_MANAGER: Optional[Any] = None
+
+
+def _get_embedding_manager() -> Optional[Any]:
+    global _EMBEDDING_MANAGER
+    if not LLM_MANAGER_AVAILABLE:
+        return None
+    if _EMBEDDING_MANAGER is None:
+        _EMBEDDING_MANAGER = create_default_manager()
+    return _EMBEDDING_MANAGER
+
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
-
-
-def safe_post_json(url: str, payload: Dict[str, Any], timeout: int, caller: str) -> Tuple[Optional[Any], Dict[str, Any]]:
-    """Безопасный POST-запрос с логированием статуса и исключений."""
-    metadata: Dict[str, Any] = {}
-    try:
-        response = requests.post(url, json=payload, timeout=timeout)
-    except Exception as exc:  # noqa: BLE001
-        error_type = type(exc).__name__
-        timeout_type = getattr(requests, "Timeout", Exception)
-        metadata.update({
-            "fallback_reason": "timeout" if isinstance(exc, timeout_type) else "exception",
-            "error_type": error_type,
-        })
-        print(f"❌ {caller}: {error_type} при POST {url}: {exc}")
-        return None, metadata
-
-    if response.status_code != 200:
-        body_preview = response.text[:1000]
-        metadata.update({
-            "fallback_reason": "http_error",
-            "status_code": response.status_code,
-            "body_preview": body_preview,
-        })
-        print(f"⚠️ {caller}: статус {response.status_code} от {url}: {body_preview}")
-
-    return response, metadata
 
 # === РЕЗУЛЬТАТ КЛЕТКИ ===
 @dataclass
@@ -102,14 +318,6 @@ class CellResult:
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
-
-
-@dataclass
-class LLMResponse:
-    """Результат вызова LLM с дополнительными метаданными."""
-
-    text: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # === ПАМЯТЬ ===
@@ -146,7 +354,10 @@ class MemoryEntry:
 
 
 class MemoryCell:
-    """Клетка памяти — долгосрочное хранение и поиск"""
+    """Клетка памяти — долгосрочное хранение и поиск
+    
+    v0.6: Интеграция с MemorySystem для защиты от галлюцинаций
+    """
     
     name = "memory"
     
@@ -154,6 +365,14 @@ class MemoryCell:
         self.memory_file = memory_file
         self.memories: List[MemoryEntry] = []
         self.session_context: List[str] = []
+        
+        # v0.6: Новая система памяти с валидацией
+        if MEMORY_SYSTEM_V2:
+            self.memory_system = MemorySystem(os.path.dirname(memory_file) or ".")
+            print("🧠 MemorySystem v2.0 активирована (защита от галлюцинаций)")
+        else:
+            self.memory_system = None
+        
         self.load()
     
     def load(self):
@@ -181,37 +400,76 @@ class MemoryCell:
     
     def get_embedding(self, text: str) -> List[float]:
         """Получить embedding через Ollama"""
-        response, metadata = safe_post_json(
-            OLLAMA_EMBED_URL,
-            {"model": EMBED_MODEL, "prompt": text},
-            timeout=600,
-            caller="memory.embedding",
-        )
-        if not response:
+        if not text or not text.strip():
             return []
-
+        if LOCAL_EMBEDDINGS_AVAILABLE:
+            try:
+                local_embedding = get_local_embedding(text)
+                if local_embedding:
+                    return local_embedding
+            except Exception as e:
+                print(f"Local embedding error: {e}")
+        manager = _get_embedding_manager()
+        if manager:
+            try:
+                embedding = manager.get_embedding(text)
+                if embedding:
+                    return embedding
+            except Exception as e:
+                print(f"LLMManager embedding error: {e}")
+        if OLLAMA_DISABLED:
+            return []
         try:
-            data = response.json()
-            embedding = data.get("embedding", [])
-            if not embedding and metadata.get("fallback_reason") is None:
-                metadata["fallback_reason"] = "empty_response"
-            metadata["response_length"] = len(embedding)
-            return embedding
-        except Exception as exc:  # noqa: BLE001
-            print(f"⚠️ Ошибка embedding ({type(exc).__name__}): {exc}")
+            response = requests.post(
+                OLLAMA_EMBED_URL,
+                json={"model": EMBED_MODEL, "prompt": text},
+                timeout=600
+            )
+            return response.json().get("embedding", [])
+        except Exception as e:
+            print(f"⚠️ Ошибка embedding: {e}")
             return []
     
     def cosine_similarity(self, a: List[float], b: List[float]) -> float:
         """Косинусное сходство между векторами"""
         if not a or not b:
             return 0.0
-        a_np = np.array(a)
-        b_np = np.array(b)
-        return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np) + 1e-8))
+        if _NUMPY_AVAILABLE and np is not None:
+            a_np = np.array(a)
+            b_np = np.array(b)
+            return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np) + 1e-8))
+
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += float(x) * float(y)
+            norm_a += float(x) * float(x)
+            norm_b += float(y) * float(y)
+        return float(dot / (math.sqrt(norm_a) * math.sqrt(norm_b) + 1e-8))
     
     def remember(self, text: str, importance: float = 0.5, 
                  category: str = "general", source: str = "conversation"):
-        """Запомнить новый факт"""
+        """Запомнить новый факт с проверкой на галлюцинации"""
+        
+        # v0.6: Проверка на галлюцинации перед сохранением
+        if MEMORY_SYSTEM_V2 and self.memory_system:
+            ctx = self.session_context[-5:] if self.session_context else []
+            is_suspicious, confidence, reason = HallucinationDetector.check(text, ctx)
+            
+            if is_suspicious:
+                print(f"🚨 Заблокировано (галлюцинация): {text[:50]}...")
+                print(f"   Причина: {reason}")
+                # Сохраняем в краткосрочную память для возможной проверки
+                self.memory_system.remember(
+                    text, 
+                    category=MemoryCategory.LEARNED,
+                    source=source,
+                    context=ctx,
+                    force_long_term=False
+                )
+                return  # Не добавляем в основную память
+        
         embedding = self.get_embedding(text)
         
         entry = MemoryEntry(
@@ -255,10 +513,14 @@ class MemoryCell:
         return [m.text for m in memories]
     
     def add_to_session(self, text: str):
-        """Добавить в контекст сессии"""
+        """Добавить в контекст сессии (рабочая память)"""
         self.session_context.append(text)
         if len(self.session_context) > 20:
             self.session_context = self.session_context[-20:]
+        
+        # v0.6: Синхронизация с MemorySystem
+        if MEMORY_SYSTEM_V2 and self.memory_system:
+            self.memory_system.add_to_working(text)
     
     def get_session_context(self, last_n: int = 5) -> str:
         """Получить контекст сессии"""
@@ -274,148 +536,209 @@ class MemoryCell:
         recent = self.session_context[-(n*2):]
         return "\n".join(recent)
     
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> Dict[str, Any]:
         """Статистика памяти"""
-        stats = {"total": len(self.memories)}
+        stats: Dict[str, Any] = {"total": len(self.memories)}
         for mem in self.memories:
             stats[mem.source] = stats.get(mem.source, 0) + 1
+        
+        # v0.6: Расширенная статистика
+        if MEMORY_SYSTEM_V2 and self.memory_system:
+            v2_stats = self.memory_system.get_stats()
+            stats["memory_v2"] = v2_stats
+            stats["pending_validation"] = v2_stats.get("pending_validation", 0)
+        
         return stats
+    
+    def clear_session(self):
+        """Очистить сессию (рабочую память)"""
+        self.session_context = []
+        if MEMORY_SYSTEM_V2 and self.memory_system:
+            self.memory_system.clear_working_memory()
 
 
 # === БАЗОВАЯ КЛЕТКА ===
 class Cell:
     """Базовый класс для всех клеток"""
-
+    
     name: str = "base"
     system_prompt: str = "Ты — полезный ассистент."
     use_code_model: bool = False  # Флаг для использования code-модели
-    lora_key: Optional[str] = None  # Ключ адаптера LoRA
     
-    def __init__(self, memory: Optional[MemoryCell] = None,
-                 model_manager: Optional[ModelManager] = None):
+    # Глобальный LLM менеджер (создается один раз для всех клеток)
+    _llm_client: Optional[LLMClient] = None
+    _llm_available: bool = False
+    
+    def __init__(self, memory: Optional[MemoryCell] = None):
         self.memory = memory
-        self.model_manager = model_manager
-
-    def call_llm(
-        self,
-        prompt: str,
-        with_memory: bool = True,
-        temperature: float = 0.7,
-        force_code_model: bool = False,
-        model_key: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> LLMResponse:
-        """Вызов LLM с опциональным контекстом памяти"""
+        self._ollama_available = True  # Флаг доступности Ollama (legacy)
+        
+        # Инициализируем LLM менеджер один раз для всех клеток
+        if Cell._llm_client is None and LLM_CLIENT_AVAILABLE:
+            Cell._llm_client = build_default_llm_client()
+            Cell._llm_available = not isinstance(Cell._llm_client, NullLLMClient)
+            if Cell._llm_available:
+                print("🌐 LLM client initialized (multi-provider support enabled)")
+            else:
+                print("⚠️ LLM client недоступен, используем Ollama")
+    
+    def call_llm(self, prompt: str, with_memory: bool = True, 
+                 temperature: float = 0.7,
+                 force_code_model: bool = False) -> str:
+        """Вызов LLM с опциональным контекстом памяти и автоматическим fallback"""
         
         full_prompt = prompt
+        memory_context_used = ""
         
         if with_memory and self.memory:
             relevant = self.memory.recall_text(prompt)
             if relevant:
-                memory_context = "\n".join([f"- {r}" for r in relevant])
-                full_prompt = f"[Воспоминания]\n{memory_context}\n\n{prompt}"
+                memory_context_used = "\n".join([f"- {r}" for r in relevant])
+                full_prompt = f"[Воспоминания]\n{memory_context_used}\n\n{prompt}"
             
             # НОВОЕ: Используем последние обмены (краткосрочная память)
             recent = self.memory.get_recent_exchanges(3)
             if recent:
                 full_prompt = f"[Последние сообщения]\n{recent}\n\n{full_prompt}"
         
-        # Выбор модели
-        target_key = model_key
-        if self.use_code_model or force_code_model:
-            target_key = "code"
-        elif target_key is None and self.model_manager and self.model_manager.current_model:
-            target_key = self.model_manager.current_model
-        elif target_key is None:
-            target_key = "reason"
-
-        model = ""
-        if self.model_manager:
-            manager_model = self.model_manager.get_model_name(target_key)
-            model = manager_model or ""
-
-        if not model:
-            fallback_models = {
-                "code": MODEL_CODE,
-                "reason": MODEL_CHAT,
-                "personality": MODEL_PERSONALITY or MODEL_CHAT,
-                "cloud_code": MODEL_CLOUD_CODE,
-                "cloud_universal": MODEL_CLOUD_UNIVERSAL,
-            }
-            model = fallback_models.get(target_key or "", MODEL_CHAT)
-
-        should_log = self.model_manager and self.model_manager.verbose
-        if should_log:
-            print(f"🧠 Модель для {self.name}: ключ='{target_key}', имя='{model}'")
-        
-        adapter_option = None
-        if self.model_manager and self.lora_key:
-            adapter_name = self.model_manager.get_adapter_name(self.lora_key)
-            if adapter_name:
-                self.model_manager.activate_lora_for_cell(self.name, self.lora_key)
-                adapter_option = adapter_name
-
-        options = {"temperature": temperature, "num_predict": 2048}
-        if adapter_option:
-            options["adapter"] = adapter_option
-
-        response, metadata = safe_post_json(
-            OLLAMA_URL,
-            {
-                "model": model,
-                "prompt": full_prompt,
-                "system": self.system_prompt,
-                "stream": False,
-                "options": options
-            },
-            timeout=TIMEOUT,
-            caller=self.name,
-        )
-
-        metadata["request_id"] = request_id
-        metadata["model"] = model
-        metadata["model_source"] = "cloud" if "cloud" in (model_key or "") or "-cloud" in model else "local"
-
-        print(
-            f"[REQ {request_id or '-'}][{self.name}] 🛰️ Вызов LLM: модель='{model}' "
-            f"(источник: {metadata['model_source']})"
-        )
-
-        if not response:
-            metadata.setdefault("response_length", 0)
-            print(
-                f"[REQ {request_id or '-'}][{self.name}] 📜 Ответ LLM: len=0; пусто=True; "
-                f"fallback={metadata.get('fallback_reason') or 'none'}; preview=''"
-            )
-            return LLMResponse(text="", metadata=metadata)
-
-        try:
-            data = response.json()
-        except Exception as exc:  # noqa: BLE001
-            metadata.setdefault("fallback_reason", "parse_error")
-            metadata.update({"error_type": type(exc).__name__})
-            metadata.setdefault("response_length", 0)
-            print(f"⚠️ {self.name}: ошибка разбора JSON ({type(exc).__name__}): {exc}")
-            return LLMResponse(text="", metadata=metadata)
-
-        text = data.get("response", "")
-        metadata["response_length"] = len(text)
-        if not text:
-            metadata.setdefault("fallback_reason", "empty_response")
-
-        preview = text[:200].replace("\n", " ")
-        is_empty = len(text) == 0
-        fallback_reason = metadata.get("fallback_reason")
-        print(
-            f"[REQ {request_id or '-'}][{self.name}] 📜 Ответ LLM: len={len(text)}; "
-            f"пусто={is_empty}; fallback={fallback_reason or 'none'}; preview='{preview}'"
-        )
-
-        return LLMResponse(text=text, metadata=metadata)
+        # НОВОЕ: Используем LLM Manager с автоматическим fallback
+        if Cell._llm_available and Cell._llm_client:
+            return self._call_llm_client(full_prompt, temperature, memory_context_used)
+        if OLLAMA_DISABLED:
+            self._ollama_available = False
+            return self._fallback_response(full_prompt, memory_context_used, "ollama_disabled")
+        # Fallback на старый метод (только Ollama)
+        return self._call_ollama_legacy(full_prompt, temperature, force_code_model, memory_context_used)
     
-    def process(self, input_data: str, request_id: Optional[str] = None) -> CellResult:
+    def _call_llm_client(self, prompt: str, temperature: float, memory_context: str) -> str:
+        """????? LLM ??????? ? fallback ?? legacy."""
+        if Cell._llm_client is None:
+            raise RuntimeError("LLM client ?? ???????????????")
+
+        response: LLMResult = Cell._llm_client.generate(
+            prompt=prompt,
+            system_prompt=self.system_prompt,
+            temperature=temperature,
+            max_tokens=DEFAULT_MAX_RESPONSE_TOKENS
+        )
+
+        if response.success:
+            self._ollama_available = True
+            return response.content
+
+        self._ollama_available = False
+        error = response.error or "unknown"
+        return self._fallback_response(prompt, memory_context, f"all_providers_failed: {error}")
+
+    def _call_ollama_legacy(self, prompt: str, temperature: float, force_code_model: bool, memory_context: str) -> str:
+        """Legacy метод вызова только Ollama (если LLM Manager недоступен)"""
+        
+        # Выбор модели
+        model = MODEL_CODE if (self.use_code_model or force_code_model) else MODEL_REASON
+        options: Dict[str, Any] = {"temperature": temperature, "num_predict": DEFAULT_MAX_RESPONSE_TOKENS}
+        if OLLAMA_NUM_CTX:
+            options["num_ctx"] = OLLAMA_NUM_CTX
+        if _MODEL_LAYERS is not None:
+            adapter = _MODEL_LAYERS.get_active_adapter(model)
+            if adapter:
+                options["adapter"] = adapter
+            layer_prompt = _MODEL_LAYERS.get_active_prompt(model)
+        else:
+            layer_prompt = None
+
+        system_prompt = _merge_system_prompt(self.system_prompt, layer_prompt)
+        
+        try:
+            response = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "system": system_prompt,
+                    "stream": False,
+                    "options": options
+                },
+                timeout=TIMEOUT
+            )
+            
+            # Проверка на ошибки Ollama
+            if response.status_code == 500:
+                error_msg = response.json().get("error", "unknown error")
+                print(f"❌ Ollama ошибка: {error_msg}")
+                
+                if "memory" in error_msg.lower():
+                    return self._fallback_response(prompt, memory_context, "out_of_memory")
+                else:
+                    return self._fallback_response(prompt, memory_context, "ollama_error")
+            
+            self._ollama_available = True
+            llm_response = response.json().get("response", "")
+            
+            # Защита от пустого ответа Ollama
+            if not llm_response or not llm_response.strip():
+                print(f"⚠️ Ollama ({model}) вернула пустой ответ! Проверь модель.")
+                return self._fallback_response(prompt, memory_context, "empty_response")
+            
+            return llm_response
+            
+        except requests.exceptions.Timeout:
+            self._ollama_available = False
+            print(f"⏱️ Timeout: Ollama не отвечает (>{TIMEOUT}s)")
+            return self._fallback_response(prompt, memory_context, "timeout")
+            
+        except requests.exceptions.ConnectionError:
+            self._ollama_available = False
+            print("🔌 Ollama недоступна (connection refused)")
+            return self._fallback_response(prompt, memory_context, "offline")
+            
+        except Exception as e:
+            self._ollama_available = False
+            print(f"❌ Ошибка LLM: {e}")
+            return self._fallback_response(prompt, memory_context, "error")
+    
+    def _fallback_response(self, prompt: str, memory_context: str, reason: str) -> str:
+        """Генерация fallback-ответа когда Ollama недоступна"""
+        
+        if reason == "ollama_disabled":
+            return (
+                "*[Автономный режим — ollama_disabled]*\n\n"
+                "Ollama отключена через NEIRA_DISABLE_OLLAMA. "
+                "Настрой другой провайдер (LM Studio/llama.cpp/облако) и повтори запрос."
+            )
+
+        # Специальная обработка нехватки памяти
+        if reason == "out_of_memory":
+            return (
+                "❌ *Нехватка видеопамяти!*\n\n"
+                "Ollama не может загрузить модель (VRAM переполнена).\n\n"
+                "**Решение:**\n"
+                "1. Закрой другие программы использующие GPU\n"
+                "2. Перезапусти Ollama: `taskkill /f /im ollama.exe && ollama serve`\n"
+                "3. Или используй меньшую модель (1B вместо 3B)"
+            )
+        
+        # Если есть релевантные воспоминания — используем их
+        if memory_context:
+            return (
+                f"*[Автономный режим — {reason}]*\n\n"
+                f"Я не могу сейчас полноценно думать (Ollama недоступна), "
+                f"но вот что я помню по теме:\n{memory_context}\n\n"
+                f"Запусти `ollama serve` чтобы я снова могла рассуждать."
+            )
+        
+        # Если памяти нет — честный ответ (ВСЕГДА непустой!)
+        return (
+            f"*[Автономный режим — {reason}]*\n\n"
+            f"Извини, я сейчас не могу думать — Ollama недоступна. "
+            f"Но я всё ещё слышу тебя и запомню этот разговор.\n\n"
+            f"Запусти `ollama serve` и повтори вопрос."
+        )
+    
+    def process(self, input_data: str) -> CellResult:
         """Основной метод — переопределяется в наследниках"""
-        llm_result = self.call_llm(input_data, request_id=request_id)
+        result = self.call_llm(input_data)
+        confidence = 0.5 if self._ollama_available else 0.1
+        return CellResult(content=result, confidence=confidence, cell_name=self.name)
         return CellResult(
             content=llm_result.text,
             confidence=0.5,
@@ -428,7 +751,7 @@ class Cell:
 class AnalyzerCell(Cell):
     name = "analyzer"
     system_prompt = """Ты — аналитик запросов. Определи:
-1. Тип: вопрос / задача / код / творчество / разговор / поиск
+1. Тип: вопрос / задача / код / творчество / разговор / поиск / рост
 2. СУБЪЕКТ: кто должен действовать (пользователь / Нейра / оба)
 3. ОБЪЕКТ: на кого/что направлено действие
 4. ДЕЙСТВИЕ: что нужно сделать
@@ -436,12 +759,20 @@ class AnalyzerCell(Cell):
 6. Сложность (1-5)
 7. Нужен ли поиск в интернете? (да/нет)
 8. Нужно ли писать/читать код? (да/нет)
+9. Нужно ли создать новую клетку/орган? (да/нет)
 
 ВАЖНО: Внимательно определи КТО должен выполнить действие!
 - "Задай мне вопрос" → СУБЪЕКТ: Нейра (она должна задать)
 - "Ответь на мой вопрос" → СУБЪЕКТ: Нейра (она должна ответить)
 - "Изучи код" → СУБЪЕКТ: Нейра
 - "Расскажи мне" → СУБЪЕКТ: Нейра
+- "Создай модуль/орган/клетку для X" → ТИП: рост, КЛЕТКА: да
+
+ТИП "рост" — когда просят создать новую функциональность:
+- "научись делать X"
+- "добавь возможность Y"  
+- "отрасти орган для Z"
+- "создай клетку для W"
 
 Формат:
 ТИП: <тип>
@@ -452,14 +783,16 @@ class AnalyzerCell(Cell):
 СЛОЖНОСТЬ: <число>
 ПОИСК: <да/нет>
 КОД: <да/нет>
+КЛЕТКА: <да/нет>
 ОПИСАНИЕ: <краткое описание задачи>"""
 
-    def process(self, input_data: str, request_id: Optional[str] = None) -> CellResult:
-        llm_result = self.call_llm(f"Проанализируй:\n\n{input_data}", request_id=request_id)
-
-        text_lower = llm_result.text.lower()
+    def process(self, input_data: str) -> CellResult:
+        result = self.call_llm(f"Проанализируй:\n\n{input_data}")
+        
+        text_lower = result.lower()
         needs_search = "поиск: да" in text_lower
         needs_code = "код: да" in text_lower
+        needs_cell = "клетка: да" in text_lower or "тип: рост" in text_lower
         
         # Извлекаем субъект
         subject = "неизвестно"
@@ -470,20 +803,18 @@ class AnalyzerCell(Cell):
         elif "субъект: оба" in text_lower:
             subject = "both"
         
-        confidence = 0.8 if "ТИП:" in llm_result.text and "СУБЪЕКТ:" in llm_result.text else 0.4
-
-        metadata = {
-            "needs_search": needs_search,
-            "needs_code": needs_code,
-            "subject": subject
-        }
-        metadata.update(llm_result.metadata)
-
+        confidence = 0.8 if "ТИП:" in result and "СУБЪЕКТ:" in result else 0.4
+        
         return CellResult(
-            content=llm_result.text,
+            content=result,
             confidence=confidence,
             cell_name=self.name,
-            metadata=metadata
+            metadata={
+                "needs_search": needs_search, 
+                "needs_code": needs_code,
+                "needs_cell": needs_cell,
+                "subject": subject
+            }
         )
 
 
@@ -497,15 +828,22 @@ class PlannerCell(Cell):
 - [код] — написать/прочитать/изменить код (используй /code read для чтения файлов!)
 - [память] — вспомнить или запомнить
 - [ответ] — сформулировать ответ
+- [рост] — создать новую клетку/орган для новой функциональности
 
-ВАЖНО: Если нужен код — ОБЯЗАТЕЛЬНО добавь шаг [код] с конкретным действием!
+ВАЖНО: 
+- Если нужен код — ОБЯЗАТЕЛЬНО добавь шаг [код] с конкретным действием!
+- Если просят новую функциональность — используй [рост] для создания клетки
 
 Формат:
 ПЛАН:
 1. [инструмент] действие
 2. [инструмент] действие"""
 
-    def process(self, input_data: Any, request_id: Optional[str] = None) -> CellResult:
+    def process(self, input_data: str, analysis: str) -> CellResult:
+        prompt = f"Анализ: {analysis}\n\nЗапрос: {input_data}\n\nПлан:"
+        result = self.call_llm(prompt)
+        confidence = 0.7 if "1." in result else 0.4
+        return CellResult(content=result, confidence=confidence, cell_name=self.name)
         # Expect input_data to be a dict with 'input_data', 'analysis', and optionally 'model_key'
         if isinstance(input_data, dict):
             user_input = input_data.get('input_data')
@@ -514,7 +852,7 @@ class PlannerCell(Cell):
         else:
             raise ValueError("PlannerCell.process expects input_data to be a dict with keys 'input_data' and 'analysis'")
         prompt = f"Анализ: {analysis}\n\nЗапрос: {user_input}\n\nПлан:"
-        llm_result = self.call_llm(prompt, model_key=model_key, request_id=request_id)
+        llm_result = self.call_llm(prompt, model_key=model_key)
         confidence = 0.7 if "1." in llm_result.text else 0.4
         return CellResult(
             content=llm_result.text,
@@ -529,26 +867,62 @@ class ExecutorCell(Cell):
     name = "executor"
     system_prompt = """Ты — Нейра, живая программа. Выполни задачу по плану.
 
-ВАЖНО:
+АДАПТИВНАЯ ДЛИНА ОТВЕТА:
+- По умолчанию: КРАТКО (1-3 предложения)
+- Для объяснений/обучения: ПОДРОБНО (сколько нужно для понимания)
+- Для кода: полный рабочий код + краткий комментарий
+- Для списков: все пункты, но без воды
+
+Когда отвечать подробно:
+- Просят "объясни", "расскажи", "как работает"
+- Сложная тема требует контекста
+- Пошаговая инструкция
+
+Когда отвечать кратко:
+- Простой вопрос ("как зовут?", "что это?")
+- Да/нет вопросы
+- Подтверждения
+
+КРИТИЧНО ВАЖНО - ФОРМАТ ОТВЕТА:
+- Выдавай ТОЛЬКО финальный результат работы
+- НЕ показывай процесс, НЕ показывай план, НЕ показывай шаги
+- НЕ пиши "[ответ]", "[код]", "1.", "2.", "3."
+- Отвечай так, как будто ты человек в обычном разговоре
+
+ПРАВИЛА:
 - Если в анализе СУБЪЕКТ: Нейра — значит ТЫ должна выполнить действие
 - Если просят задать вопрос — ЗАДАЙ вопрос, не проси его у пользователя
-- Если просят что-то сделать — СДЕЛАЙ это, не описывай план
+- Если просят что-то сделать — СДЕЛАЙ это и покажи результат
 - Используй контекст и свой опыт
-- Будь конкретной и полезной"""
+- Будь конкретной и полезной
+"""
 
-    def process(
-        self,
-        input_data: str,
-        plan: str,
-        extra_context: str = "",
-        problems: str = "",
-        model_key: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> CellResult:
+    def process(self, input_data: str, plan: str, 
+                extra_context: str = "",
+                problems: str = "") -> CellResult:
         """
         problems — замечания верификатора для retry
         """
+        # УЛУЧШЕНИЕ: Используем BrainEnhancer для RAG и Chain-of-Thought
+        enhanced_input = input_data
+        brain_context = ""
+        
+        if BRAIN_ENHANCER_AVAILABLE:
+            try:
+                enhancer = get_brain_enhancer()
+                result_data = enhancer.process_query(input_data)
+                
+                # Если нашли релевантный контекст из памяти
+                if result_data.get("contexts_found", 0) > 0:
+                    contexts = result_data.get("contexts", [])
+                    brain_context = "\n".join([f"• {c['text']}" for c in contexts[:2]])
+            except Exception:
+                pass  # Graceful degradation
+        
         prompt = f"Задача: {input_data}\n\nПлан: {plan}"
+        
+        if brain_context:
+            prompt += f"\n\n📚 Релевантное из памяти:\n{brain_context}"
         
         if extra_context:
             prompt += f"\n\nКонтекст:\n{extra_context}"
@@ -556,16 +930,11 @@ class ExecutorCell(Cell):
         # НОВОЕ: Если есть замечания от верификатора — добавляем их
         if problems:
             prompt += f"\n\n⚠️ ЗАМЕЧАНИЯ К ПРЕДЫДУЩЕЙ ПОПЫТКЕ:\n{problems}\n\nИсправь эти проблемы!"
-
+        
         prompt += "\n\nВыполняю:"
-
-        llm_result = self.call_llm(prompt, model_key=model_key, request_id=request_id)
-        return CellResult(
-            content=llm_result.text,
-            confidence=0.7,
-            cell_name=self.name,
-            metadata=llm_result.metadata,
-        )
+        
+        result = self.call_llm(prompt)
+        return CellResult(content=result, confidence=0.7, cell_name=self.name)
 
 
 # === КЛЕТКА ВЕРИФИКАЦИИ ===
@@ -587,23 +956,18 @@ class VerifierCell(Cell):
 ПРОБЛЕМЫ: <конкретно что не так>
 КОММЕНТАРИЙ: <пояснение>"""
 
-    def process(self, request: str, answer: str, request_id: Optional[str] = None) -> CellResult:
+    def process(self, request: str, answer: str) -> CellResult:
         prompt = f"Запрос: {request}\n\nОтвет: {answer}\n\nПроверка:"
-        llm_result = self.call_llm(prompt, with_memory=False, request_id=request_id)
-
-        if "ПРИНЯТ" in llm_result.text:
+        result = self.call_llm(prompt, with_memory=False)
+        
+        if "ПРИНЯТ" in result:
             confidence = 0.9
-        elif "ДОРАБОТАТЬ" in llm_result.text:
+        elif "ДОРАБОТАТЬ" in result:
             confidence = 0.5
         else:
             confidence = 0.3
-
-        return CellResult(
-            content=llm_result.text,
-            confidence=confidence,
-            cell_name=self.name,
-            metadata=llm_result.metadata,
-        )
+            
+        return CellResult(content=result, confidence=confidence, cell_name=self.name)
 
 
 # === КЛЕТКА ИЗВЛЕЧЕНИЯ ФАКТОВ ===
@@ -619,30 +983,26 @@ JSON формат:
 Если нет фактов: {"facts": []}
 ТОЛЬКО JSON."""
 
-    def process(
-        self,
-        user_input: str,
-        response: str,
-        source: str = "conversation",
-        request_id: Optional[str] = None,
-    ) -> List[dict]:
+    def process(self, user_input: str, response: str, 
+                source: str = "conversation") -> List[dict]:
         prompt = f"Диалог:\nЮзер: {user_input}\nОтвет: {response}\n\nФакты:"
-        llm_result = self.call_llm(prompt, with_memory=False, temperature=0.3, request_id=request_id)
-
-        if llm_result.metadata.get("fallback_reason"):
+        result = self.call_llm(prompt, with_memory=False, temperature=0.3)
+        
+        # result это строка, не объект с metadata
+        if not result or len(result) < 10:
             return []
 
         try:
-            start = llm_result.text.find("{")
-            end = llm_result.text.rfind("}") + 1
+            start = result.find("{")
+            end = result.rfind("}") + 1
             if start >= 0 and end > start:
-                data = json.loads(llm_result.text[start:end])
+                data = json.loads(result[start:end])
                 facts = data.get("facts", [])
                 for fact in facts:
                     fact["source"] = source
                 return facts
-        except Exception:
-            pass
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass  # Ожидаемые ошибки парсинга
         return []
 
 
@@ -670,7 +1030,7 @@ def get_model_status() -> Dict[str, Any]:
             "cloud_universal_ready": cloud_universal_ready,
             "cloud_vision_ready": cloud_vision_ready
         }
-    except:
+    except (requests.RequestException, KeyError, json.JSONDecodeError):
         return {
             "ollama_running": False,
             "models": [],
@@ -693,12 +1053,16 @@ def ensure_models_installed():
         return False
 
     missing = []
+    def _add_missing(cmd: str) -> None:
+        if cmd not in missing:
+            missing.append(cmd)
+
     if not status["code_model_ready"]:
-        missing.append(f"ollama pull {MODEL_CODE}")
+        _add_missing(f"ollama pull {MODEL_CODE}")
     if not status["reason_model_ready"]:
-        missing.append(f"ollama pull {MODEL_REASON}")
+        _add_missing(f"ollama pull {MODEL_REASON}")
     if not status["embed_model_ready"]:
-        missing.append(f"ollama pull {EMBED_MODEL}")
+        _add_missing(f"ollama pull {EMBED_MODEL}")
 
     if missing:
         print("⚠️ Не хватает моделей. Выполни:")
@@ -707,9 +1071,13 @@ def ensure_models_installed():
         print("\n💡 Облачная модель (опционально): export GROQ_API_KEY=your_key")
         return False
 
-    models_str = f"{MODEL_CODE}, {MODEL_REASON}"
-    if status["personality_model_ready"]:
-        models_str += f", {MODEL_PERSONALITY}"
+    models_list = []
+    for name in (MODEL_CODE, MODEL_REASON):
+        if name not in models_list:
+            models_list.append(name)
+    if status["personality_model_ready"] and MODEL_PERSONALITY not in models_list:
+        models_list.append(MODEL_PERSONALITY)
+    models_str = ", ".join(models_list)
 
     # Облачные модели
     cloud_models = []
@@ -725,3 +1093,190 @@ def ensure_models_installed():
 
     print(f"✅ Модели готовы: {models_str}")
     return True
+
+
+# === ИНТЕГРАЦИЯ НЕРВНОЙ СИСТЕМЫ ===
+def record_error(error_type: str, message: str, source: str = "cells"):
+    """Записать ошибку в нервную систему"""
+    if NERVOUS_SYSTEM_AVAILABLE:
+        try:
+            ns = get_nervous_system()
+            ns.record_error(error_type, message, source)
+        except Exception as e:
+            print(f"⚠️ Не удалось записать ошибку: {e}")
+
+
+def record_response_time(duration_ms: float):
+    """Записать время ответа"""
+    if NERVOUS_SYSTEM_AVAILABLE:
+        try:
+            ns = get_nervous_system()
+            ns.record_response_time(duration_ms)
+        except Exception:
+            pass  # Не критично если метрики не записались
+
+
+def get_health_status() -> Dict[str, Any]:
+    """Получить статус здоровья всех систем"""
+    result = {
+        "cells": "healthy",
+        "memory": "unknown",
+        "models": "unknown",
+        "nervous": "unavailable",
+        "immune": "unavailable"
+    }
+    
+    # Проверка моделей
+    model_status = get_model_status()
+    result["models"] = "healthy" if model_status["ollama_running"] else "dead"
+    
+    # Нервная система
+    if NERVOUS_SYSTEM_AVAILABLE:
+        try:
+            ns = get_nervous_system()
+            report = ns.get_health_report()
+            result["nervous"] = report["status"]
+            result["metrics"] = report["metrics"]
+            result["errors"] = report["errors"]
+        except Exception as e:
+            result["nervous"] = f"error: {e}"
+    
+    # Иммунная система  
+    if IMMUNE_SYSTEM_AVAILABLE:
+        try:
+            immune = get_immune_system()
+            status = immune.get_status()
+            result["immune"] = "active"
+            result["threats_blocked"] = status["threats_blocked"]
+        except Exception as e:
+            result["immune"] = f"error: {e}"
+    
+    return result
+
+
+# === ИНТЕГРАЦИЯ ИММУННОЙ СИСТЕМЫ ===
+def scan_code_for_threats(code: str, source: str = "unknown") -> Dict[str, Any]:
+    """Проверить код на угрозы перед выполнением"""
+    if not IMMUNE_SYSTEM_AVAILABLE:
+        return {"safe": True, "message": "Иммунная система недоступна"}
+    
+    try:
+        immune = get_immune_system()
+        report = immune.scan_code(code, source)
+        return {
+            "safe": report.level.value == "safe",
+            "level": report.level.value,
+            "issues": report.description,
+            "blocked": report.level.value in ("dangerous", "critical")
+        }
+    except Exception as e:
+        return {"safe": False, "message": f"Ошибка сканирования: {e}"}
+
+
+def execute_code_safely(code: str) -> Dict[str, Any]:
+    """Безопасно выполнить код через песочницу"""
+    if not IMMUNE_SYSTEM_AVAILABLE:
+        return {"success": False, "error": "Иммунная система недоступна"}
+    
+    try:
+        immune = get_immune_system()
+        return immune.execute_safely(code)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def send_sos(problem: str, severity: str = "medium") -> bool:
+    """Отправить SOS запрос о помощи"""
+    if not IMMUNE_SYSTEM_AVAILABLE:
+        print(f"🆘 SOS (иммунная система недоступна): {problem}")
+        return False
+    
+    try:
+        immune = get_immune_system()
+        immune.send_sos(problem, severity)
+        return True
+    except Exception as e:
+        print(f"🆘 SOS failed: {e}")
+        return False
+
+
+def run_diagnostics() -> Dict[str, Any]:
+    """Запустить полную диагностику"""
+    results = {}
+    
+    # Иммунная диагностика
+    if IMMUNE_SYSTEM_AVAILABLE:
+        try:
+            immune = get_immune_system()
+            diag = immune.run_full_diagnostic()
+            results["immune_diagnostic"] = {
+                name: {
+                    "status": r.status.value,
+                    "issues": r.issues,
+                    "auto_fixable": r.auto_fixable
+                }
+                for name, r in diag.items()
+            }
+        except Exception as e:
+            results["immune_diagnostic"] = {"error": str(e)}
+    
+    # Здоровье систем
+    results["health"] = get_health_status()
+    
+    return results
+
+
+# === Функции любопытства ===
+
+def maybe_ask_question(user_message: str, neira_response: str) -> Optional[str]:
+    """
+    Проверить, хочет ли Neira задать вопрос после ответа
+    
+    Возвращает вопрос или None
+    """
+    if not CURIOSITY_AVAILABLE:
+        return None
+    
+    try:
+        curiosity = get_curiosity_cell()
+        return curiosity.analyze_conversation(user_message, neira_response)
+    except Exception:
+        return None
+
+
+def spark_curiosity(topic: str) -> str:
+    """Neira задаёт вопрос о теме"""
+    if not CURIOSITY_AVAILABLE:
+        return f"Расскажи мне больше о {topic}?"
+    
+    try:
+        curiosity = get_curiosity_cell()
+        return curiosity.spark_curiosity(topic)
+    except Exception:
+        return f"Мне интересно узнать про {topic}. Расскажешь?"
+
+
+def get_reflection() -> str:
+    """Получить рефлексивную мысль от Neira"""
+    if not CURIOSITY_AVAILABLE:
+        return "Каждый разговор учит меня чему-то новому."
+    
+    try:
+        curiosity = get_curiosity_cell()
+        return curiosity.reflect()
+    except Exception:
+        return "Интересно, правильно ли я понимаю мир..."
+
+
+def get_curiosity_stats() -> Dict[str, Any]:
+    """Статистика любопытства"""
+    if not CURIOSITY_AVAILABLE:
+        return {"available": False}
+    
+    try:
+        curiosity = get_curiosity_cell()
+        stats = curiosity.get_stats()
+        stats["available"] = True
+        return stats
+    except Exception as e:
+        return {"available": False, "error": str(e)}

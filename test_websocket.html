@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Test — TicTacToe</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #2a2a2a;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    h1 { color: #ffd700; margin-top: 0; }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .log {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+    .log-entry {
+      margin: 5px 0;
+      padding: 5px;
+      border-left: 3px solid #667eea;
+      padding-left: 10px;
+    }
+    .log-entry.success { border-left-color: #10b981; color: #10b981; }
+    .log-entry.error { border-left-color: #ef4444; color: #ef4444; }
+    .log-entry.info { border-left-color: #3b82f6; color: #3b82f6; }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .status.connected { background: #10b981; color: white; }
+    .status.disconnected { background: #ef4444; color: white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 WebSocket Test — TicTacToe Generation</h1>
+    <p>Тест Cell Router + UICodeCell через WebSocket</p>
+    
+    <div>
+      <button id="connectBtn">🔌 Подключиться</button>
+      <button id="sendBtn" disabled>📤 Создать TicTacToe</button>
+      <button id="clearBtn">🗑️ Очистить лог</button>
+      <span class="status disconnected" id="status">Disconnected</span>
+    </div>
+    
+    <div class="log" id="log"></div>
+  </div>
+
+  <script>
+    let ws = null;
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const connectBtn = document.getElementById('connectBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function log(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function updateStatus(connected) {
+      if (connected) {
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'status connected';
+        sendBtn.disabled = false;
+        connectBtn.textContent = '🔌 Отключиться';
+      } else {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'status disconnected';
+        sendBtn.disabled = true;
+        connectBtn.textContent = '🔌 Подключиться';
+      }
+    }
+
+    connectBtn.addEventListener('click', () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+        return;
+      }
+
+      log('Подключение к ws://localhost:8001/ws/chat...', 'info');
+      ws = new WebSocket('ws://localhost:8001/ws/chat');
+
+      ws.onopen = () => {
+        log('✅ WebSocket подключен!', 'success');
+        updateStatus(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          log(`📥 ${data.type}: ${data.content || ''}`, 'info');
+          
+          if (data.type === 'artifact' && data.metadata && data.metadata.artifact) {
+            const artifact = data.metadata.artifact;
+            log(`✅ Артефакт создан: ${artifact.id}`, 'success');
+            log(`   Template: ${artifact.template_used}`, 'success');
+            log(`   Cell: ${data.metadata.cell_used || 'unknown'}`, 'info');
+            
+            // Открыть артефакт
+            const artifactUrl = `artifacts/${artifact.id}.html`;
+            window.open(artifactUrl, '_blank');
+          }
+        } catch (e) {
+          log(`❌ Ошибка парсинга: ${e.message}`, 'error');
+        }
+      };
+
+      ws.onerror = (error) => {
+        log(`❌ WebSocket ошибка: ${error}`, 'error');
+      };
+
+      ws.onclose = () => {
+        log('WebSocket отключен', 'info');
+        updateStatus(false);
+      };
+    });
+
+    sendBtn.addEventListener('click', () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('❌ WebSocket не подключен', 'error');
+        return;
+      }
+
+      const message = {
+        message: "Создай интерфейс для игры в крестики-нолики 3x3",
+        context: {}
+      };
+
+      log('📤 Отправка запроса...', 'info');
+      log(`   Message: ${message.message}`, 'info');
+      ws.send(JSON.stringify(message));
+    });
+
+    clearBtn.addEventListener('click', () => {
+      logEl.innerHTML = '';
+      log('Лог очищен', 'info');
+    });
+
+    // Auto-connect on load
+    window.addEventListener('load', () => {
+      log('Страница загружена. Нажмите "Подключиться" для старта.', 'info');
+    });
+  </script>
+</body>
+</html>
