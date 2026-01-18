@@ -17,11 +17,17 @@
 - [Общая архитектура](architecture/ARCHITECTURE.md) — структура Neira v2
 - [Cortex](architecture/CORTEX.md) — мозг системы v2.0
 - [Cell Router](architecture/CELL_ROUTER.md) — маршрутизация клеток
+
+#### 🦀 Rust Brain
 - [Миграция мозга в Rust](architecture/RUST_BRAIN_MIGRATION.md) — этапы и требования миграции
+- [Rust Brain V1](architecture/RUST_BRAIN_V1.md) — автономия, латентность, fallback, тесты
 - [Rust Brain Crates](architecture/RUST_BRAIN_CRATES.md) — состав модулей и границы ответственности
-- [Критерии автономии Rust Brain](architecture/RUST_BRAIN_V1.md) — автономия, латентность, fallback, тесты
-- [Roadmap миграции данных Rust Brain](architecture/RUST_BRAIN_MIGRATION_ROADMAP.md) — источники данных, этапы миграции, деградация
-- [Дорожная карта Rust Brain](architecture/RUST_BRAIN_ROADMAP.md) — этапы 0–3, риски и метрики
+- [Форматы данных](architecture/RUST_BRAIN_DATA_FORMATS.md) — схемы Pathway, Memory, Wisdom
+- [Глоссарий](architecture/RUST_BRAIN_GLOSSARY.md) — ключевые термины архитектуры
+- [Дорожная карта](architecture/RUST_BRAIN_ROADMAP.md) — этапы 0–3, риски и метрики
+- [Roadmap миграции данных](architecture/RUST_BRAIN_MIGRATION_ROADMAP.md) — источники данных, этапы миграции
+- **[Маппинг Python → Rust](architecture/RUST_BRAIN_MAPPING.md)** — связь существующего кода с Rust crates 🆕
+- **[LLM Runtime](architecture/RUST_BRAIN_LLM_RUNTIME.md)** — mistral.rs, выбор модели, интеграция 🆕
 
 ### ⚡ [Возможности](features/)
 - [Система памяти](features/memory/) — хранение, защита, консолидация
