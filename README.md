@@ -188,7 +188,7 @@ python test_memory_protection.py     # Проверить защиту
 python run_memory_consolidation.py   # Объединить дубликаты
 ```
 
-📖 Подробнее: [MEMORY_v3_DEPLOYMENT_REPORT.md](MEMORY_v3_DEPLOYMENT_REPORT.md) | [MEMORY_PROTECTION_GUIDE.md](MEMORY_PROTECTION_GUIDE.md)
+📖 Подробнее: [Система памяти](docs/features/memory/README.md)
 
 ---
 
