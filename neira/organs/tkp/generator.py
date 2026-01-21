@@ -22,11 +22,13 @@ from neira.organs.tkp.parser import (
     ParsedParameter,
     load_or_parse_catalog,
 )
+from neira.organs.tkp.images import select_model_images
 
 from neira.config import (
     TKP_CATALOGS_DIR,
     TKP_COMPANY_PARAGRAPH_LIMIT,
     TKP_INTRO_PARAGRAPH_LIMIT,
+    TKP_IMAGE_WIDTH_CM,
     TKP_MISSING_VALUE_TEXT,
     TKP_OUTPUT_DIR,
     TKP_PARSED_DIR,
@@ -197,6 +199,8 @@ _RAW_PARAM_ALIASES: dict[str, list[str]] = {
         "spindle head",
         "spindle nose",
         "spindle type",
+        "spindle nose a",
+        "spindle nose a2",
     ],
     "Макс.скорость шпинделя": [
         "max spindle speed",
@@ -226,10 +230,14 @@ _RAW_PARAM_ALIASES: dict[str, list[str]] = {
     "Смазка подшипника шпинделя": [
         "spindle bearing lubrication",
         "bearing lubrication",
+        "spindle bearing lube",
     ],
     "Смазка направляющей": [
         "guideway lubrication",
         "way lubrication",
+        "guide rail lubrication",
+        "guiderail lubrication",
+        "linear guide lubrication",
     ],
     "Максимальное вращение над станиной": [
         "swing over bed",
@@ -267,6 +275,17 @@ _RAW_PARAM_ALIASES: dict[str, list[str]] = {
         "turret",
         "tool turret",
         "revolver",
+        "servo turret",
+        "revolver head",
+        "turret type",
+    ],
+    "Конус станины станка, материал": [
+        "bed material",
+        "bed casting",
+        "base material",
+        "machine bed",
+        "base casting",
+        "bed type",
     ],
 }
 
@@ -313,6 +332,7 @@ class TkpCatalogInfo:
     standard_items: list[str]
     option_items: list[str]
     param_values: dict[str, str]
+    pages_used: list[int]
 
 
 @dataclass(frozen=True)
@@ -368,13 +388,14 @@ def generate_tkp_document(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = _build_output_path(output_dir, model_name)
 
-    missing_values = _render_docx(
+    missing_values, render_warnings = _render_docx(
         output_path=output_path,
         model_name=model_name,
         template=template,
         catalog_info=catalog_info,
         missing_value_text=missing_value_text,
     )
+    warnings.extend(render_warnings)
 
     return TkpGenerationResult(
         output_path=output_path,
@@ -438,7 +459,11 @@ def _prepare_generation_context(
 
 
 def _load_templates(samples_dir: Path) -> list[TkpTemplateSpec]:
-    samples = sorted(samples_dir.glob("*.docx"))
+    samples = sorted(
+        path
+        for path in samples_dir.glob("*.docx")
+        if not path.name.startswith("~$")
+    )
     if not samples:
         raise TkpGenerationError(f"В папке нет docx-шаблонов: {samples_dir}")
 
@@ -691,7 +716,7 @@ def _extract_model_from_paragraphs(paragraphs: Sequence[str]) -> str | None:
         if match:
             return match.group(1)
     for paragraph in paragraphs:
-        match = re.search(r"\\b([A-Z]{1,4}\\s?\\d{2,4}[A-Z]?)\\b", paragraph)
+        match = re.search(r"\b([A-Z]{1,4}\s?\d{2,4}[A-Z]?)\b", paragraph)
         if match:
             return match.group(1).strip()
     return None
@@ -844,6 +869,7 @@ def _extract_catalog_info(
         standard_items=parsed.standard_items,
         option_items=parsed.option_items,
         param_values=param_values,
+        pages_used=list(parsed.pages_used),
     )
 
 
@@ -945,7 +971,7 @@ def _extract_weight_kg(parameters: Sequence[ParsedParameter]) -> float | None:
 
 
 def _parse_numeric_value(value: str) -> float | None:
-    match = re.search(r"[-+]?\\d+(?:[\\.,]\\d+)?", value)
+    match = re.search(r"[-+]?\d+(?:[.,]\d+)?", value)
     if not match:
         return None
     raw = match.group(0).replace(" ", "").replace(",", ".")
@@ -997,6 +1023,8 @@ def _match_by_aliases(
     for alias in aliases:
         for key, param in indexed.items():
             if alias in key or key in alias:
+                if not _units_compatible(unit, param.unit):
+                    continue
                 score = float(len(key))
                 if _units_match(unit, param.unit):
                     score += 1000.0
@@ -1016,6 +1044,8 @@ def _match_fuzzy(
     best_param: ParsedParameter | None = None
     best_score = 0.0
     for key, param in indexed.items():
+        if not _units_compatible(unit, param.unit):
+            continue
         score = difflib.SequenceMatcher(None, normalized, key).ratio()
         if _units_match(unit, param.unit):
             score += 1.0
@@ -1034,6 +1064,8 @@ def _normalize_param_name(text: str) -> str:
 def _normalize_unit(unit: str) -> str:
     normalized = unit.lower().strip()
     normalized = normalized.replace(" ", "")
+    if "type" in normalized or "тип" in normalized:
+        return "type"
     normalized = normalized.replace("°", "deg")
     normalized = normalized.replace("r/min", "rpm")
     normalized = normalized.replace("r\\min", "rpm")
@@ -1051,6 +1083,18 @@ def _units_match(row_unit: str | None, param_unit: str | None) -> bool:
     param_norm = _normalize_unit(param_unit)
     if not row_norm or not param_norm:
         return False
+    return row_norm in param_norm or param_norm in row_norm
+
+
+def _units_compatible(row_unit: str | None, param_unit: str | None) -> bool:
+    if not row_unit or not param_unit:
+        return True
+    row_norm = _normalize_unit(row_unit)
+    param_norm = _normalize_unit(param_unit)
+    if not row_norm or not param_norm:
+        return True
+    if row_norm == "type" or param_norm == "type":
+        return True
     return row_norm in param_norm or param_norm in row_norm
 
 
@@ -1076,7 +1120,7 @@ def _render_docx(
     template: TkpTemplateSpec,
     catalog_info: TkpCatalogInfo,
     missing_value_text: str,
-) -> int:
+) -> tuple[int, list[str]]:
     Document = _require_docx()
     document = Document()
 
@@ -1084,7 +1128,16 @@ def _render_docx(
     _render_company_section(document, template, missing_value_text)
 
     missing_values = 0
+    warnings: list[str] = []
     missing_values += _render_machine_info(document, catalog_info, missing_value_text)
+    visual_missing, visual_warnings = _render_visual_section(
+        document,
+        model_name,
+        catalog_info,
+        missing_value_text,
+    )
+    missing_values += visual_missing
+    warnings.extend(visual_warnings)
     missing_values += _render_main_units(document, template, catalog_info, missing_value_text)
     missing_values += _render_tech_specs(document, template, catalog_info, missing_value_text)
     missing_values += _render_standard_equipment(document, catalog_info, missing_value_text)
@@ -1093,7 +1146,7 @@ def _render_docx(
 
     document.save(output_path)
     logger.info("Сформирован ТКП: %s", output_path)
-    return missing_values
+    return missing_values, warnings
 
 
 def _require_docx():
@@ -1161,6 +1214,31 @@ def _render_machine_info(
     return 1 if catalog_info.model_snippet is None else 0
 
 
+def _render_visual_section(
+    document,
+    model_name: str,
+    catalog_info: TkpCatalogInfo,
+    missing_value_text: str,
+) -> tuple[int, list[str]]:
+    document.add_heading("Визуализация", level=2)
+    images = select_model_images(
+        catalog_info.catalog_path,
+        model_name,
+        catalog_info.pages_used,
+    )
+    if not images.image_paths:
+        document.add_paragraph(missing_value_text)
+        return 1, images.warnings
+    try:
+        from docx.shared import Cm
+    except ImportError as exc:
+        logger.warning("Не удалось добавить изображения в docx: %s", exc)
+        return 1, images.warnings + ["Не удалось добавить изображения в docx."]
+    for image_path in images.image_paths:
+        document.add_picture(str(image_path), width=Cm(TKP_IMAGE_WIDTH_CM))
+    return 0, images.warnings
+
+
 def _render_main_units(
     document,
     template: TkpTemplateSpec,
@@ -1176,7 +1254,7 @@ def _render_main_units(
         )
     return _add_bullet_list(
         document,
-        catalog_info.main_units,
+        _filter_list_items(catalog_info.main_units),
         missing_value_text,
     )
 
@@ -1204,7 +1282,7 @@ def _render_standard_equipment(
     document.add_heading("Стандартная комплектация", level=2)
     return _add_bullet_list(
         document,
-        catalog_info.standard_items,
+        _filter_list_items(catalog_info.standard_items),
         missing_value_text,
     )
 
@@ -1216,16 +1294,17 @@ def _render_options(
     missing_value_text: str,
 ) -> int:
     document.add_heading("Возможные опции", level=2)
+    filtered_options = _filter_list_items(catalog_info.option_items)
     if template.options_headers:
         return _add_options_table(
             document,
             template.options_headers,
-            catalog_info.option_items,
+            filtered_options,
             missing_value_text,
         )
     return _add_bullet_list(
         document,
-        catalog_info.option_items,
+        filtered_options,
         missing_value_text,
     )
 
@@ -1317,7 +1396,8 @@ def _add_tech_table(
             row_cells[0].merge(row_cells[-1])
             continue
 
-        value = param_values.get(row.name, missing_value_text)
+        raw_value = param_values.get(row.name, missing_value_text)
+        value = _normalize_param_value(raw_value, missing_value_text, row.unit)
         if value == missing_value_text:
             missing_values += 1
 
@@ -1399,3 +1479,74 @@ def _add_options_table(
             cell.text = missing_value_text
             missing_values += 1
     return missing_values
+
+
+def _filter_list_items(items: Sequence[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = _clean_list_item(item)
+        if not text:
+            continue
+        normalized = text.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        cleaned.append(text)
+    return cleaned
+
+
+def _clean_list_item(item: str) -> str:
+    if not item:
+        return ""
+    text = re.sub(r"^[\-•*\d.\)\s]+", "", item).strip()
+    lowered = text.lower()
+    if any(token in lowered for token in ("http", "www", "tel", "fax", "e-mail", "email", "@")):
+        return ""
+    if any(token in lowered for token in ("technical", "parameters", "характерист", "параметр")):
+        return ""
+    words = text.split()
+    if len(words) > 16 or len(text) > 140:
+        return ""
+    if sum(ch.isalpha() for ch in text) < 4:
+        return ""
+    alpha_tokens = [token.strip("()[]{}.,:;/-").lower() for token in words]
+    alpha_tokens = [token for token in alpha_tokens if token.isalpha()]
+    stopwords = {
+        "option",
+        "options",
+        "optional",
+        "standard",
+        "specification",
+        "specifications",
+        "опции",
+        "опция",
+        "опцион",
+        "стандарт",
+        "комплектация",
+        "комплект",
+    }
+    if alpha_tokens and all(token in stopwords for token in alpha_tokens):
+        return ""
+    if len(words) <= 2 and any(token in stopwords for token in alpha_tokens):
+        return ""
+    return text
+
+
+def _normalize_param_value(
+    value: str,
+    missing_value_text: str,
+    row_unit: str | None,
+) -> str:
+    if not value or value == missing_value_text:
+        return missing_value_text
+    cleaned = " ".join(value.split())
+    numeric_tokens = re.findall(r"\d+(?:[.,]\d+)?", cleaned)
+    if row_unit and _normalize_unit(row_unit) == "type":
+        if not re.search(r"[A-Za-zА-Яа-я]", cleaned):
+            return missing_value_text
+    if len(numeric_tokens) >= 3:
+        return numeric_tokens[0]
+    if len(cleaned) > 60 and len(numeric_tokens) <= 1:
+        return missing_value_text
+    return cleaned

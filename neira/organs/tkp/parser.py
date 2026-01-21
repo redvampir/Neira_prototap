@@ -10,13 +10,20 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
+import sqlite3
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
 from neira.config import (
+    TKP_DB_PATH,
     TKP_LIST_LIMIT,
+    TKP_OCR_DIR,
+    TKP_OCR_LANG,
+    TKP_OCR_TIMEOUT_SECONDS,
     TKP_PARSED_DIR,
     TKP_PARSED_SCHEMA_VERSION,
     TKP_PARSE_FALLBACK_PAGES,
@@ -24,11 +31,13 @@ from neira.config import (
     TKP_SNIPPET_CHARS,
     TKP_VALUE_WINDOW_CHARS,
 )
+from neira.organs.tkp.db import store_parsed_catalog
 
 logger = logging.getLogger(__name__)
 
 _UNIT_TOKENS = (
     "mm",
+    "тт",
     "mm/min",
     "m/min",
     "kg",
@@ -47,7 +56,36 @@ _UNIT_TOKENS = (
     "l",
     "db",
 )
-_NUMERIC_PATTERN = re.compile(r"[-+]?\\d[\\d\\s.,/x×-]*\\d|[-+]?\\d")
+_NUMERIC_PATTERN = re.compile(r"[-+]?\d[\d\s.,/x×-]*\d|[-+]?\d")
+_TYPE_PATTERN = re.compile(r"\b[A-Z]{1,3}\d{1,2}-\d{1,2}\b")
+_OCR_CONFUSABLES = str.maketrans(
+    {
+        "а": "a",
+        "в": "b",
+        "е": "e",
+        "к": "k",
+        "м": "m",
+        "н": "h",
+        "о": "o",
+        "р": "p",
+        "с": "c",
+        "т": "t",
+        "у": "y",
+        "х": "x",
+        "А": "A",
+        "В": "B",
+        "Е": "E",
+        "К": "K",
+        "М": "M",
+        "Н": "H",
+        "О": "O",
+        "Р": "P",
+        "С": "C",
+        "Т": "T",
+        "У": "Y",
+        "Х": "X",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -190,6 +228,7 @@ def parse_catalog_to_files(
 
     _write_json(parsed, json_path)
     _write_md(parsed, md_path)
+    _save_to_db(parsed)
     return parsed
 
 
@@ -222,12 +261,33 @@ def _parse_catalog_content(
         ),
         TKP_LIST_LIMIT,
     )
-    standard_sources = _extract_items_with_sources(
-        pages, ("стандарт", "standard", "комплектац")
+    standard_sources = _extract_section_items_with_sources(
+        pages,
+        ("стандарт", "standard", "комплектац"),
+        ("опци", "optional", "option", "прайс", "price", "technical", "parameters"),
     )
-    option_sources = _extract_items_with_sources(
-        pages, ("опци", "optional", "option")
+    if not standard_sources:
+        standard_sources = _extract_items_with_sources(
+            pages, ("стандарт", "standard", "комплектац")
+        )
+    option_sources = _extract_section_items_with_sources(
+        pages,
+        ("опци", "optional", "option"),
+        (
+            "прайс",
+            "price",
+            "техническ",
+            "характеристик",
+            "specification",
+            "technical",
+            "parameters",
+            "standard",
+        ),
     )
+    if not option_sources:
+        option_sources = _extract_items_with_sources(
+            pages, ("опци", "optional", "option")
+        )
     if main_units_sources:
         main_units = [item.text for item in main_units_sources]
     standard_items = [item.text for item in standard_sources]
@@ -324,11 +384,25 @@ def _catalog_from_dict(payload: dict) -> ParsedCatalog:
 def _extract_pages(catalog_path: Path) -> tuple[list[PageContent], list[str]]:
     warnings: list[str] = []
     pages = _extract_pages_with_pdfplumber(catalog_path)
-    if pages:
+    if _has_content(pages):
         return pages, warnings
 
+    pages = _extract_pages_with_pdfminer(catalog_path)
+    if _has_content(pages):
+        warnings.append("pdfplumber извлек пустой текст, использован pdfminer.")
+        return pages, warnings
+
+    ocr_pages, ocr_warnings = _extract_pages_with_ocr(catalog_path)
+    warnings.extend(ocr_warnings)
+    if _has_content(ocr_pages):
+        return ocr_pages, warnings
+
     pages = _extract_pages_with_pypdf(catalog_path)
-    warnings.append("pdfplumber недоступен, качество извлечения ниже.")
+    warnings.append(
+        "pdfplumber извлек пустой текст, pdfminer и OCR не помогли, качество извлечения ниже."
+    )
+    if not _has_content(pages):
+        warnings.append("В PDF не найден текст, возможно требуется OCR.")
     return pages, warnings
 
 
@@ -361,6 +435,78 @@ def _extract_pages_with_pypdf(catalog_path: Path) -> list[PageContent]:
     return pages
 
 
+def _extract_pages_with_pdfminer(catalog_path: Path) -> list[PageContent]:
+    try:
+        from pdfminer.high_level import extract_pages
+        from pdfminer.layout import LTTextContainer
+    except ImportError:
+        return []
+
+    pages: list[PageContent] = []
+    for idx, layout in enumerate(extract_pages(str(catalog_path)), start=1):
+        parts: list[str] = []
+        for element in layout:
+            if isinstance(element, LTTextContainer):
+                parts.append(element.get_text())
+        text = "".join(parts).replace("\x0c", "").strip()
+        pages.append(PageContent(idx, text, []))
+    return pages
+
+
+def _extract_pages_with_ocr(
+    catalog_path: Path,
+) -> tuple[list[PageContent], list[str]]:
+    warnings: list[str] = []
+    ocrmypdf_path = shutil.which("ocrmypdf")
+    if not ocrmypdf_path:
+        warnings.append("OCR недоступен: ocrmypdf не найден.")
+        return [], warnings
+
+    TKP_OCR_DIR.mkdir(parents=True, exist_ok=True)
+    ocr_path = TKP_OCR_DIR / f"{_safe_name(catalog_path.stem)}_ocr.pdf"
+    if not ocr_path.exists():
+        try:
+            result = subprocess.run(
+                [
+                    ocrmypdf_path,
+                    "--force-ocr",
+                    "--language",
+                    TKP_OCR_LANG,
+                    str(catalog_path),
+                    str(ocr_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=TKP_OCR_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            warnings.append(f"OCR ошибка: {exc}")
+            return [], warnings
+
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            detail = f": {stderr}" if stderr else ""
+            warnings.append(f"OCR завершился с ошибкой{detail}")
+            return [], warnings
+
+    pages = _extract_pages_with_pdfplumber(ocr_path)
+    if not _has_content(pages):
+        warnings.append("OCR завершился, но текст не извлечён.")
+    return pages, warnings
+
+
+def _save_to_db(parsed: ParsedCatalog) -> None:
+    try:
+        store_parsed_catalog(parsed, TKP_DB_PATH)
+    except (OSError, sqlite3.Error) as exc:
+        logger.warning("Не удалось сохранить ТКП в БД: %s", exc)
+
+
+def _has_content(pages: Sequence[PageContent]) -> bool:
+    return any(page.text.strip() or page.tables for page in pages)
+
+
 def _select_pages_for_model(
     pages: Sequence[PageContent],
     model_name: str,
@@ -387,7 +533,12 @@ def _expand_page_window(indexes: Sequence[int]) -> set[int]:
 
 
 def _collect_lines(text: str) -> list[str]:
-    return [line.strip() for line in text.splitlines() if line.strip()]
+    lines: list[str] = []
+    for line in text.splitlines():
+        cleaned = _sanitize_text(line)
+        if cleaned:
+            lines.append(cleaned)
+    return lines
 
 
 def _extract_snippet(text: str, model_name: str) -> str | None:
@@ -470,6 +621,84 @@ def _extract_lines_by_keywords(
         if len(matched) >= limit:
             break
     return matched
+
+
+def _flatten_lines_with_pages(
+    pages: Sequence[PageContent],
+) -> list[tuple[int, str]]:
+    lines: list[tuple[int, str]] = []
+    for page in pages:
+        for line in _collect_lines(page.text):
+            lines.append((page.index, line))
+    return lines
+
+
+def _line_has_keywords(line: str, keywords: Sequence[str]) -> bool:
+    lowered = line.lower()
+    return any(keyword in lowered for keyword in keywords)
+
+
+def _is_heading_line(line: str) -> bool:
+    if len(line) > 80:
+        return False
+    if _count_letters(line) < 4:
+        return False
+    digits = sum(ch.isdigit() for ch in line)
+    return digits <= 4
+
+
+def _is_candidate_list_item(item: str) -> bool:
+    if not item:
+        return False
+    text = item.strip()
+    if len(text) > 140:
+        return False
+    if _count_letters(text) < 4:
+        return False
+    lowered = text.lower()
+    if any(token in lowered for token in ("http", "www", "tel", "fax", "e-mail", "email", "@")):
+        return False
+    if any(token in lowered for token in ("technical", "parameters", "характерист", "параметр")):
+        return False
+    return True
+
+
+def _extract_section_items_with_sources(
+    pages: Sequence[PageContent],
+    start_keywords: Sequence[str],
+    stop_keywords: Sequence[str],
+) -> list[ParsedListItem]:
+    lines = _flatten_lines_with_pages(pages)
+    start_indexes = [
+        idx
+        for idx, (_, line) in enumerate(lines)
+        if _line_has_keywords(line, start_keywords) and _is_heading_line(line)
+    ]
+    if not start_indexes:
+        return []
+    items: list[ParsedListItem] = []
+    seen: set[str] = set()
+    for start_idx in start_indexes:
+        for page_index, line in lines[start_idx + 1 :]:
+            if _line_has_keywords(line, stop_keywords) and _is_heading_line(line):
+                break
+            for item in _split_line_items(line):
+                if not _is_candidate_list_item(item):
+                    continue
+                normalized = item.lower()
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                items.append(
+                    ParsedListItem(
+                        text=item,
+                        source_page=page_index,
+                        source_text=line,
+                    )
+                )
+                if len(items) >= TKP_LIST_LIMIT:
+                    return items
+    return items
 
 
 def _extract_lines_with_sources(
@@ -615,7 +844,7 @@ def _extract_unit(cells: Sequence[str]) -> str | None:
         lowered = cell.lower()
         for token in _UNIT_TOKENS:
             if token in lowered:
-                return token
+                return "mm" if token == "тт" else token
     return None
 
 
@@ -628,12 +857,64 @@ def _extract_parameters_from_lines(
     pages: Sequence[PageContent],
     model_name: str,
 ) -> list[ParsedParameter]:
+    lines = _flatten_lines_with_pages(pages)
+    tech_keywords = (
+        "technical parameters",
+        "technical specifications",
+        "tech parameters",
+        "specifications",
+        "технические характеристики",
+        "технические параметры",
+    )
+    stop_keywords = (
+        "standard",
+        "комплектац",
+        "опци",
+        "optional",
+        "option",
+        "price",
+        "прайс",
+    )
+    if _has_section_heading(lines, tech_keywords):
+        return _extract_parameters_from_sections(lines, model_name, tech_keywords, stop_keywords)
+
     parameters: list[ParsedParameter] = []
-    for page in pages:
-        for line in _collect_lines(page.text):
-            param = _parse_line(line, page.index, model_name)
-            if param:
-                parameters.append(param)
+    for page_index, line in lines:
+        param = _parse_line(line, page_index, model_name)
+        if param:
+            parameters.append(param)
+    return parameters
+
+
+def _has_section_heading(
+    lines: Sequence[tuple[int, str]],
+    keywords: Sequence[str],
+) -> bool:
+    return any(
+        _line_has_keywords(line, keywords) and _is_heading_line(line)
+        for _, line in lines
+    )
+
+
+def _extract_parameters_from_sections(
+    lines: Sequence[tuple[int, str]],
+    model_name: str,
+    start_keywords: Sequence[str],
+    stop_keywords: Sequence[str],
+) -> list[ParsedParameter]:
+    parameters: list[ParsedParameter] = []
+    in_section = False
+    for page_index, line in lines:
+        if _line_has_keywords(line, start_keywords) and _is_heading_line(line):
+            in_section = True
+            continue
+        if in_section and _line_has_keywords(line, stop_keywords) and _is_heading_line(line):
+            in_section = False
+        if not in_section:
+            continue
+        param = _parse_line(line, page_index, model_name)
+        if param:
+            parameters.append(param)
     return parameters
 
 
@@ -644,6 +925,8 @@ def _parse_line(
 ) -> ParsedParameter | None:
     if not _has_digits(line):
         return None
+    if _looks_like_noise(line):
+        return None
     unit = _extract_unit([line])
     if unit is None:
         return None
@@ -652,6 +935,8 @@ def _parse_line(
         return None
     name = _extract_name_from_line(line)
     if not name:
+        return None
+    if _count_letters(name) < 4:
         return None
     return ParsedParameter(
         name=name,
@@ -665,16 +950,26 @@ def _parse_line(
 def _extract_value_from_line(line: str, model_name: str) -> str | None:
     if model_name.lower() in line.lower():
         trimmed = _trim_after_model(line, model_name)
+        type_match = _TYPE_PATTERN.search(trimmed or "")
+        if type_match:
+            return type_match.group(0).strip()
         match = _NUMERIC_PATTERN.search(trimmed or "")
         if match:
             return match.group(0).strip()
+    type_match = _TYPE_PATTERN.search(line)
+    if type_match:
+        return type_match.group(0).strip()
+    if _normalize_text(model_name) in _normalize_text(line):
+        match = _NUMERIC_PATTERN.search(line)
+        return match.group(0).strip() if match else None
     match = _NUMERIC_PATTERN.search(line)
     return match.group(0).strip() if match else None
 
 
 def _extract_name_from_line(line: str) -> str | None:
-    parts = re.split(r"\\d", line, maxsplit=1)
+    parts = re.split(r"\d", line, maxsplit=1)
     name = parts[0].strip(" :-")
+    name = _clean_param_name(name)
     return name if len(name) > 2 else None
 
 
@@ -754,32 +1049,64 @@ def _find_model_column(
 ) -> tuple[int | None, int]:
     normalized_model = _normalize_text(model_name)
     header_index = 0
-    best_index = None
+    best_index: int | None = None
+    best_score = 0.0
+    candidates = [normalized_model]
+    for candidate in _model_fallback_candidates(model_name):
+        normalized_candidate = _normalize_text(candidate)
+        if normalized_candidate and normalized_candidate not in candidates:
+            candidates.append(normalized_candidate)
+
     for idx, row in enumerate(table):
-        cells = [_clean_cell(cell) for cell in row if cell and cell.strip()]
+        cells = [_clean_cell(cell) for cell in row if cell and str(cell).strip()]
         if not cells:
             continue
-        if any(normalized_model in _normalize_text(cell) for cell in cells):
-            best_index = next(
-                (
-                    i
-                    for i, cell in enumerate(row)
-                    if normalized_model in _normalize_text(cell)
-                ),
-                None,
-            )
-            header_index = idx
-            if _is_header_row(cells) or _row_has_models(cells):
-                return best_index, header_index
-    return best_index, header_index
+        if not (_is_header_row(cells) or _row_has_models(cells)):
+            continue
+        for col_idx, cell in enumerate(row):
+            score = _score_model_cell(cell, normalized_model, candidates)
+            if score > best_score:
+                best_score = score
+                best_index = col_idx
+                header_index = idx
+        if best_score >= 2.0:
+            break
+
+    if best_index is not None:
+        return best_index, header_index
+
+    for idx, row in enumerate(table):
+        for col_idx, cell in enumerate(row):
+            if normalized_model in _normalize_text(cell):
+                return col_idx, idx
+    return None, 0
 
 
 def _row_has_models(cells: Sequence[str]) -> bool:
     hits = 0
     for cell in cells:
-        if re.search(r"[A-Za-z]{1,4}\\s?\\d{2,4}", cell):
+        normalized = _normalize_text(cell)
+        if re.search(r"[a-z]{1,4}\d{2,4}", normalized):
             hits += 1
     return hits >= 2
+
+
+def _score_model_cell(
+    cell: str,
+    normalized_model: str,
+    candidates: Sequence[str],
+) -> float:
+    normalized_cell = _normalize_text(cell)
+    if not normalized_cell:
+        return 0.0
+    if normalized_cell == normalized_model:
+        return 3.0
+    if normalized_model and normalized_model in normalized_cell:
+        return 2.0
+    for candidate in candidates:
+        if candidate and candidate in normalized_cell:
+            return 1.5
+    return 0.0
 
 
 def _find_unit_column(
@@ -911,13 +1238,56 @@ def _build_param_name_from_context(context: Sequence[str]) -> str | None:
 def _clean_cell(cell: str) -> str:
     if not cell:
         return ""
-    return " ".join(str(cell).replace("\n", " ").split())
+    cleaned = _sanitize_text(str(cell))
+    return " ".join(cleaned.replace("\n", " ").split())
 
 
 def _normalize_text(text: str) -> str:
     if not text:
         return ""
-    return re.sub(r"[^a-z0-9а-яё]+", "", str(text).lower())
+    lowered = str(text).lower()
+    lowered = lowered.translate(_OCR_CONFUSABLES)
+    return re.sub(r"[^a-z0-9а-яё]+", "", lowered)
+
+
+def _sanitize_text(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = text.replace("\u00a0", " ")
+    cleaned = cleaned.replace("\u00ad", "")
+    cleaned = cleaned.replace("\u200b", "")
+    cleaned = cleaned.replace("\ufb01", "fi")
+    cleaned = cleaned.replace("\ufb02", "fl")
+    cleaned = cleaned.replace("�", "")
+    cleaned = cleaned.replace("¬", "")
+    return cleaned.strip()
+
+
+def _clean_param_name(name: str) -> str:
+    if not name:
+        return ""
+    name = re.sub(r"^[^A-Za-zА-Яа-я]+", "", name).strip()
+    tokens = name.split()
+    for idx, token in enumerate(tokens):
+        if re.search(r"[a-zA-Z]", token):
+            return " ".join(tokens[idx:]).strip(" :-")
+    return name
+
+
+def _looks_like_noise(line: str) -> bool:
+    lowered = line.lower()
+    return any(
+        token in lowered
+        for token in (
+            "http",
+            "www",
+            "tel",
+            "fax",
+            "e-mail",
+            "email",
+            "@",
+        )
+    )
 
 
 def _safe_name(text: str) -> str:

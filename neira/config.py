@@ -103,6 +103,9 @@ TKP_SAMPLES_DIR: Final[Path] = PROJECT_ROOT / "training_data" / "tkp" / "samples
 TKP_CATALOGS_DIR: Final[Path] = PROJECT_ROOT / "training_data" / "tkp" / "catalogs"
 TKP_OUTPUT_DIR: Final[Path] = ARTIFACTS_DIR / "tkp"
 TKP_PARSED_DIR: Final[Path] = TKP_OUTPUT_DIR / "parsed"
+TKP_OCR_DIR: Final[Path] = TKP_OUTPUT_DIR / "ocr"
+TKP_DB_PATH: Final[Path] = TKP_OUTPUT_DIR / "tkp.sqlite3"
+TKP_IMAGES_DIR: Final[Path] = TKP_OUTPUT_DIR / "images"
 TKP_PARSED_SCHEMA_VERSION: Final[str] = os.getenv("NEIRA_TKP_PARSED_SCHEMA_VERSION", "3")
 
 TKP_MISSING_VALUE_TEXT: Final[str] = os.getenv(
@@ -128,6 +131,54 @@ TKP_PARSE_FALLBACK_PAGES: Final[int] = int(
 )
 TKP_PARAM_MATCH_MIN_SCORE: Final[float] = float(
     os.getenv("NEIRA_TKP_PARAM_MATCH_MIN_SCORE", "0.62")
+)
+TKP_OCR_LANG: Final[str] = os.getenv("NEIRA_TKP_OCR_LANG", "eng+rus")
+TKP_OCR_TIMEOUT_SECONDS: Final[int] = int(
+    os.getenv("NEIRA_TKP_OCR_TIMEOUT_SECONDS", "900")
+)
+TKP_IMAGE_MAX_COUNT: Final[int] = int(os.getenv("NEIRA_TKP_IMAGE_MAX_COUNT", "1"))
+TKP_IMAGE_DPI: Final[int] = int(os.getenv("NEIRA_TKP_IMAGE_DPI", "200"))
+TKP_IMAGE_WIDTH_CM: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_WIDTH_CM", "16.0")
+)
+TKP_IMAGE_MODEL_PAGE_WINDOW: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_MODEL_PAGE_WINDOW", "1")
+)
+TKP_IMAGE_TEXT_KEYWORD_PENALTY: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_TEXT_KEYWORD_PENALTY", "10000")
+)
+TKP_IMAGE_DIGIT_RATIO_THRESHOLD: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_DIGIT_RATIO_THRESHOLD", "0.08")
+)
+TKP_IMAGE_DIGIT_RATIO_PENALTY: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_DIGIT_RATIO_PENALTY", "5000")
+)
+TKP_IMAGE_DIGIT_WEIGHT: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_DIGIT_WEIGHT", "3.0")
+)
+TKP_IMAGE_LETTER_WEIGHT: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_LETTER_WEIGHT", "0.2")
+)
+TKP_IMAGE_LENGTH_WEIGHT: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_LENGTH_WEIGHT", "0.1")
+)
+TKP_IMAGE_MODEL_PAGE_BONUS: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_MODEL_PAGE_BONUS", "20000")
+)
+TKP_IMAGE_RENDER_TIMEOUT_SECONDS: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_RENDER_TIMEOUT_SECONDS", "120")
+)
+TKP_IMAGE_OCR_DPI: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_OCR_DPI", "110")
+)
+TKP_IMAGE_OCR_MAX_PAGES: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_OCR_MAX_PAGES", "30")
+)
+TKP_IMAGE_OCR_TIMEOUT_SECONDS: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_OCR_TIMEOUT_SECONDS", "20")
+)
+TKP_IMAGE_OCR_CROP_RATIO: Final[float] = float(
+    os.getenv("NEIRA_TKP_IMAGE_OCR_CROP_RATIO", "0.45")
 )
 
 # ============================================================================

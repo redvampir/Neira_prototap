@@ -1,21 +1,583 @@
 {
   "model_name": "HT2",
   "catalog_path": "F:\\Нейронки\\prototype\\training_data\\tkp\\catalogs\\1_ECATALOG_OF_HT_CT_ADVANCED_TYPE_CNC_TURNING_CENTER_DRC_MACHINERY.pdf",
-  "extracted_at": "2026-01-21T12:45:40.786400",
+  "extracted_at": "2026-01-21T17:59:54.864063",
   "schema_version": "3",
   "pages_used": [
-    1,
-    2
+    11,
+    12,
+    13
   ],
-  "snippet": null,
-  "main_units": [],
+  "snippet": "m 268 Nm 268 Nm 19/20 1.35 /ADVANTAGE DRC “4 53 R/HIGHLIGHTS MACHINERY РЕБ ЗЖ/МАСНИМЕ TOOLS AND TECHN!OLOGY УЖВУЕММВОММЕМТ ERG { 82X75 ЗЕ /AUTOMATION SOLUTION SacI /OPTIONS $A H/TECHNICAL PARAMETERS. HT2 HT3 HTS НТУ HT6 HT6L ЛАfF Tool attachments Technical Parameters иже ЯВ! бегуо turret Туре Ргавак/зашег ~ > = SAUTER SAUTER ЛА\\МитЬег of Tools - | 8/12 - = re р 12 HT2 HT3 НТ5 НТ 61 ASR Parameter ЛАКЗ Size of Tools тт | 20/25 = 4 = 25 25 4587 Servo turret 38155 Spindle head 38 02-5 FL140h5/A2-6 FL140/A2-6 FL140/A2-6 FL170h5 FL220h5 SERB IIS spindle maximumspeed rpm 5000 4500 4500 4500 4000 3000 лЛАМитьег of Tools - 1/12 8/12 12 12 - i ЖЗНХЕ Max. Torque NXm 76 i 90 112 112 i 300 420 TBAB Turret disk type - Е Slotdisk Slotdisk —Slotdisk ^ ЗЕЕ Spindle power | kw §.5-75/TS11 7.5-11/11-15 11/15",
+  "main_units": [
+    "ад ЖЕ /АОТОМАПОМ SOLUTION ВЕН Sub-spindle",
+    "ВЕНЕ Sub-spindle travel 490 тт “850mm 1050 mm",
+    "НЕА Sub-spindle nose A2-5 A2-6 A2-6",
+    "ВЕРНЫХ Max.speed of sub-spindle 6000 rpm 5000 rpm 5000 rpm",
+    "88 - 3 clamping chuck Diameter - main spindle 210 тт 250 тт 304mm",
+    "ЗЕ Main spindle",
+    "SEH Spindle nose A2-8 FL170/A2-8/FL220 A2-8/FL220",
+    "ЗЕ Spindle bore diameter 74mm 87/102 mm 87/102 mm"
+  ],
   "standard_items": [],
-  "option_items": [],
-  "main_units_sources": [],
+  "option_items": [
+    "SacI /OPTIONS"
+  ],
+  "main_units_sources": [
+    {
+      "text": "ад ЖЕ /АОТОМАПОМ SOLUTION ВЕН Sub-spindle",
+      "source_page": 11,
+      "source_text": "ад ЖЕ /АОТОМАПОМ SOLUTION ВЕН Sub-spindle"
+    },
+    {
+      "text": "ВЕНЕ Sub-spindle travel 490 тт “850mm 1050 mm",
+      "source_page": 11,
+      "source_text": "ВЕНЕ Sub-spindle travel 490 тт “850mm 1050 mm"
+    },
+    {
+      "text": "НЕА Sub-spindle nose A2-5 A2-6 A2-6",
+      "source_page": 11,
+      "source_text": "НЕА Sub-spindle nose A2-5 A2-6 A2-6"
+    },
+    {
+      "text": "ВЕРНЫХ Max.speed of sub-spindle 6000 rpm 5000 rpm 5000 rpm",
+      "source_page": 11,
+      "source_text": "ВЕРНЫХ Max.speed of sub-spindle 6000 rpm 5000 rpm 5000 rpm"
+    },
+    {
+      "text": "88 - 3 clamping chuck Diameter - main spindle 210 тт 250 тт 304mm",
+      "source_page": 11,
+      "source_text": "88 - 3 clamping chuck Diameter - main spindle 210 тт 250 тт 304mm"
+    },
+    {
+      "text": "ЗЕ Main spindle",
+      "source_page": 11,
+      "source_text": "ЗЕ Main spindle"
+    },
+    {
+      "text": "SEH Spindle nose A2-8 FL170/A2-8/FL220 A2-8/FL220",
+      "source_page": 11,
+      "source_text": "SEH Spindle nose A2-8 FL170/A2-8/FL220 A2-8/FL220"
+    },
+    {
+      "text": "ЗЕ Spindle bore diameter 74mm 87/102 mm 87/102 mm",
+      "source_page": 11,
+      "source_text": "ЗЕ Spindle bore diameter 74mm 87/102 mm 87/102 mm"
+    }
+  ],
   "standard_items_sources": [],
-  "option_items_sources": [],
-  "parameters": [],
-  "warnings": [
-    "Модель не найдена на страницах каталога."
-  ]
+  "option_items_sources": [
+    {
+      "text": "SacI /OPTIONS",
+      "source_page": 12,
+      "source_text": "SacI /OPTIONS"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "iim KEI Front Bearing Diameter",
+      "value": "100",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "‘iim KEI Front Bearing Diameter - 100 тт 100 тт"
+    },
+    {
+      "name": "Max.speed of sub-spindle",
+      "value": "6000",
+      "unit": "rpm",
+      "source_page": 11,
+      "source_text": "ВЕРНЫХ Max.speed of sub-spindle 6000 rpm 5000 rpm 5000 rpm"
+    },
+    {
+      "name": "CTS СТ",
+      "value": "8",
+      "unit": "s",
+      "source_page": 11,
+      "source_text": "CTS СТ8"
+    },
+    {
+      "name": "Rated power",
+      "value": "11",
+      "unit": "kw",
+      "source_page": 11,
+      "source_text": "ЗЕЕ Rated power 11KW 15 KW 15 KW"
+    },
+    {
+      "name": "Max.torque",
+      "value": "103",
+      "unit": "nm",
+      "source_page": 11,
+      "source_text": "ВЖЕ Max.torque - 103 Nm -"
+    },
+    {
+      "name": "RS ЕЕ Swing Diameter over Bed",
+      "value": "550",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "RS ЕЕ Swing Diameter over Bed 550 mm 680 тт 700 mm X/V/ZLSLHISB EEE Accuracy of positioninign X/Y/Z1 Axes <6/8/8um <6/8/10 ит | <6/8 / 12 ит"
+    },
+    {
+      "name": "XB EAE He Swing Diameter over X-slide",
+      "value": "200",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "XB EAE He Swing Diameter over X-slide 200 mm 450 тт 450mm"
+    },
+    {
+      "name": "Max. Turning Diameter",
+      "value": "300",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "ЖЖЕНИЕ Max. Turning Diameter 300 mm 400 тт 400 mm"
+    },
+    {
+      "name": "X/НVЕ /S FEZ (L",
+      "value": "1",
+      "unit": "v",
+      "source_page": 11,
+      "source_text": "X/НVЕ /S FEZ (L1AE accuracy of repeatability in Х/\\/71 Axes <4/5/5 ит <5/5/8um <5/5 /8 ит"
+    },
+    {
+      "name": "PERERA ERIE Recommended max. turning diameter",
+      "value": "210",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "PERERA ERIE Recommended max. turning diameter 210mm 250 тт 310mm"
+    },
+    {
+      "name": "Accuracy of positioninign С Axes <",
+      "value": "20",
+      "unit": "a",
+      "source_page": 11,
+      "source_text": "СНЕ Accuracy of positioninign С Axes < 20 arcsec. < 20 arcsec. < 20 arcsec."
+    },
+    {
+      "name": "X travel",
+      "value": "190",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "ХАН X travel 190+10 тт 225 тт 255 тт"
+    },
+    {
+      "name": "YY travel +",
+      "value": "+45",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "УЗИ YY travel +45 тт +50 тт 60 тт"
+    },
+    {
+      "name": "Z travel",
+      "value": "550",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "ТАНИ Z travel 550mm. 850mm 1050 mm"
+    },
+    {
+      "name": "EEARX Max. Pressure \"",
+      "value": "55",
+      "unit": "bar",
+      "source_page": 11,
+      "source_text": "EEARX Max. Pressure \"55 bar 55 bar 55 bar"
+    },
+    {
+      "name": "Rapid Traverse X/¥/Z",
+      "value": "30/12/30",
+      "unit": "m/min",
+      "source_page": 11,
+      "source_text": "АВЕ Rapid Traverse X/¥/Z 30/12/30m/min 30/12/30m/min 30/12/30m/min 9 #0589828 Coolant tank capacity 180L 2004 ~-220L"
+    },
+    {
+      "name": "Chip conveyor capacity ато |",
+      "value": "180",
+      "unit": "v",
+      "source_page": 11,
+      "source_text": "НЫВИВНЗЫЕЕ Chip conveyor capacity ато | 180ь 2001"
+    },
+    {
+      "name": "SEH Spindle nose A",
+      "value": "A2-8",
+      "unit": "a",
+      "source_page": 11,
+      "source_text": "SEH Spindle nose A2-8 FL170/A2-8/FL220 A2-8/FL220"
+    },
+    {
+      "name": "Pump Power",
+      "value": "0.85",
+      "unit": "kw",
+      "source_page": 11,
+      "source_text": "ЖНЯЗЕНЯЕ Pump Power 0.85 kW 0.85 kW 0.85 kW"
+    },
+    {
+      "name": "Front Bearing Diameter",
+      "value": "100",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "ВИННИ Front Bearing Diameter 100 mm 130/140 mm 130/140 mm"
+    },
+    {
+      "name": "Spindle bore diameter",
+      "value": "74",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "ЗЕ Spindle bore diameter 74mm 87/102 mm 87/102 mm"
+    },
+    {
+      "name": "WARART Мах. bar capacity",
+      "value": "51",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "WARART Мах. bar capacity 51mm 65/75/90 mm 65/75/90 mm"
+    },
+    {
+      "name": "HEfE",
+      "value": "000",
+      "unit": "kva",
+      "source_page": 11,
+      "source_text": "HEfE000)28- Max.installed Power 50 kVA | 50 kVA 50 КУА"
+    },
+    {
+      "name": "Power",
+      "value": "11/15",
+      "unit": "kw",
+      "source_page": 11,
+      "source_text": "УЕ Power 11/15 kw 15/18.5 kW 15/18.5 kW “WR Frequency 50/60 Hz 50/60 Hz 50/6H0z"
+    },
+    {
+      "name": "SRAHE Max Torque",
+      "value": "168",
+      "unit": "nm",
+      "source_page": 11,
+      "source_text": "SRAHE Max Torque 168 Nm 268/420 Nm 268/420 Nm"
+    },
+    {
+      "name": "Max. spindle Speed",
+      "value": "4500",
+      "unit": "rpm",
+      "source_page": 11,
+      "source_text": "ВЕН Max. spindle Speed 4500 rpm 4000 rpm 4000/3000 rpm SAFRAN Allowed Voltage Fluctuation at 400V +10% +10% 10%"
+    },
+    {
+      "name": "Number of BMT",
+      "value": "65",
+      "unit": "a",
+      "source_page": 11,
+      "source_text": "ВМТ Number of BMT65 Tool Stations 12 pcs 12 pcs 12 pes"
+    },
+    {
+      "name": "MPRAMA ist tHE Machine Acceptance Test according to VDI",
+      "value": "3441",
+      "unit": "v",
+      "source_page": 11,
+      "source_text": "MPRAMA ist tHE Machine Acceptance Test according to VDI 3441 according to VDI 3441 according to VDI 3441"
+    },
+    {
+      "name": "Tool Reception according to BMT",
+      "value": "65",
+      "unit": "a",
+      "source_page": 11,
+      "source_text": "ЛЕК Tool Reception according to BMT65 Е = = = Pneumatics"
+    },
+    {
+      "name": "TWEE Shank diameter \"",
+      "value": "25/40",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "TWEE Shank diameter \"25/40 mm \"25/40 mm 95/40 mm"
+    },
+    {
+      "name": "SEA Air Pressure",
+      "value": "6",
+      "unit": "bar",
+      "source_page": 11,
+      "source_text": "SEA Air Pressure 6 bar 6 bar 6 bar"
+    },
+    {
+      "name": "SK Air consumption",
+      "value": "15",
+      "unit": "a",
+      "source_page": 11,
+      "source_text": "SK Air consumption 15 m3/h 15 m3/h 15 m3/h"
+    },
+    {
+      "name": "SEE ALBYIG)",
+      "value": "30",
+      "unit": "nm",
+      "source_page": 11,
+      "source_text": "SEE ALBYIG)30° FEM Indexing Time 30° without locking ^ 0.12 зес. © 0.12sec. 0.12 sec. IRAE Environment Conditions я т :"
+    },
+    {
+      "name": "Driven tools characteristic",
+      "value": "5",
+      "unit": "v",
+      "source_page": 11,
+      "source_text": "ЛЕ Driven tools characteristic 5B Room Temperature . +150+35°С +150+35°С +15to+35°C"
+    },
+    {
+      "name": "BARN SSR Max. relative air humidity",
+      "value": "75",
+      "unit": "bar",
+      "source_page": 11,
+      "source_text": "BARN SSR Max. relative air humidity 75% i 75% 75%"
+    },
+    {
+      "name": "Installation Height above msl",
+      "value": "1000",
+      "unit": "v",
+      "source_page": 11,
+      "source_text": "ВА ВЫЗЗЕЮЕМах. Installation Height above msl 1000 т 1000 т 1000 т"
+    },
+    {
+      "name": "SETHE Rated Power",
+      "value": "3/3.7-5.5",
+      "unit": "kw",
+      "source_page": 11,
+      "source_text": "SETHE Rated Power 3/3.7-5.5 KW 3/3.7-5.5 KW 3/3.7-5.5 KW"
+    },
+    {
+      "name": "BRE MaxSpeed = — В ``",
+      "value": "4000/6000",
+      "unit": "kg",
+      "source_page": 11,
+      "source_text": "BRE MaxSpeed = — В `` 4000/6000трт 4000/60 rpm_ 4000/5600 rpm ЕЛЕ etwcightotthemachinewith chipcomeyoraporos. | 400 kg 6500 kg 8000 kg"
+    },
+    {
+      "name": "HEBBEN Machine with Chip Conveyor(LxWxH)",
+      "value": "3630x1720 x 1740",
+      "unit": "mm",
+      "source_page": 11,
+      "source_text": "‘HEBBEN Machine with Chip Conveyor(LxWxH) 3630x1720 x 1740 mm4820 x 2250 x 2150 mm 5020 x 2250 x 2150 mm"
+    },
+    {
+      "name": "of Tools",
+      "value": "1/12 8/12 12 12",
+      "unit": "s",
+      "source_page": 12,
+      "source_text": "лЛАМитьег of Tools - 1/12 8/12 12 12 - i"
+    },
+    {
+      "name": "ASR Parameter ЛАКЗ Size of Tools тт |",
+      "value": "20/25",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ASR Parameter ЛАКЗ Size of Tools тт | 20/25 = 4 = 25 25"
+    },
+    {
+      "name": "SERB IIS spindle maximumspeed rpm",
+      "value": "5000 4500 4500 4500 4000 3000",
+      "unit": "rpm",
+      "source_page": 12,
+      "source_text": "SERB IIS spindle maximumspeed rpm 5000 4500 4500 4500 4000 3000"
+    },
+    {
+      "name": "Max. Torque NXm",
+      "value": "76",
+      "unit": "a",
+      "source_page": 12,
+      "source_text": "ЖЗНХЕ Max. Torque NXm 76 i 90 112 112 i 300 420"
+    },
+    {
+      "name": "Spindle power | kw §.",
+      "value": "5-75",
+      "unit": "kw",
+      "source_page": 12,
+      "source_text": "ЗЕЕ Spindle power | kw §.5-75/TS11 7.5-11/11-15 11/15 11/15 15-18.5 15-18.5"
+    },
+    {
+      "name": "JIBRT Size of Tools mm",
+      "value": "20/25 25 25 25",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "JIBRT Size of Tools mm 20/25 25 25 25 Е A"
+    },
+    {
+      "name": "Chuck diameter mm",
+      "value": "165 165/210 210 210 250/310",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ВОН Chuck diameter mm 165 165/210 210 210 250/310 — 250/310"
+    },
+    {
+      "name": "FaERVoltage У",
+      "value": "380",
+      "unit": "v",
+      "source_page": 12,
+      "source_text": "FaERVoltage У 380 +10% 380 +10% 380 +10% 380 +10% 380 +10% 380 +10%"
+    },
+    {
+      "name": "Front bearing diameter. mm",
+      "value": "80",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ЗОЖ Front bearing diameter. mm 80 “100 100 100 130 140"
+    },
+    {
+      "name": "Frequency Hz",
+      "value": "50",
+      "unit": "hz",
+      "source_page": 12,
+      "source_text": "ЗН Е Frequency Hz 50£1% 501% 504% S0+1% 5041% 5041%"
+    },
+    {
+      "name": "ARR Max. installed power KVA =",
+      "value": "20 / 20/25 25",
+      "unit": "kva",
+      "source_page": 12,
+      "source_text": "ARR Max. installed power KVA = 20 / 20/25 25 : 25 35 35"
+    },
+    {
+      "name": "SAW Guiderail Lubrication |",
+      "value": "842",
+      "unit": "a",
+      "source_page": 12,
+      "source_text": "SAW Guiderail Lubrication | 842 Oil oil oil oil oil ВН Oil"
+    },
+    {
+      "name": "Swing Diameter overthebed mm |",
+      "value": "520 558 576 576 670 680",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "В ЕН Swing Diameter overthebed mm | 520 558 576 576 670 680"
+    },
+    {
+      "name": "Maximum cuttingciameter | mm",
+      "value": "260 340/328",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "Этаж Maximum cuttingciameter | mm 260 340/328 — 390/48 — 390348 — 450/20 500/450 ЖЕЕЖ#Нуагаийс system"
+    },
+    {
+      "name": "vocТcutingaaneer mm |",
+      "value": "150 180",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ВИии vocТcutingaaneer mm | 150 180 _ 200 200 250 `` 300"
+    },
+    {
+      "name": "ЗИДТMaxИimumЕ cuttАingleАngth | тт",
+      "value": "200 350 500 800",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ЗИДТMaxИimumЕ cuttАingleАngth | тт 200 350 500 800 _ 550 1000 ЗВ НИНА Reservoir capacity iE 15 35 35 35 35 35"
+    },
+    {
+      "name": "Maximum Bar Diameter тт",
+      "value": "41 42/51/65 51/65 51/65 65/75 75/90",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ВНЕ Maximum Bar Diameter тт 41 42/51/65 51/65 51/65 65/75 75/90"
+    },
+    {
+      "name": "Pump flow L/min",
+      "value": "24 24 24 24 24 24",
+      "unit": "l/min",
+      "source_page": 12,
+      "source_text": "ОЛ Pump flow L/min 24 24 24 24 24 24"
+    },
+    {
+      "name": "Travel of Z-axis “mm |",
+      "value": "250 380",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ТАНИ Travel of Z-axis “mm | 250 380 | 525 850 _ 600 | 1050"
+    },
+    {
+      "name": "Travel of X-axis “mm",
+      "value": "150 180 225 225 267 300",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "ХЗЫЕИЕ Travel of X-axis “mm 150 180 225 225 267 300"
+    },
+    {
+      "name": "ЖА(A) CНapacity with tank ie",
+      "value": "100 150 180 180 180 180",
+      "unit": "a",
+      "source_page": 12,
+      "source_text": "ЖА(A) CНapacity with tank ie 100 150 180 180 180 180"
+    },
+    {
+      "name": "Pump delivery L/min.",
+      "value": "30 30 30 30 30 30",
+      "unit": "v",
+      "source_page": 12,
+      "source_text": "ЖЗ Pump delivery L/min. 30 30 30 30 30 30"
+    },
+    {
+      "name": "X/ZSRBDx EPryRzaxiMsatAscewToxr тт |",
+      "value": "32",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "X/ZSRBDx EPryRzaxiMsatAscewToxr тт | 32х10 «32x10 32х10 32x10 40х10 40х10 НЖЗЕЕЕЙ Pump pressure bar | 5 | 5 5 5 5 5"
+    },
+    {
+      "name": "X AERIS Rapid traverse X “m/min,",
+      "value": "30 30 30 30 30 30",
+      "unit": "m/min",
+      "source_page": 12,
+      "source_text": "X AERIS Rapid traverse X “m/min, 30 30 30 30 30 30 ЕЖЕ Noise Level dB(A) <80 <80 <80 <80 <80 <80"
+    },
+    {
+      "name": "weight kg aoe Res ‘About",
+      "value": "4000",
+      "unit": "kg",
+      "source_page": 12,
+      "source_text": "Ме weight kg aoe Res ‘About 4000 ee ‘About 5200 tae"
+    },
+    {
+      "name": "WAH Measuring system ВНИ",
+      "value": "44",
+      "unit": "a",
+      "source_page": 12,
+      "source_text": "WAH Measuring system ВНИ44 SЗlant angle, Material 45°, HT300 45°, HT300 45%, HT300 45°, HT300 45°, HT300"
+    },
+    {
+      "name": "RetSize(L/W/H) MM",
+      "value": "1600",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "RetSize(L/W/H) MM 1600х1500х1750_2550х1600х1850 2750x1700x 1850 | s100%1701085%0 2800x1850 1950 3900x 1900x2050"
+    },
+    {
+      "name": "SRE /z",
+      "value": "3",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "SRE /z3voy0c034a restoring тт 0.008/0.008 0.008/0.008 —0,008/0.008 0.008/0.008 _0,008/0.008 _0.008/0.008"
+    },
+    {
+      "name": "BS EAB олово cents mm |",
+      "value": "0.004/0.005",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "BS EAB олово cents mm | 0.004/0.005 | 0.004/0.005 0.005/0.005 i 0.005/0.005 0.005/0.005 — 0.005/0.005"
+    },
+    {
+      "name": "EANFZTravel oftailstock mm, |",
+      "value": "350 500 800 500 850",
+      "unit": "mm",
+      "source_page": 12,
+      "source_text": "EANFZTravel oftailstock mm, | - 350 500 800 500 850"
+    },
+    {
+      "name": "REARAYEH Max.pressureoftailstock oN - =",
+      "value": "4000 4000 4000. 8000 8000",
+      "unit": "a",
+      "source_page": 12,
+      "source_text": "REARAYEH Max.pressureoftailstock oN - = 4000 4000 4000. 8000 8000"
+    },
+    {
+      "name": "ATRL Tailstock top sleeve Туре - MT",
+      "value": "4",
+      "unit": "v",
+      "source_page": 12,
+      "source_text": "ATRL Tailstock top sleeve Туре - MT4 MT4 MT4 MTS MTS"
+    },
+    {
+      "name": "ofГ a o~!",
+      "value": "9",
+      "unit": "a",
+      "source_page": 13,
+      "source_text": "ofГ a o~! 9l не"
+    }
+  ],
+  "warnings": []
 }
