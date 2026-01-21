@@ -1,6 +1,6 @@
 """
 LLM Providers v1.0 — Универсальный интерфейс для разных LLM API
-Поддерживает: Ollama, OpenAI, Claude, Groq, Gemini с автоматическим fallback
+Поддерживает: Ollama, OpenAI, Claude, Groq, LM Studio, llama.cpp, mistral.rs с автоматическим fallback
 """
 
 import os
