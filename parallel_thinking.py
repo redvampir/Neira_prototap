@@ -8,7 +8,7 @@ import json
 import os
 from typing import Dict, List, Optional
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 
 @dataclass
@@ -22,6 +22,7 @@ class ChatContext:
     created_at: str
     last_active: str
     message_count: int = 0
+    abbreviation_expansions: Dict[str, str] = field(default_factory=dict)
 
 
 class ParallelMindSystem:
@@ -34,7 +35,31 @@ class ParallelMindSystem:
     def __init__(self, contexts_file: str = "neira_chat_contexts.json"):
         self.contexts_file = contexts_file
         self.contexts: Dict[int, ChatContext] = {}
+        self._max_message_chars = int(os.getenv("NEIRA_CONTEXT_MAX_MESSAGE_CHARS", "2000") or "2000")
         self._load_contexts()
+
+    def _sanitize_message_content(self, content: str) -> str:
+        """
+        Сжимает сообщения в контексте, чтобы не раздувать историю до мегабайт.
+
+        INVARIANT: функция не должна бросать исключения.
+        """
+        try:
+            text = str(content or "")
+            if not text:
+                return ""
+
+            # Убираем самые проблемные "портянки" (часто попадали в память при падении провайдера)
+            if "Автономный режим" in text and len(text) > 800:
+                first_line = text.splitlines()[0].strip()
+                text = (first_line[:200].rstrip() + " (сокращено)") if first_line else "Автономный режим (сокращено)"
+
+            limit = max(int(self._max_message_chars), 200)
+            if len(text) > limit:
+                text = text[: max(limit - 3, 0)].rstrip() + "..."
+            return text
+        except Exception:
+            return ""
     
     def _load_contexts(self):
         """Загружает контексты из файла"""
@@ -42,9 +67,24 @@ class ParallelMindSystem:
             try:
                 with open(self.contexts_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                    changed = False
                     for chat_id_str, context_data in data.items():
                         chat_id = int(chat_id_str)
-                        self.contexts[chat_id] = ChatContext(**context_data)
+                        ctx = ChatContext(**context_data)
+                        for msg in ctx.context_history:
+                            if not isinstance(msg, dict):
+                                continue
+                            if "content" not in msg:
+                                continue
+                            original = msg.get("content", "")
+                            sanitized = self._sanitize_message_content(original)
+                            if sanitized != original:
+                                msg["content"] = sanitized
+                                changed = True
+                        self.contexts[chat_id] = ctx
+
+                    if changed:
+                        self._save_contexts()
             except Exception as e:
                 print(f"⚠️ Ошибка загрузки контекстов: {e}")
     
@@ -86,9 +126,10 @@ class ParallelMindSystem:
         """Добавляет сообщение в контекст чата"""
         if chat_id in self.contexts:
             context = self.contexts[chat_id]
+            safe_content = self._sanitize_message_content(content)
             context.context_history.append({
                 "role": role,
-                "content": content,
+                "content": safe_content,
                 "timestamp": datetime.now().isoformat()
             })
             context.last_active = datetime.now().isoformat()
@@ -111,8 +152,39 @@ class ParallelMindSystem:
         if chat_id in self.contexts:
             self.contexts[chat_id].context_history = []
             self.contexts[chat_id].message_count = 0
+            self.contexts[chat_id].abbreviation_expansions.clear()
             self._save_contexts()
             print(f"🗑️ Контекст чата {chat_id} очищен")
+
+    def get_abbreviation_expansion(self, chat_id: int, abbreviation: str) -> Optional[str]:
+        """
+        Получить сохранённую расшифровку аббревиатуры для конкретного чата.
+
+        Это лёгкая «дообучаемая» память: один раз уточнили → дальше подставляем автоматически.
+        """
+        if not abbreviation:
+            return None
+        ctx = self.contexts.get(chat_id)
+        if not ctx:
+            return None
+        return ctx.abbreviation_expansions.get(abbreviation.upper())
+
+    def set_abbreviation_expansion(self, chat_id: int, abbreviation: str, expansion: str) -> None:
+        """
+        Сохранить расшифровку аббревиатуры для конкретного чата.
+
+        Args:
+            chat_id: ID чата.
+            abbreviation: Аббревиатура (например, "КП").
+            expansion: Расшифровка (например, "Коммерческое предложение").
+        """
+        if not abbreviation or not expansion:
+            return
+        ctx = self.contexts.get(chat_id)
+        if not ctx:
+            return
+        ctx.abbreviation_expansions[abbreviation.upper()] = expansion
+        self._save_contexts()
     
     def get_stats(self) -> dict:
         """Возвращает статистику по всем чатам"""

@@ -10,7 +10,16 @@
 
 import os
 from pathlib import Path
-from typing import Final
+from typing import Final, Iterable
+
+
+def _parse_csv_env(name: str, default: Iterable[str]) -> tuple[str, ...]:
+    """Читает CSV из env и возвращает tuple значений."""
+    raw = os.getenv(name, "")
+    if not raw:
+        return tuple(default)
+    parts = [item.strip() for item in raw.split(",") if item.strip()]
+    return tuple(parts) if parts else tuple(default)
 
 # ============================================================================
 # ПУТИ
@@ -84,6 +93,41 @@ TELEGRAM_RATE_LIMIT_MESSAGES: Final[int] = 10  # Сообщений в мину�
 TELEGRAM_RATE_LIMIT_WINDOW: Final[int] = 60  # Окно в секундах
 
 # ============================================================================
+# ТКП (Технико-коммерческие предложения)
+# ============================================================================
+
+TKP_SAMPLES_DIR: Final[Path] = PROJECT_ROOT / "training_data" / "tkp" / "samples"
+TKP_CATALOGS_DIR: Final[Path] = PROJECT_ROOT / "training_data" / "tkp" / "catalogs"
+TKP_OUTPUT_DIR: Final[Path] = ARTIFACTS_DIR / "tkp"
+TKP_PARSED_DIR: Final[Path] = TKP_OUTPUT_DIR / "parsed"
+TKP_PARSED_SCHEMA_VERSION: Final[str] = os.getenv("NEIRA_TKP_PARSED_SCHEMA_VERSION", "3")
+
+TKP_MISSING_VALUE_TEXT: Final[str] = os.getenv(
+    "NEIRA_TKP_MISSING_VALUE_TEXT",
+    "Требуется уточнение",
+)
+TKP_SNIPPET_CHARS: Final[int] = int(os.getenv("NEIRA_TKP_SNIPPET_CHARS", "600"))
+TKP_VALUE_WINDOW_CHARS: Final[int] = int(
+    os.getenv("NEIRA_TKP_VALUE_WINDOW_CHARS", "180")
+)
+TKP_LIST_LIMIT: Final[int] = int(os.getenv("NEIRA_TKP_LIST_LIMIT", "8"))
+TKP_INTRO_PARAGRAPH_LIMIT: Final[int] = int(
+    os.getenv("NEIRA_TKP_INTRO_PARAGRAPH_LIMIT", "2")
+)
+TKP_COMPANY_PARAGRAPH_LIMIT: Final[int] = int(
+    os.getenv("NEIRA_TKP_COMPANY_PARAGRAPH_LIMIT", "5")
+)
+TKP_PARSE_PAGE_WINDOW: Final[int] = int(
+    os.getenv("NEIRA_TKP_PARSE_PAGE_WINDOW", "1")
+)
+TKP_PARSE_FALLBACK_PAGES: Final[int] = int(
+    os.getenv("NEIRA_TKP_PARSE_FALLBACK_PAGES", "2")
+)
+TKP_PARAM_MATCH_MIN_SCORE: Final[float] = float(
+    os.getenv("NEIRA_TKP_PARAM_MATCH_MIN_SCORE", "0.62")
+)
+
+# ============================================================================
 # ОРГАНЫ (Organ System)  
 # ============================================================================
 
@@ -91,6 +135,50 @@ TELEGRAM_RATE_LIMIT_WINDOW: Final[int] = 60  # Окно в секундах
 ORGAN_MAX_CODE_LENGTH: Final[int] = 10000  # Символов кода
 ORGAN_EXEC_TIMEOUT: Final[int] = 30  # Секунд на выполнение
 ORGAN_MAX_MEMORY_MB: Final[int] = 100  # Лимит памяти
+
+# Безопасные зависимости для органов (pip-пакеты)
+ORGAN_DEP_ALLOWLIST: Final[tuple[str, ...]] = _parse_csv_env(
+    "NEIRA_ORGAN_DEP_ALLOWLIST",
+    (
+        "faster-whisper",
+        "ctranslate2",
+        "tokenizers",
+        "huggingface-hub",
+        "numpy",
+        "soundfile",
+        "pydub",
+        "pypdf",
+        "aiohttp",
+        "beautifulsoup4",
+        "lxml",
+        "youtube-transcript-api",
+        "duckduckgo-search",
+        "python-docx",
+        "pillow",
+        "requests",
+    ),
+)
+
+# Маппинг module -> pip package
+ORGAN_DEP_MODULE_MAP: Final[dict[str, str]] = {
+    "bs4": "beautifulsoup4",
+    "pillow": "pillow",
+    "pil": "pillow",
+    "cv2": "opencv-python",
+    "yaml": "pyyaml",
+    "sklearn": "scikit-learn",
+    "ffmpeg": "ffmpeg",
+    "yt_dlp": "yt-dlp",
+    "docx": "python-docx",
+}
+
+# Таймаут установки зависимостей (секунды)
+ORGAN_DEP_INSTALL_TIMEOUT: Final[int] = int(
+    os.getenv("NEIRA_ORGAN_DEP_INSTALL_TIMEOUT", "600")
+)
+ORGAN_DEP_INSTALL_OUTPUT_LIMIT: Final[int] = int(
+    os.getenv("NEIRA_ORGAN_DEP_INSTALL_OUTPUT_LIMIT", "800")
+)
 
 # ============================================================================
 # БЕЗОПАСНОСТЬ

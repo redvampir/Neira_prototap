@@ -218,6 +218,19 @@
       "variables": {},
       "usage_count": 0,
       "success_rate": 1.0
+    },
+    "capabilities_overview": {
+      "id": "capabilities_overview",
+      "text": "Я умею вести диалог, отвечать на вопросы и выполнять доступные команды. Точный список зависит от интерфейса. В Telegram он указан в /help.",
+      "category": "capabilities",
+      "tags": [
+        "capabilities",
+        "help",
+        "commands"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
     }
   }
 }

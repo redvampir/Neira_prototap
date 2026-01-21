@@ -7,6 +7,125 @@ import re
 from typing import List, Tuple
 
 
+_AMBIGUOUS_ABBREVIATIONS: dict[str, tuple[str, ...]] = {
+    "КП": (
+        "Коммерческое предложение",
+        "Контент-план",
+        "Календарный план",
+    ),
+}
+
+
+def find_ambiguous_abbreviation(text: str) -> tuple[str, tuple[str, ...]] | None:
+    """
+    Ищет в тексте неоднозначную аббревиатуру, по которой лучше задать уточняющий вопрос.
+
+    Сейчас поддерживает минимальный кейс из реальной переписки: «КП».
+
+    Args:
+        text: Текст пользователя.
+
+    Returns:
+        Кортеж (аббревиатура, варианты расшифровки) или None.
+    """
+    if not text:
+        return None
+
+    text_lower = text.lower()
+
+    for abbreviation, options in _AMBIGUOUS_ABBREVIATIONS.items():
+        # Уже уточнено человеком: "коммерческое предложение (КП)" и т.п.
+        if "коммерческ" in text_lower or "контент" in text_lower or "календар" in text_lower:
+            continue
+
+        if re.search(rf"(?i)\b{re.escape(abbreviation)}\b", text):
+            return abbreviation, options
+
+    return None
+
+
+def build_abbreviation_clarification_question(abbreviation: str, options: tuple[str, ...]) -> str:
+    """
+    Собирает короткий уточняющий вопрос по аббревиатуре.
+
+    Args:
+        abbreviation: Аббревиатура (например, "КП").
+        options: Варианты расшифровки.
+
+    Returns:
+        Текст вопроса (plain text, без Markdown).
+    """
+    lines = [f"Уточни, пожалуйста: что ты имеешь в виду под «{abbreviation}»?"]
+    for idx, option in enumerate(options, start=1):
+        lines.append(f"{idx}) {option}")
+    lines.append("Ответь цифрой (1/2/3) или словами.")
+    return "\n".join(lines)
+
+
+def parse_abbreviation_choice(reply_text: str, options: tuple[str, ...]) -> str | None:
+    """
+    Пытается понять выбор пользователя в ответ на уточняющий вопрос.
+
+    Args:
+        reply_text: Ответ пользователя (например, "1" или "коммерческое предложение").
+        options: Варианты расшифровки.
+
+    Returns:
+        Выбранная расшифровка или None.
+    """
+    if not reply_text:
+        return None
+
+    normalized = reply_text.strip().lower()
+    if not normalized:
+        return None
+
+    if normalized.isdigit():
+        try:
+            index = int(normalized) - 1
+        except ValueError:
+            return None
+        if 0 <= index < len(options):
+            return options[index]
+        return None
+
+    # Быстрый парсинг по ключевым словам (чтобы не требовать ровного совпадения)
+    if "коммерчес" in normalized:
+        return options[0] if len(options) >= 1 else None
+    if "контент" in normalized:
+        return options[1] if len(options) >= 2 else None
+    if "календар" in normalized:
+        return options[2] if len(options) >= 3 else None
+
+    # Попытка точного совпадения с вариантом (без учёта регистра)
+    for option in options:
+        if normalized == option.lower():
+            return option
+
+    return None
+
+
+def apply_abbreviation_expansion(text: str, abbreviation: str, expansion: str) -> str:
+    """
+    Подставляет расшифровку аббревиатуры прямо в текст запроса.
+
+    Пример: "как составить КП?" -> "как составить коммерческое предложение (КП)?"
+
+    Args:
+        text: Исходный текст.
+        abbreviation: Аббревиатура, которую расширяем.
+        expansion: Расшифровка.
+
+    Returns:
+        Текст с подстановкой.
+    """
+    if not text:
+        return text
+
+    replacement = f"{expansion} ({abbreviation})"
+    return re.sub(rf"(?i)\b{re.escape(abbreviation)}\b", replacement, text)
+
+
 def remove_duplicate_paragraphs(text: str) -> str:
     """
     Удаляет дублирующиеся абзацы из текста.

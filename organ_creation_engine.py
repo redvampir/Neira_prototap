@@ -89,7 +89,17 @@ class OrganCreationEngine:
         organ_id = entry.organ_id if entry else ''
         return ok, msg, organ_id
 
-    def create_and_test_organ(self, description: str, author_id: int = 0, max_attempts: int = 2) -> Dict[str, Any]:
+    def create_and_test_organ(
+        self,
+        description: str,
+        author_id: int = 0,
+        max_attempts: int = 2,
+        *,
+        force_cell_name: Optional[str] = None,
+        dependency_policy: Optional[str] = None,
+        skip_duplicate_check: bool = False,
+        overwrite_existing: bool = False,
+    ) -> Dict[str, Any]:
         """Попытаться создать орган и протестировать его работоспособность.
 
         Возвращает dict с ключами: success, report, cell (если есть), quarantined
@@ -104,7 +114,15 @@ class OrganCreationEngine:
             # Для первой попытки используем оригинальное описание, дальше добавляем письмо
             pattern = description if attempt == 1 else self._augment_with_letter(description)
 
-            result = self.factory.create_cell(pattern=pattern, tasks=[{"description": description}], author_id=author_id)
+            result = self.factory.create_cell(
+                pattern=pattern,
+                tasks=[{"description": description}],
+                author_id=author_id,
+                force_cell_name=force_cell_name,
+                dependency_policy=dependency_policy,
+                skip_duplicate_check=skip_duplicate_check,
+                overwrite_existing=overwrite_existing,
+            )
 
             # Если был карантин или опасность — вернём как есть
             if result.get("quarantined"):
@@ -127,6 +145,20 @@ class OrganCreationEngine:
             loaded = self.loader.import_cell_from_file(filepath)
 
             if not loaded or not loaded.instance:
+                missing_deps = list(getattr(self.loader, "last_missing_deps", []) or [])
+                if missing_deps:
+                    return {
+                        "success": False,
+                        "missing_deps": missing_deps,
+                        "cell": gen,
+                        "report": "missing_deps",
+                        "entrypoints": result.get("entrypoints") or getattr(gen, "entrypoints", {}),
+                        "target_platforms": result.get("target_platforms") or getattr(gen, "target_platforms", []),
+                        "input_modalities": result.get("input_modalities") or getattr(gen, "input_modalities", []),
+                        "dependencies": result.get("dependencies") or getattr(gen, "dependencies", []),
+                        "commands": result.get("commands") or getattr(gen, "command_triggers", []),
+                    }
+
                 last_report = f"Ошибка импорта клетки из {filepath}"
                 logger.warning(last_report)
                 # удаляем файл и попробуем снова
@@ -157,10 +189,20 @@ class OrganCreationEngine:
                     logger.info("Орган успешно сгенерирован и прошёл smoke-test: %s", gen.cell_name)
                     # Пометим как активный в реестре (уже активен по умолчанию для safe)
                     organ_registered, organ_message, organ_id = self._ensure_hybrid_registration(gen, author_id)
+                    entrypoints = result.get("entrypoints") or getattr(gen, "entrypoints", {})
+                    target_platforms = result.get("target_platforms") or getattr(gen, "target_platforms", [])
+                    input_modalities = result.get("input_modalities") or getattr(gen, "input_modalities", [])
+                    commands = result.get("commands") or getattr(gen, "command_triggers", [])
+                    dependencies = result.get("dependencies") or getattr(gen, "dependencies", [])
                     return {
                         "success": True,
                         "cell": gen,
                         "report": "Создан и протестирован",
+                        "entrypoints": entrypoints,
+                        "target_platforms": target_platforms,
+                        "input_modalities": input_modalities,
+                        "commands": commands,
+                        "dependencies": dependencies,
                         "organ_registered": organ_registered,
                         "organ_message": organ_message,
                         "organ_id": organ_id,

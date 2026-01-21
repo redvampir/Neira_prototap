@@ -1,0 +1,20 @@
+{
+  "model_name": "HT2",
+  "catalog_path": "F:\\Нейронки\\prototype\\training_data\\tkp\\catalogs\\02_DEED_Vertical_machining_center_VMC_立加：VMC_中英_YSB.pdf",
+  "extracted_at": "2026-01-21T10:01:08.247363",
+  "schema_version": "1",
+  "pages_used": [
+    1,
+    2
+  ],
+  "snippet": null,
+  "main_units": [
+    "high-precision five-axis linkage machining center, horizontal milling & boring machining center and horizontal machining"
+  ],
+  "standard_items": [],
+  "option_items": [],
+  "parameters": [],
+  "warnings": [
+    "Модель не найдена на страницах каталога."
+  ]
+}

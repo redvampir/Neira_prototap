@@ -1,0 +1,21 @@
+{
+  "model_name": "HT2",
+  "catalog_path": "F:\\Нейронки\\prototype\\training_data\\tkp\\catalogs\\1_ECATALOG_OF_HT_CT_ADVANCED_TYPE_CNC_TURNING_CENTER_DRC_MACHINERY.pdf",
+  "extracted_at": "2026-01-21T12:45:40.786400",
+  "schema_version": "3",
+  "pages_used": [
+    1,
+    2
+  ],
+  "snippet": null,
+  "main_units": [],
+  "standard_items": [],
+  "option_items": [],
+  "main_units_sources": [],
+  "standard_items_sources": [],
+  "option_items_sources": [],
+  "parameters": [],
+  "warnings": [
+    "Модель не найдена на страницах каталога."
+  ]
+}

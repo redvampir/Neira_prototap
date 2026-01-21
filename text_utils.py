@@ -12,6 +12,10 @@ from neira.utils.text import (
     normalize_whitespace,
     extract_code_blocks,
     smart_split,
+    find_ambiguous_abbreviation,
+    build_abbreviation_clarification_question,
+    parse_abbreviation_choice,
+    apply_abbreviation_expansion,
 )
 
 __all__ = [
@@ -20,4 +24,8 @@ __all__ = [
     "normalize_whitespace",
     "extract_code_blocks",
     "smart_split",
+    "find_ambiguous_abbreviation",
+    "build_abbreviation_clarification_question",
+    "parse_abbreviation_choice",
+    "apply_abbreviation_expansion",
 ]

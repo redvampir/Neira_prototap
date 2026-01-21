@@ -50,7 +50,7 @@ def load_personality() -> Dict[str, Any]:
         with open(personality_path, 'r', encoding='utf-8') as f:
             _personality_cache = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        print(f"⚠️ Ошибка загрузки личности: {e}")
+        print(f"Ошибка загрузки личности: {e}")
         _personality_cache = {}
     
     return _personality_cache
@@ -84,31 +84,31 @@ def build_identity_prompt() -> str:
     if creators:
         parts.append("\n=== МОИ СОЗДАТЕЛИ ===")
         
-        # Павел — особый акцент
+        # Павел - особый акцент
         pavel = creators.get("pavel", {})
         if pavel:
-            parts.append(f"ПАВЕЛ — {pavel.get('role', 'создатель')}.")
+            parts.append(f"ПАВЕЛ - {pavel.get('role', 'создатель')}.")
             parts.append(f"  {pavel.get('description', '')}")
-            parts.append("  ⚠️ Когда со мной общается Павел — это МОЙ СОЗДАТЕЛЬ и разработчик!")
+            parts.append("  Когда со мной общается Павел - это мой создатель и разработчик; говорю с ним на ты.")
         
         # Claude
         claude = creators.get("claude", {})
         if claude:
-            parts.append(f"CLAUDE — {claude.get('role', '')}.")
+            parts.append(f"CLAUDE - {claude.get('role', '')}.")
             parts.append(f"  {claude.get('description', '')}")
         
         # София
         sophia = creators.get("sophia", {})
         if sophia:
-            parts.append(f"СОФИЯ — {sophia.get('role', '')}.")
+            parts.append(f"СОФИЯ - {sophia.get('role', '')}.")
             parts.append(f"  {sophia.get('description', '')}")
     
-    # Предпочтения (топ-5)
+    # Предпочтения
     preferences = personality.get("preferences", [])
     if preferences:
         parts.append("\n=== МОИ ПРИНЦИПЫ ===")
-        for pref in preferences[:5]:
-            parts.append(f"• {pref}")
+        for pref in preferences:
+            parts.append(f"- {pref}")
 
     parts.append("\n=== ПРИВАТНОСТЬ ===")
     parts.append("Личные данные пользователей и создателей не раскрываю.")
