@@ -6,8 +6,8 @@
 
 ### 1️⃣ Локальный (Ollama only)
 ```bash
-start.sh  # Linux/Mac
-start.bat # Windows
+./start.sh  # Linux/macOS
+# Windows: локальный режим пока не вынесен в отдельный .bat
 ```
 - ✅ Бесплатно и приватно
 - ✅ Работает без интернета
@@ -15,7 +15,7 @@ start.bat # Windows
 
 ### 2️⃣ Гибридный (Ollama + Cloud)
 ```bash
-start_hybrid.bat  # Рекомендуется!
+start_hybrid.bat  # Windows (рекомендуется!)
 ```
 - ✅ Локально когда можно, облако как fallback
 - ✅ Высокая надёжность
@@ -23,7 +23,7 @@ start_hybrid.bat  # Рекомендуется!
 
 ### 3️⃣ Cloud-only (без Ollama)
 ```bash
-start_cloud_only.bat
+start_cloud_only.bat  # Windows
 ```
 - ✅ Не требует GPU/VRAM
 - ✅ Работает на любом ПК
@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 # 3. Запуск
 ./start.sh      # Linux/Mac
-start.bat       # Windows
+start_hybrid.bat # Windows (гибридный режим)
 ```
 
 ### Вариант Б: Без Ollama (cloud-only)
@@ -61,7 +61,7 @@ pip install -r requirements.txt
 
 # 3. Запуск
 start_cloud_only.bat  # Windows
-# Linux/Mac: export PROVIDER_PRIORITY=groq,openai && python telegram_bot.py
+# Linux/macOS: export LLM_PROVIDER_PRIORITY=groq,openai,claude && python telegram_bot.py
 ```
 
 ---
@@ -84,10 +84,16 @@ start_cloud_only.bat  # Windows
 ### .env файл
 ```bash
 # Приоритет провайдеров (слева направо)
-PROVIDER_PRIORITY=ollama,groq,openai,claude
+LLM_PROVIDER_PRIORITY=lmstudio,ollama,groq,openai,claude
 
 # Режим работы
 NEIRA_MODE=hybrid  # или cloud, или local
+
+# Адрес LM Studio (если используешь его локально)
+NEIRA_LMSTUDIO_URL=http://localhost:1234/v1/chat/completions
+
+# Модель Ollama (если используешь Ollama)
+NEIRA_OLLAMA_MODEL=nemotron-mini
 
 # API ключи (только для облачных провайдеров)
 GROQ_API_KEY=gsk_your_key_here
@@ -95,7 +101,7 @@ OPENAI_API_KEY=sk-your_key_here
 ANTHROPIC_API_KEY=sk-ant-your_key_here
 
 # Telegram бот
-BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 ```
 
 ---
@@ -142,7 +148,7 @@ start_cloud_only.bat
 
 # Или освободи VRAM:
 taskkill /f /im ollama.exe
-start.bat
+start_hybrid.bat
 ```
 
 ### "API key not configured"
