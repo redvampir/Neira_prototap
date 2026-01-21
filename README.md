@@ -184,8 +184,8 @@ python creative_engine.py    # Тест творческого движка
 
 **Команды:**
 ```bash
-python test_memory_protection.py     # Проверить защиту
-python run_memory_consolidation.py   # Объединить дубликаты
+python -m pytest tests/test_memory_protection.py -x  # Проверить защиту
+python memory_consolidation.py                     # Прогон консолидации (встроенный тест)
 ```
 
 📖 Подробнее: [Система памяти](docs/features/memory/README.md)
