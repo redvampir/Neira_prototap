@@ -99,15 +99,20 @@ python clean_memory_duplicates.py
 
 **Проверить приоритет:**
 ```env
-LLM_PROVIDER_PRIORITY=lmstudio,ollama,groq,openai
+LLM_PROVIDER_PRIORITY=mistralrs
 ```
 
-**Проверить LM Studio:**
+**Проверить mistral.rs:**
+```bash
+curl http://127.0.0.1:8080/health
+```
+
+**Проверить LM Studio (опционально):**
 ```bash
 curl http://localhost:1234/v1/models
 ```
 
-**Проверить Ollama:**
+**Проверить Ollama (опционально):**
 ```bash
 ollama list
 ```
@@ -118,8 +123,8 @@ ollama list
 # Отключить Ollama
 NEIRA_DISABLE_OLLAMA=true
 
-# Использовать только LM Studio
-LLM_PROVIDER_PRIORITY=lmstudio
+# Использовать только mistral.rs
+LLM_PROVIDER_PRIORITY=mistralrs
 ```
 
 ---
@@ -133,9 +138,9 @@ LLM_PROVIDER_PRIORITY=lmstudio
    python check_bot_status.py
    ```
 
-2. **Проверить LLM:**
+2. **Проверить LLM (mistral.rs):**
    ```bash
-   python test_ollama_quick.py
+   curl http://127.0.0.1:8080/health
    ```
 
 3. **Перезапустить:**

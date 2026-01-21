@@ -113,17 +113,22 @@ uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
 ### 1. Запусти LLM-провайдера
 
-**LM Studio (рекомендуется):**
+**mistral.rs (текущая основа):**
+- Запусти локальный сервер mistral.rs (OpenAI‑совместимый)
+- Проверь `http://127.0.0.1:8080/health`
+- При необходимости укажи модель через `NEIRA_MISTRALRS_MODEL`
+
+**LM Studio (опционально):**
 - Открой LM Studio
 - Загрузи модель (например, `qwen2.5-coder-14b`, это опциональный пример)
 - Запусти сервер на порту 1234
 
-**Или Ollama:**
+**Ollama (опционально):**
 ```bash
 ollama pull nemotron-mini
 ollama serve
 ```
-Модель можно сменить через `NEIRA_LMSTUDIO_MODEL` или `NEIRA_OLLAMA_MODEL`.
+Модель можно сменить через `NEIRA_LMSTUDIO_MODEL`, `NEIRA_OLLAMA_MODEL` или `NEIRA_MISTRALRS_MODEL`.
 Если переменные не заданы, используются дефолты из кода.
 
 ### 2. Запусти Backend API
