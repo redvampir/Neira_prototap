@@ -29,26 +29,30 @@ pip install -r requirements.txt
 
 ### 2. Настройка LLM провайдера
 
-**Вариант A: LM Studio (рекомендуется)**
+**Вариант A: mistral.rs (текущая основа)**
+1. Запустить локальный сервер mistral.rs (OpenAI‑совместимый)
+2. Указать модель через `NEIRA_MISTRALRS_MODEL` (или оставить `default`)
+3. Проверить доступность: `http://127.0.0.1:8080/health`
+
+**Вариант B: LM Studio (опционально)**
 1. Скачать [LM Studio](https://lmstudio.ai/)
 2. Загрузить модель (например, `qwen2.5-coder-14b`, это опциональный пример)
 3. Запустить сервер на порту 1234
 
-**Вариант B: Ollama**
+**Вариант C: Ollama (опционально)**
 ```bash
 ollama pull nemotron-mini
 ollama serve
 ```
-Модель можно переопределить через `NEIRA_OLLAMA_MODEL` или `NEIRA_LMSTUDIO_MODEL`.
+Модель можно переопределить через `NEIRA_OLLAMA_MODEL`, `NEIRA_LMSTUDIO_MODEL` или `NEIRA_MISTRALRS_MODEL`.
 Если переменные не заданы, используются дефолты из кода.
 
 ### 3. Настройка `.env`
 
 ```env
 # LLM провайдер
-LLM_PROVIDER_PRIORITY=lmstudio,ollama
-NEIRA_LMSTUDIO_MODEL=local-model
-NEIRA_OLLAMA_MODEL=nemotron-mini
+LLM_PROVIDER_PRIORITY=mistralrs
+NEIRA_MISTRALRS_MODEL=default
 
 # Telegram (опционально)
 TELEGRAM_BOT_TOKEN=your_token

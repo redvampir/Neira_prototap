@@ -2,9 +2,11 @@
 
 ## 🎯 Теперь Neira независима от Ollama!
 
-Вместо зависимости от одного провайдера, Neira автоматически переключается между:
+Вместо зависимости от одного провайдера, Neira может переключаться между:
+- **mistral.rs** (локально, основа — Rust runtime)
+- **LM Studio** (локально, GUI)
 - **Ollama** (локально, бесплатно, приватно)
-- **Groq** (облако, бесплатно, ОЧЕНЬ быстро)
+- **Groq** (облако, бесплатно, очень быстро)
 - **OpenAI** (GPT-3.5/4, качество, недорого)
 - **Claude** (Anthropic, лучшее качество, дороже)
 
@@ -13,7 +15,7 @@
 
 ## ⚡ Быстрый старт
 
-### 1. Получи бесплатные API ключи
+### 1. Получи API ключи (если используешь облако)
 
 #### Groq (РЕКОМЕНДУЕТСЯ - быстро и бесплатно!)
 ```
@@ -59,7 +61,7 @@ ANTHROPIC_API_KEY=sk-ant-ваш_ключ
 NEIRA_MODE=balanced
 
 # Приоритет провайдеров (первый пробуется первым)
-LLM_PROVIDER_PRIORITY=ollama,groq,openai
+LLM_PROVIDER_PRIORITY=mistralrs,ollama,groq,openai
 ```
 
 ### 3. Запусти Neira
@@ -68,7 +70,7 @@ LLM_PROVIDER_PRIORITY=ollama,groq,openai
 python telegram_bot.py
 ```
 
-**Теперь если Ollama недоступна, Neira автоматически переключится на Groq!**
+**Теперь если mistral.rs недоступен, Neira автоматически переключится на Groq!**
 
 ## 🎨 Режимы работы
 
@@ -76,6 +78,7 @@ python telegram_bot.py
 ```env
 NEIRA_MODE=free
 ```
+- mistral.rs (локально)
 - Ollama (локально)
 - Groq (бесплатно в облаке)
 - **Стоимость: $0**
@@ -84,14 +87,14 @@ NEIRA_MODE=free
 ```env
 NEIRA_MODE=balanced
 ```
-- Ollama → Groq → GPT-3.5-turbo
+- mistral.rs → Ollama → Groq → GPT-3.5-turbo
 - **Стоимость: ~$0.002/1000 токенов**
 
 ### QUALITY (максимум качества)
 ```env
 NEIRA_MODE=quality
 ```
-- Claude Sonnet → GPT-4 → Groq → Ollama
+- Claude Sonnet → GPT-4 → Groq → Ollama → mistral.rs
 - **Стоимость: ~$0.03/1000 токенов**
 
 ## 🔄 Как работает автоматический fallback
@@ -99,7 +102,7 @@ NEIRA_MODE=quality
 ```
 Пользователь: "Привет!"
     ↓
-1. Пробуем Ollama (qwen2.5:0.5b)
+1. Пробуем mistral.rs (локально)
    ❌ Ошибка: "memory layout cannot be allocated"
     ↓
 2. Пробуем Groq (llama-3.1-8b-instant)
@@ -112,6 +115,8 @@ NEIRA_MODE=quality
 
 | Провайдер | Скорость | Качество | Стоимость | Приватность |
 |-----------|----------|----------|-----------|-------------|
+| **mistral.rs** | ⚡⚡ Быстро | ⭐⭐⭐⭐ | 🆓 Бесплатно | 🔒 100% |
+| **LM Studio** | ⚡⚡ Быстро | ⭐⭐⭐⭐ | 🆓 Бесплатно | 🔒 100% |
 | **Ollama** | 🐌 Медленно | ⭐⭐⭐ | 🆓 Бесплатно | 🔒 100% |
 | **Groq** | ⚡⚡⚡ ОЧЕНЬ быстро | ⭐⭐⭐⭐ | 🆓 Бесплатно | ⚠️ В облаке |
 | **OpenAI** | ⚡⚡ Быстро | ⭐⭐⭐⭐⭐ | 💰 Дешево | ⚠️ В облаке |
@@ -128,6 +133,9 @@ NEIRA_MODE=quality
 модель — используйте переменные ниже. Они реально читаются рантаймом.
 
 ```env
+# mistral.rs
+NEIRA_MISTRALRS_MODEL=default
+
 # Ollama
 NEIRA_OLLAMA_MODEL=qwen2.5:3b
 
@@ -142,17 +150,17 @@ NEIRA_LMSTUDIO_MODEL=qwen/qwen2.5-coder-14b
 ### Кастомный приоритет провайдеров
 
 ```env
-# Только Groq и Claude (без Ollama)
-LLM_PROVIDER_PRIORITY=groq,claude
+# Только mistral.rs
+LLM_PROVIDER_PRIORITY=mistralrs
 
 # Сначала качество, потом скорость
-LLM_PROVIDER_PRIORITY=claude,openai,groq,ollama
+LLM_PROVIDER_PRIORITY=claude,openai,groq,ollama,mistralrs
 ```
 
 ### Условия переключения на облако
 
 ```env
-# Использовать облако если Ollama недоступна
+# Использовать облако если локальный провайдер недоступен
 USE_CLOUD_IF_OLLAMA_FAILS=true
 
 # Использовать облако если сложность задачи > 4
@@ -164,12 +172,11 @@ USE_CLOUD_IF_RETRIES=2
 
 ## 💡 Примеры использования
 
-### Минимальная конфигурация (только Groq)
+### Минимальная конфигурация (только mistral.rs)
 
 ```env
-GROQ_API_KEY=gsk_твой_ключ
 NEIRA_MODE=free
-LLM_PROVIDER_PRIORITY=groq,ollama
+LLM_PROVIDER_PRIORITY=mistralrs
 ```
 
 ### Максимальная надёжность (все провайдеры)
@@ -180,7 +187,7 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 
 NEIRA_MODE=balanced
-LLM_PROVIDER_PRIORITY=ollama,groq,openai,claude
+LLM_PROVIDER_PRIORITY=mistralrs,ollama,groq,openai,claude
 ```
 
 ### Только облако (без локальных моделей)
@@ -190,7 +197,7 @@ GROQ_API_KEY=gsk_...
 OPENAI_API_KEY=sk-...
 
 NEIRA_MODE=quality
-LLM_PROVIDER_PRIORITY=groq,openai
+LLM_PROVIDER_PRIORITY=mistralrs,groq,openai
 ```
 
 ## 📈 Проверка конфигурации
@@ -213,11 +220,11 @@ python neira_config.py
   ✗ Claude (Anthropic)
   ✗ Gemini
 
-🎯 Приоритет провайдеров: ollama → groq → openai
+🎯 Приоритет провайдеров: mistralrs → ollama → groq → openai
 
 🤖 Модели:
-  code: qwen2.5-coder:7b
-  reason: qwen2.5:0.5b
+  code: nemotron-mini
+  reason: nemotron-mini
   personality: gpt-3.5-turbo
 
 ⚙️ Настройки:
@@ -234,8 +241,8 @@ python neira_config.py
 
 **Проверь логи:**
 ```
-INFO:root:Trying ollama (qwen2.5:0.5b)...
-WARNING:root:✗ Failed with ollama: memory layout cannot be allocated
+INFO:root:Trying mistralrs (default)...
+WARNING:root:✗ Failed with mistralrs: memory layout cannot be allocated
 INFO:root:Trying groq (llama-3.1-8b-instant)...
 INFO:root:✓ Success with groq
 ```
