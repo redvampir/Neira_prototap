@@ -95,7 +95,7 @@
 ### Ручная
 
 ```bash
-python run_memory_consolidation.py
+python -c "from memory_consolidation import get_memory_consolidation; get_memory_consolidation().run_consolidation_cycle()"
 ```
 
 ---
@@ -111,10 +111,14 @@ python run_memory_consolidation.py
 ### Восстановление
 
 ```python
-from memory_protection import MemoryVersionControl
+from memory_version_control import MemoryVersionControl
 
-mvc = MemoryVersionControl(brain)
-mvc.rollback(steps=1)  # Откатить 1 шаг
+vc = MemoryVersionControl(snapshots_dir="./memory_snapshots")
+snapshots = vc.list_snapshots(limit=1)
+
+if snapshots:
+    restored_data = vc.restore_snapshot(snapshots[0].id)
+    print(f"Восстановлено записей: {len(restored_data)}")
 ```
 
 ---
