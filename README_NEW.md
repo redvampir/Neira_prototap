@@ -31,20 +31,24 @@ pip install -r requirements.txt
 
 **Вариант A: LM Studio (рекомендуется)**
 1. Скачать [LM Studio](https://lmstudio.ai/)
-2. Загрузить модель (например, `qwen2.5-coder-14b`)
+2. Загрузить модель (например, `qwen2.5-coder-14b`, это опциональный пример)
 3. Запустить сервер на порту 1234
 
 **Вариант B: Ollama**
 ```bash
-ollama pull qwen2.5-coder:14b
+ollama pull nemotron-mini
 ollama serve
 ```
+Модель можно переопределить через `NEIRA_OLLAMA_MODEL` или `NEIRA_LMSTUDIO_MODEL`.
+Если переменные не заданы, используются дефолты из кода.
 
 ### 3. Настройка `.env`
 
 ```env
 # LLM провайдер
 LLM_PROVIDER_PRIORITY=lmstudio,ollama
+NEIRA_LMSTUDIO_MODEL=local-model
+NEIRA_OLLAMA_MODEL=nemotron-mini
 
 # Telegram (опционально)
 TELEGRAM_BOT_TOKEN=your_token

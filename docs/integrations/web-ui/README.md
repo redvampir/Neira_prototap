@@ -115,13 +115,16 @@ uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
 **LM Studio (рекомендуется):**
 - Открой LM Studio
-- Загрузи модель (например, `qwen2.5-coder-14b`)
+- Загрузи модель (например, `qwen2.5-coder-14b`, это опциональный пример)
 - Запусти сервер на порту 1234
 
 **Или Ollama:**
 ```bash
+ollama pull nemotron-mini
 ollama serve
 ```
+Модель можно сменить через `NEIRA_LMSTUDIO_MODEL` или `NEIRA_OLLAMA_MODEL`.
+Если переменные не заданы, используются дефолты из кода.
 
 ### 2. Запусти Backend API
 

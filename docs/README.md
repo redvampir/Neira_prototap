@@ -72,7 +72,7 @@
 
 - **Neira**: v0.8.3
 - **Документация**: Январь 2026
-- **LLM**: LM Studio (qwen2.5-coder-14b) / Ollama (резерв)
+- **LLM**: runtime — `nemotron-mini`, провайдеры LM Studio / Ollama настраиваются через `NEIRA_LMSTUDIO_MODEL` и `NEIRA_OLLAMA_MODEL` (если не заданы, берутся дефолты из кода)
 
 ---
 
