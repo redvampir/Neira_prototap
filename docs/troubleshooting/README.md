@@ -75,6 +75,28 @@ python clean_memory_duplicates.py
 
 ### Не отвечает на запросы
 
+**Фактический дефолт приоритета (если `LLM_PROVIDER_PRIORITY` не задан):**
+
+1. Mistral.rs (OpenAI-совместимый локальный сервер)
+2. LM Studio
+3. Ollama
+4. llama.cpp server
+5. Groq
+6. OpenAI
+7. Claude
+
+Источник истины — `llm_providers._DEFAULT_PROVIDER_PRIORITY` в коде. Если переменная
+`LLM_PROVIDER_PRIORITY` отсутствует, приоритет берётся именно оттуда.
+
+**Поддерживаемые провайдеры (реально реализованы в `llm_providers.py`):**
+- Mistral.rs (OpenAI-совместимый локальный сервер)
+- LM Studio
+- Ollama
+- llama.cpp server
+- Groq
+- OpenAI
+- Claude
+
 **Проверить приоритет:**
 ```env
 LLM_PROVIDER_PRIORITY=lmstudio,ollama,groq,openai
