@@ -1,0 +1,163 @@
+{
+  "version": "1.0",
+  "saved_at": "2026-01-21T09:31:07.428379",
+  "fragments": {
+    "greeting_casual": {
+      "id": "greeting_casual",
+      "text": "{emoji} Привет!",
+      "category": "greeting",
+      "tags": [
+        "greeting",
+        "casual"
+      ],
+      "variables": {
+        "emoji": [
+          "👋",
+          "😊",
+          "✨",
+          "🌟"
+        ]
+      },
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "greeting_formal": {
+      "id": "greeting_formal",
+      "text": "Здравствуйте! Рада вас видеть.",
+      "category": "greeting",
+      "tags": [
+        "greeting",
+        "formal"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "thanks_casual": {
+      "id": "thanks_casual",
+      "text": "{emoji} Пожалуйста!",
+      "category": "gratitude",
+      "tags": [
+        "thanks",
+        "casual"
+      ],
+      "variables": {
+        "emoji": [
+          "😊",
+          "💫",
+          "✨"
+        ]
+      },
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "thanks_helpful": {
+      "id": "thanks_helpful",
+      "text": "Рада помочь! Обращайся, если что.",
+      "category": "gratitude",
+      "tags": [
+        "thanks",
+        "helpful"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "explanation_intro": {
+      "id": "explanation_intro",
+      "text": "Сейчас объясню:",
+      "category": "explanation",
+      "tags": [
+        "explanation",
+        "intro"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "explanation_step": {
+      "id": "explanation_step",
+      "text": "Шаг {step}: {description}",
+      "category": "explanation",
+      "tags": [
+        "explanation",
+        "step"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "emotion_thinking": {
+      "id": "emotion_thinking",
+      "text": "🤔 Дай подумать...",
+      "category": "emotion",
+      "tags": [
+        "thinking",
+        "processing"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "emotion_excited": {
+      "id": "emotion_excited",
+      "text": "✨ О, это интересно!",
+      "category": "emotion",
+      "tags": [
+        "excited",
+        "interest"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "code_intro": {
+      "id": "code_intro",
+      "text": "Вот пример кода:",
+      "category": "code",
+      "tags": [
+        "code",
+        "intro"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "code_explanation": {
+      "id": "code_explanation",
+      "text": "Этот код делает следующее: {explanation}",
+      "category": "code",
+      "tags": [
+        "code",
+        "explanation"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "error_not_understand": {
+      "id": "error_not_understand",
+      "text": "🤔 Не совсем поняла. Можешь переформулировать?",
+      "category": "error",
+      "tags": [
+        "error",
+        "clarification"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    },
+    "error_need_more_info": {
+      "id": "error_need_more_info",
+      "text": "Мне нужно больше информации. Расскажи подробнее о {topic}.",
+      "category": "error",
+      "tags": [
+        "error",
+        "info_request"
+      ],
+      "variables": {},
+      "usage_count": 0,
+      "success_rate": 1.0
+    }
+  }
+}

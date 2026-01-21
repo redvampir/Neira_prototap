@@ -2,6 +2,15 @@ import builtins
 import pytest
 from datetime import datetime
 
+import sys
+from pathlib import Path
+
+# Pytest иногда выбирает rootdir на уровень выше `prototype/` (тогда import main ломается).
+# Делаем импорт стабильным: добавляем корень проекта в sys.path.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import main as main_mod
 
 

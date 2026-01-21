@@ -175,6 +175,50 @@
       "resolved": false,
       "actual_value": null,
       "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "5c846f943904",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.5945945945945946,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-21T09:31:19.826043",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "b408c7eb4e74",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.6103896103896105,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-21T09:31:19.828698",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "23882577ae77",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.6103896103896105,
+      "context": "Привет! Как дела?",
+      "created_at": "2026-01-21T09:45:45.169117",
+      "resolved": true,
+      "actual_value": "how_are_you",
+      "prediction_error": 0.0
+    },
+    {
+      "prediction_id": "eef3f0c733eb",
+      "prediction_type": "follow_up",
+      "predicted_value": "how_are_you",
+      "confidence": 0.625,
+      "context": "Помоги с кодом",
+      "created_at": "2026-01-21T09:45:45.171178",
+      "resolved": false,
+      "actual_value": null,
+      "prediction_error": 0.0
     }
   ],
   "patterns": {
@@ -183,13 +227,13 @@
       "trigger": "greeting",
       "prediction_type": "follow_up",
       "likely_outcomes": {
-        "how_are_you": 0.5945945945945946,
-        "help_request": 0.2027027027027027,
-        "small_talk": 0.13513513513513517,
-        "direct_question": 0.06756756756756759
+        "how_are_you": 0.625,
+        "help_request": 0.18749999999999997,
+        "small_talk": 0.12500000000000003,
+        "direct_question": 0.06250000000000001
       },
-      "success_count": 8,
-      "total_count": 8
+      "success_count": 10,
+      "total_count": 10
     },
     "technical_clarification": {
       "pattern_id": "technical_clarification",
@@ -201,8 +245,8 @@
         "thanks": 0.2,
         "new_question": 0.1
       },
-      "success_count": 8,
-      "total_count": 8
+      "success_count": 10,
+      "total_count": 10
     },
     "emotional_support": {
       "pattern_id": "emotional_support",
@@ -229,7 +273,7 @@
       "total_count": 0
     }
   },
-  "total_predictions": 16,
-  "successful_predictions": 8,
-  "avg_prediction_error": 0.3317102156445311
+  "total_predictions": 20,
+  "successful_predictions": 10,
+  "avg_prediction_error": 0.2993684696191893
 }

@@ -7,7 +7,10 @@ import logging
 import os
 import re
 import time
+import tempfile
+import threading
 import hashlib
+import subprocess
 import secrets
 import base64
 import io
@@ -29,7 +32,7 @@ import aiohttp
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.constants import ChatAction, ParseMode
-from telegram.error import TimedOut, NetworkError, InvalidToken
+from telegram.error import TimedOut, NetworkError, InvalidToken, BadRequest
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -41,7 +44,7 @@ from telegram.ext import (
 )
 
 # Локальные импорты
-from backend.neira_wrapper import NeiraWrapper
+from backend.neira_wrapper import NeiraWrapper, StreamChunk
 from cell_factory import CellFactory
 from parallel_thinking import parallel_mind
 from enhanced_auth import auth_system
@@ -56,6 +59,13 @@ from memory_system import EMBED_MODEL
 from autonomous_learning import AutonomousLearningSystem
 from emoji_feedback import EmojiFeedbackSystem, EmojiMap
 from organ_creation_engine import OrganCreationEngine, train_neira_from_letter
+from neira.config import (
+    ORGAN_DEP_ALLOWLIST,
+    ORGAN_DEP_MODULE_MAP,
+    ORGAN_DEP_INSTALL_TIMEOUT,
+    ORGAN_DEP_INSTALL_OUTPUT_LIMIT,
+)
+from neira.organs.tkp.generator import generate_tkp_document, TkpGenerationError
 
 # 🧬 Исполняемые органы v1.0
 try:
@@ -174,6 +184,28 @@ if not BOT_TOKEN:
         "или в файле .env (см. .env.example)."
     )
 
+_STT_ENGINE = os.getenv("NEIRA_STT_ENGINE", "faster_whisper").strip().lower()
+_STT_MODEL_NAME = os.getenv("NEIRA_STT_MODEL", "small").strip()
+_STT_DEVICE = os.getenv("NEIRA_STT_DEVICE", "cpu").strip()
+_STT_COMPUTE_TYPE = os.getenv("NEIRA_STT_COMPUTE_TYPE", "int8").strip()
+_STT_LANGUAGE = os.getenv("NEIRA_STT_LANGUAGE", "ru").strip()
+try:
+    _STT_MAX_DURATION_SEC = int(os.getenv("NEIRA_STT_MAX_DURATION_SEC", "120"))
+except ValueError:
+    _STT_MAX_DURATION_SEC = 120
+_STT_ECHO_TRANSCRIPT = os.getenv("NEIRA_STT_ECHO_TRANSCRIPT", "1").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+)
+
+_STT_MODEL_INSTANCE = None
+_STT_MODEL_LOCK = threading.Lock()
+
+_PENDING_DEP_INSTALLS: Dict[str, Dict[str, Any]] = {}
+
 
 class _SensitiveDataFilter(logging.Filter):
     """Фильтр логов: скрывает токены/ключи, чтобы не засветить их в tg.log."""
@@ -276,6 +308,65 @@ def _persist_tg_settings() -> None:
 
 neira_wrapper = NeiraWrapper(verbose=False)
 processing_lock = asyncio.Lock()
+
+# Таймауты, чтобы бот не "засыпал" навсегда под глобальным processing_lock.
+# `*_CHUNK_TIMEOUT_SEC` здесь используется как период keepalive (прогрев "typing"),
+# а не как ошибка: ошибка наступает только по `*_TOTAL_TIMEOUT_SEC`.
+_STREAM_CHUNK_TIMEOUT_SEC = float(os.getenv("NEIRA_TG_STREAM_CHUNK_TIMEOUT_SEC", "10"))
+_STREAM_TOTAL_TIMEOUT_SEC = float(os.getenv("NEIRA_TG_STREAM_TOTAL_TIMEOUT_SEC", "600"))
+_STREAM_CHUNK_TIMEOUT_SEC = max(_STREAM_CHUNK_TIMEOUT_SEC, 5.0)
+_STREAM_TOTAL_TIMEOUT_SEC = max(_STREAM_TOTAL_TIMEOUT_SEC, _STREAM_CHUNK_TIMEOUT_SEC)
+
+
+async def _iterate_stream_with_timeouts(stream: Any):
+    """
+    Вход: async-генератор стриминга NeiraWrapper.
+    Выход: те же чанки, но с таймаутом на "молчание" и общий дедлайн.
+
+    Edge cases:
+    - зависший LLM/стрим → keepalive чанки; asyncio.TimeoutError только по total timeout
+    """
+
+    deadline = time.monotonic() + _STREAM_TOTAL_TIMEOUT_SEC
+    pending: "asyncio.Task[Any] | None" = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(stream.__anext__())
+
+            remaining_total = deadline - time.monotonic()
+            if remaining_total <= 0:
+                raise asyncio.TimeoutError("total_stream_timeout")
+
+            timeout = min(_STREAM_CHUNK_TIMEOUT_SEC, remaining_total)
+            done, _ = await asyncio.wait({pending}, timeout=timeout)
+            if not done:
+                # Keepalive: NeiraWrapper внутри может "молчать", пока выполняется self.neira.process()
+                # (run_in_executor). Не считаем это ошибкой — просто поддерживаем UX.
+                yield StreamChunk(type="stage", stage="execution", content="")
+                continue
+
+            try:
+                item = pending.result()
+            except StopAsyncIteration:
+                return
+            finally:
+                pending = None
+
+            yield item
+    finally:
+        if pending is not None:
+            pending.cancel()
+            try:
+                await pending
+            except asyncio.CancelledError:
+                pass
+            except (RuntimeError, StopAsyncIteration) as exc:
+                logging.debug("Stream task завершился с ошибкой при cancel: %s", exc)
+        try:
+            await stream.aclose()
+        except RuntimeError as exc:
+            logging.debug("Stream aclose() завершился с ошибкой: %s", exc)
 
 # === Система автономного обучения ===
 autonomous_learning_system: Optional[AutonomousLearningSystem] = None
@@ -401,6 +492,40 @@ def store_llm_response_for_learning(query: str, response: str, success: bool = T
         logging.warning(f"Не удалось сохранить ответ для обучения: {e}")
 
 
+def _should_store_llm_response(user_text: str, intent_value: str | None = None) -> bool:
+    """
+    Отсекаем краткие/разговорные ответы, чтобы не засорять кэш.
+
+    Важно: сюда попадают только ответы LLM, это не блокирует живой ответ пользователю.
+    """
+    normalized = " ".join(str(user_text or "").strip().lower().split())
+    if not normalized:
+        return False
+    if normalized.startswith("/"):
+        return False
+    if len(normalized) < 15:
+        return False
+    if intent_value in {"greeting", "chat", "gratitude", "feedback"}:
+        return False
+
+    small_talk_markers = (
+        "привет",
+        "здравств",
+        "добрый",
+        "hi",
+        "hello",
+        "спасибо",
+        "пожалуйста",
+        "ок",
+        "ладно",
+        "ясно",
+        "как дела",
+    )
+    if any(marker in normalized for marker in small_talk_markers):
+        return False
+    return True
+
+
 async def send_feedback_to_server(
     query: str, 
     response: str, 
@@ -452,34 +577,55 @@ def require_auth(func):
     """Декоратор для проверки авторизации пользователя."""
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        username = update.effective_user.username
-        chat_id = update.effective_chat.id
-        chat_type = update.effective_chat.type
-        
-        # В разрешённых каналах/группах — без авторизации
+        chat = update.effective_chat
+        message = update.effective_message
+        user = update.effective_user
+
+        chat_id = chat.id if chat else None
+        chat_type = chat.type if chat else None
+
+        if chat_id is None or chat_type is None:
+            logging.warning("Auth: update без чата, пропускаю")
+            return
+
+        # В разрешённых каналах/группах — без авторизации (важно для channel_post, где нет user)
         if chat_id in ALLOWED_CHANNELS:
             return await func(update, context, *args, **kwargs)
-        
-        # Каналы и супергруппы — проверяем что чат в списке разрешённых
-        if chat_type in ("channel", "supergroup", "group"):
-            # Если чат не в списке — игнорируем (не спамим про авторизацию)
-            if chat_id not in ALLOWED_CHANNELS and ACCESS_MODE != "open":
-                return
-        
+
+        # Каналы и супергруппы: отвечаем только в whitelist (если режим не open)
+        if chat_type in ("channel", "supergroup", "group") and ACCESS_MODE != "open":
+            return
+
         if ACCESS_MODE == "open":
             return await func(update, context, *args, **kwargs)
-        
-        if ACCESS_MODE == "admin_only" and not is_admin(user_id):
-            if chat_type == "private":
-                await update.message.reply_text("⛔ Доступ только для администратора.")
+
+        if user is None:
+            # channel_post и сообщения от sender_chat (анонимные админы) приходят без user.
+            # В не-private чатах просто игнорируем, чтобы не спамить.
+            if chat_type == "private" and message:
+                await safe_reply_text(
+                    message,
+                    "🔐 *Требуется авторизация*\n\n"
+                    "Я не вижу автора сообщения (Telegram прислал update без user). "
+                    "Напиши мне обычным сообщением в личку.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
             return
-        
+
+        user_id = user.id
+        username = user.username
+
+        if ACCESS_MODE == "admin_only" and not is_admin(user_id):
+            if chat_type == "private" and message:
+                await safe_reply_text(message, "⛔ Доступ только для администратора.")
+            return
+
         if is_admin(user_id) or auth_system.is_authorized(user_id, username):
             return await func(update, context, *args, **kwargs)
-        
-        if chat_type == "private":
-            await update.message.reply_text(
+
+        if chat_type == "private" and message:
+            await safe_reply_text(
+                message,
                 "🔐 *Требуется авторизация*\n\n"
                 f"Твой user_id: `{user_id}`\n\n"
                 "📋 *Варианты доступа:*\n\n"
@@ -554,19 +700,19 @@ def format_stage(stage: str | None) -> str:
     return mapping.get(stage or "", "Подготовка")
 
 
-def is_cortex_placeholder_response(text: str) -> bool:
+def is_cortex_placeholder_response(text: str, *, user_text: str = "") -> bool:
     """
     Cortex (в автономном режиме) часто возвращает «заглушки», если не хватает
     pathway/фрагментов/шаблонов. В Telegram это выглядит как «бот сломан».
 
     В режиме `NEIRA_CORTEX_MODE=auto` такие ответы лучше отдавать в legacy Neira.
+
+    Edge cases:
+    - короткие нормальные ответы (например, приветствия) не считаем заглушкой
+    - для содержательных вопросов короткий ответ (<30 символов) чаще является заглушкой
     """
     normalized = (text or "").strip().lower()
     if not normalized:
-        return True
-    
-    # Слишком короткий ответ (< 30 символов) на содержательный вопрос — скорее всего заглушка
-    if len(normalized) < 30:
         return True
 
     placeholder_markers = (
@@ -587,11 +733,115 @@ def is_cortex_placeholder_response(text: str) -> bool:
         "хм, интересно...",
     )
 
-    return any(marker in normalized for marker in placeholder_markers)
+    if any(marker in normalized for marker in placeholder_markers):
+        return True
+
+    normalized_user = (user_text or "").strip().lower()
+    if not normalized_user:
+        return False
+
+    question_prefixes = (
+        "почему",
+        "зачем",
+        "как",
+        "что",
+        "где",
+        "когда",
+        "сколько",
+        "какой",
+        "какая",
+        "какие",
+        "можно ли",
+        "нужно ли",
+        "что делать",
+    )
+    looks_like_question = (
+        "?" in normalized_user
+        or len(normalized_user) >= 60
+        or any(normalized_user.startswith(prefix) for prefix in question_prefixes)
+    )
+    if looks_like_question and len(normalized) < 30:
+        return True
+
+    return False
 
 
-# Импорт общей функции для удаления дубликатов
-from text_utils import remove_duplicate_paragraphs as _remove_duplicate_paragraphs
+def _looks_like_capabilities_query(text: str) -> bool:
+    normalized = " ".join(str(text or "").lower().split())
+    if not normalized:
+        return False
+
+    direct_phrases = (
+        "что ты умеешь",
+        "что ты можешь",
+        "что умеешь",
+        "что можешь",
+        "твои возможности",
+        "твой функционал",
+        "функционал нейры",
+        "функционал бота",
+        "возможности бота",
+        "команды бота",
+        "список команд",
+        "покажи команды",
+        "какие команды",
+        "как пользоваться",
+        "что умеет нейра",
+        "что умеет бот",
+    )
+    if any(phrase in normalized for phrase in direct_phrases):
+        return True
+
+    if "возможност" in normalized or "функционал" in normalized:
+        if any(marker in normalized for marker in ("нейр", "бот", "тво", "у тебя")):
+            return True
+
+    if "команд" in normalized:
+        if any(marker in normalized for marker in ("нейр", "бот", "тво", "у тебя")):
+            return True
+
+    return False
+
+
+async def _build_capabilities_response(is_admin_user: bool) -> str:
+    lines = [
+        "Коротко о моем функционале в Telegram:",
+        "- Диалог и контекст: обычные сообщения, /context, /clear_context",
+        "- Память: /memory",
+        "- Изображения: пришли фото, /imagine, /vision",
+        "- Персонализация: /myname",
+        "- Ритм и тон: /rhythm",
+        "- Статус систем: /stats",
+        "",
+        "Полный список доступных тебе команд - /help.",
+    ]
+
+    if is_admin_user:
+        lines.append("У тебя есть админ-команды - они указаны в /help.")
+    else:
+        lines.append("Некоторые команды доступны только администратору - они тоже перечислены в /help.")
+
+    try:
+        registry = await _load_cell_registry()
+        active = [m for m in registry if m.get("active")]
+        names = [m.get("cell_name") for m in active if m.get("cell_name")]
+        if names:
+            trimmed = ", ".join(names[:8])
+            lines.append(f"Активные органы: {trimmed}. Команды смотри в /help.")
+    except Exception:
+        pass
+
+    return "\n".join(lines)
+
+
+# Импорт общих функций для обработки текста
+from text_utils import (
+    remove_duplicate_paragraphs as _remove_duplicate_paragraphs,
+    find_ambiguous_abbreviation as _find_ambiguous_abbreviation,
+    build_abbreviation_clarification_question as _build_abbreviation_clarification_question,
+    parse_abbreviation_choice as _parse_abbreviation_choice,
+    apply_abbreviation_expansion as _apply_abbreviation_expansion,
+)
 
 
 def _truncate_response(text: str, limit: int) -> tuple[str, bool]:
@@ -602,18 +852,208 @@ def _truncate_response(text: str, limit: int) -> tuple[str, bool]:
     return text[: limit - 3].rstrip() + "...", True
 
 
+def _unique_preserve_order(items: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def _normalize_dep_name(name: str) -> str:
+    """Нормализовать имя зависимости (pip)."""
+    return name.strip().lower().replace("_", "-")
+
+
+def _resolve_dep_name(module_name: str) -> str:
+    """Преобразовать имя модуля в pip-пакет (если есть mapping)."""
+    normalized = _normalize_dep_name(module_name)
+    mapped = ORGAN_DEP_MODULE_MAP.get(normalized)
+    return mapped if mapped else normalized
+
+
+def _filter_allowed_deps(deps: Iterable[str]) -> List[str]:
+    """Оставить только разрешённые зависимости."""
+    allowlist = {_normalize_dep_name(dep) for dep in ORGAN_DEP_ALLOWLIST}
+    cleaned: List[str] = []
+    for dep in deps:
+        if not dep:
+            continue
+        resolved = _resolve_dep_name(str(dep))
+        normalized = _normalize_dep_name(resolved)
+        if normalized in allowlist:
+            cleaned.append(normalized)
+    return _unique_preserve_order(cleaned)
+
+
+def _extract_missing_module_name(error: BaseException) -> Optional[str]:
+    """Извлечь имя отсутствующего модуля из ImportError."""
+    name = getattr(error, "name", None)
+    if isinstance(name, str) and name:
+        return name.split(".")[0]
+    match = re.search(r"No module named ['\"]([^'\"]+)['\"]", str(error))
+    if match:
+        return match.group(1).split(".")[0]
+    return None
+
+
 async def safe_reply_text(
     message: Message,
     text: str,
     *,
     parse_mode: str | ParseMode | None = None,
+    **kwargs: Any,
 ) -> Message | None:
-    """Безопасная отправка reply_text: не роняет обработчик на сетевых ошибках."""
+    """Безопасная отправка reply_text: не роняет обработчик на сетевых/Markdown-ошибках."""
+
+    def _is_entities_parse_error(error: BadRequest) -> bool:
+        msg = str(error or "").lower()
+        return "can't find end of the entity" in msg or "can't parse entities" in msg
+
     try:
-        return await message.reply_text(text, parse_mode=parse_mode)
+        return await message.reply_text(text, parse_mode=parse_mode, **kwargs)
+    except BadRequest as exc:
+        if parse_mode is not None and _is_entities_parse_error(exc):
+            logging.warning("Telegram Markdown не распарсился, отправляю как plain text: %s", exc)
+            try:
+                return await message.reply_text(text, parse_mode=None, **kwargs)
+            except (TimedOut, NetworkError, BadRequest) as fallback_exc:
+                logging.warning("Telegram reply_text fallback не удалось отправить: %s", fallback_exc)
+                return None
+
+        logging.warning("Telegram BadRequest при reply_text: %s", exc)
+        return None
     except (TimedOut, NetworkError) as exc:
         logging.warning("Telegram reply_text не удалось отправить: %s", exc)
         return None
+
+
+async def safe_edit_message_text(
+    query: "CallbackQuery",
+    text: str,
+    *,
+    parse_mode: str | ParseMode | None = None,
+) -> None:
+    """Безопасное редактирование сообщения: не роняет обработчик на Telegram-ошибках."""
+
+    def _is_entities_parse_error(error: BadRequest) -> bool:
+        msg = str(error or "").lower()
+        return "can't find end of the entity" in msg or "can't parse entities" in msg
+
+    try:
+        await query.edit_message_text(text, parse_mode=parse_mode)
+        return
+    except BadRequest as exc:
+        if parse_mode is not None and _is_entities_parse_error(exc):
+            logging.warning("Telegram Markdown не распарсился при edit_message_text, отправляю plain text: %s", exc)
+            try:
+                await query.edit_message_text(text, parse_mode=None)
+            except (TimedOut, NetworkError, BadRequest) as fallback_exc:
+                logging.warning("Telegram edit_message_text fallback не удалось отправить: %s", fallback_exc)
+            return
+
+        logging.warning("Telegram BadRequest при edit_message_text: %s", exc)
+        return
+    except (TimedOut, NetworkError) as exc:
+        logging.warning("Telegram edit_message_text не удалось отправить: %s", exc)
+        return
+
+
+def _split_deps_by_allowlist(deps: Iterable[str]) -> tuple[list[str], list[str]]:
+    """Разделить зависимости на разрешённые и запрещённые."""
+    allowlist = {_normalize_dep_name(dep) for dep in ORGAN_DEP_ALLOWLIST}
+    allowed: List[str] = []
+    blocked: List[str] = []
+    for dep in deps:
+        if not dep:
+            continue
+        resolved = _resolve_dep_name(str(dep))
+        normalized = _normalize_dep_name(resolved)
+        if normalized in allowlist:
+            allowed.append(normalized)
+        else:
+            blocked.append(resolved)
+    return _unique_preserve_order(allowed), _unique_preserve_order(blocked)
+
+
+def _register_pending_dep_install(
+    organ_name: str,
+    deps: List[str],
+    user_id: int,
+    source: str,
+) -> None:
+    """Сохранить ожидание подтверждения установки зависимостей."""
+    if not organ_name or not deps:
+        return
+    _PENDING_DEP_INSTALLS[organ_name] = {
+        "deps": deps,
+        "user_id": user_id,
+        "source": source,
+        "created_at": datetime.now().isoformat(),
+    }
+
+
+async def _prompt_dependency_install(
+    message: Message,
+    organ_name: str,
+    deps: List[str],
+    *,
+    source: str,
+) -> None:
+    """Попросить подтверждение установки зависимостей."""
+    allowed, blocked = _split_deps_by_allowlist(deps)
+    if allowed:
+        user_id = getattr(message.from_user, "id", 0) if message else 0
+        _register_pending_dep_install(organ_name, allowed, user_id, source)
+
+    lines = [
+        f"Для органа `{organ_name}` нужны зависимости.",
+        "",
+    ]
+
+    if allowed:
+        formatted = ", ".join(f"`{dep}`" for dep in allowed)
+        lines.append(f"Разрешённые: {formatted}")
+        lines.append(
+            f"Подтвердить установку: `/deps_install {organ_name} {' '.join(allowed)}`"
+        )
+    if blocked:
+        formatted = ", ".join(f"`{dep}`" for dep in blocked)
+        lines.append(f"Запрещённые/вне allowlist: {formatted}")
+    if "ffmpeg" in [b.lower() for b in blocked]:
+        lines.append("ffmpeg нужно установить отдельно (системный пакет).")
+
+    await safe_reply_text(message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+def _pip_install_sync(packages: List[str]) -> tuple[bool, str]:
+    """Установить зависимости через pip (синхронно)."""
+    if not packages:
+        return False, "empty_packages"
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        *packages,
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=ORGAN_DEP_INSTALL_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    output = (result.stderr or result.stdout or "").strip()
+    return result.returncode == 0, output
 
 
 async def send_chunks(
@@ -787,7 +1227,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "с многоуровневой защитой от галлюцинаций."
         )
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -867,10 +1307,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/learn\\_auto approve/reject <id>\n\n"
             "*🧬 Самосознание:*\n"
             "/self — самоанализ\n"
-            "/organs — статус органов\n"
-            "/grow — создание органов\n"
-            "/organ_mode — управление режимом создания органов\n"
-            "/code list/read — управление кодом\n\n"
+            "/organs - статус органов\n"
+            "/grow - создание органов\n"
+            "/organ_mode - управление режимом создания органов\n"
+            "/deps - ожидающие установки зависимостей\n"
+            "/deps_install <орган> <deps> - подтвердить установку\n"
+            "/deps_cancel <орган> - отменить установку\n"
+            "/code list/read - управление кодом\n"
+            "/tkp <модель> - сформировать ТКП (docx)\n\n"
             "*💡 Хештеги:*\n"
             "#создай\\_орган <описание>\n"
             "#научись <тема>\n"
@@ -895,7 +1339,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception:
         logging.exception('Не удалось загрузить реестр органов для /help')
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -966,7 +1410,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         coverage = cortex_stats['pathways']['coverage']
         lines.append(f"- Покрытие: HOT {coverage.get('hot', '0%')}, WARM {coverage.get('warm', '0%')}")
 
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
 async def ratelimit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -992,7 +1436,7 @@ async def ratelimit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         text += "\n✅ Лимит не превышен"
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, text, parse_mode=ParseMode.MARKDOWN)
 
 
 @require_auth
@@ -1028,7 +1472,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         lines.append(f"\n_Всего записей: {data.get('total', len(recent))}_")
         lines.append("_Используй /memory stats для статистики_")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         return
     
     action = context.args[0].lower()
@@ -1068,7 +1512,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             for cat, count in sorted_cats[:5]:
                 lines.append(f"  • {cat}: {count}")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "search" and len(context.args) > 1:
         # Поиск записей
@@ -1087,12 +1531,12 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(results) > 15:
             lines.append(f"\n_...и ещё {len(results) - 15} записей_")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "delete":
         # Требует подтверждения
         if len(context.args) < 2:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 "❓ *Команды удаления:*\n"
                 "/memory delete last <N> — удалить последние N записей\n"
                 "/memory delete text <текст> — удалить записи со словом\n"
@@ -1112,7 +1556,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     return
                 
                 count = memory_manager.delete_last_n(n)
-                await update.message.reply_text(
+                await safe_reply_text(update.message,
                     f"🗑️ Удалено последних записей: {count}\n"
                     f"_Используй /memory stats для проверки_",
                     parse_mode=ParseMode.MARKDOWN
@@ -1123,7 +1567,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif subaction == "text" and len(context.args) > 2:
             query = " ".join(context.args[2:])
             count = memory_manager.delete_by_text(query)
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"🗑️ Удалено записей с '{query}': {count}",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1136,7 +1580,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     return
                 
                 count = memory_manager.delete_old_entries(days)
-                await update.message.reply_text(
+                await safe_reply_text(update.message,
                     f"🗑️ Удалено записей старше {days} дн.: {count}",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -1146,7 +1590,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif subaction == "category" and len(context.args) > 2:
             category = context.args[2]
             count = memory_manager.delete_by_category(category)
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"🗑️ Удалено записей категории '{category}': {count}",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1157,7 +1601,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif action == "dedupe":
         # Удалить дубликаты
         count = memory_manager.deduplicate()
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"🧹 Удалено дубликатов: {count}\n"
             f"_Дубликатами считаются записи с >95% схожестью_",
             parse_mode=ParseMode.MARKDOWN
@@ -1167,7 +1611,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Создать бэкап
         backup_path = memory_manager.create_backup()
         filename = os.path.basename(backup_path)
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"💾 Бэкап создан: `{filename}`\n"
             f"_Сохранён в папку backups/_",
             parse_mode=ParseMode.MARKDOWN
@@ -1179,13 +1623,13 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         success = memory_manager.restore_from_backup(backup_name)
         
         if success:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"✅ Память восстановлена из `{backup_name}`\n"
                 f"_Используй /memory stats для проверки_",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"❌ Бэкап `{backup_name}` не найден\n"
                 f"_Используй /memory backups для списка_",
                 parse_mode=ParseMode.MARKDOWN
@@ -1212,7 +1656,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             lines.append(f"\n_...и ещё {len(backups) - 10} бэкапов_")
         
         lines.append("\n_Используй /memory restore <filename>_")
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "filter" and len(context.args) > 1:
         # Умные фильтры
@@ -1248,7 +1692,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if len(results) > 15:
                 lines.append(f"\n_...и ещё {len(results) - 15}_")
             
-            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         
         elif filter_type == "source" and len(context.args) > 2:
             # /memory filter source telegram
@@ -1267,7 +1711,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if len(results) > 15:
                 lines.append(f"\n_...и ещё {len(results) - 15}_")
             
-            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         
         elif filter_type == "recent" and len(context.args) > 2:
             # /memory filter recent 24h
@@ -1289,10 +1733,10 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if len(results) > 15:
                 lines.append(f"\n_...и ещё {len(results) - 15}_")
             
-            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         
         else:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 "❓ *Фильтры:*\n"
                 "/memory filter confidence <0.5\n"
                 "/memory filter source telegram\n"
@@ -1314,7 +1758,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             entry_id = recent[entry_num].get('id')
             if memory_manager.pin_entry(entry_id):
-                await update.message.reply_text(
+                await safe_reply_text(update.message,
                     f"📌 Запись #{context.args[1]} закреплена\n"
                     f"_Защищена от удаления_",
                     parse_mode=ParseMode.MARKDOWN
@@ -1337,7 +1781,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             entry_id = recent[entry_num].get('id')
             if memory_manager.unpin_entry(entry_id):
-                await update.message.reply_text(
+                await safe_reply_text(update.message,
                     f"📍 Запись #{context.args[1]} откреплена",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -1362,7 +1806,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(pinned) > 20:
             lines.append(f"\n_...и ещё {len(pinned) - 20}_")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "export" and len(context.args) > 1:
         # Экспорт в текст
@@ -1382,13 +1826,13 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(text_export)
             
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"📄 Экспорт создан: `{filename}`\n"
                 f"_Сохранён в папку backups/_",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 "❓ *Экспорт:*\n"
                 "/memory export txt — вся память\n"
                 "/memory export txt <категория>",
@@ -1401,7 +1845,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         results = memory_manager.semantic_search(query, top_k=10)
         
         if not results:
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"🔍 Нет результатов семантического поиска\n"
                 f"_(Требуется Ollama с {EMBED_MODEL})_",
                 parse_mode=ParseMode.MARKDOWN
@@ -1413,10 +1857,10 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text = entry.text[:60] + "..." if len(entry.text) > 60 else entry.text
             lines.append(f"{i}. [{score:.0%}] {text}")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     else:
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "❓ *Команды памяти:*\n"
             "/memory — последние записи\n"
             "/memory stats — статистика\n"
@@ -1836,7 +2280,7 @@ async def organs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     for inp in stats['recent_inputs']:
                         lines.append(f"  • {inp}...")
                 
-                await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+                await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
                 return
                 
             except Exception as e:
@@ -1883,7 +2327,7 @@ async def organs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
         
         elif subcommand == "help":
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 "🧬 **Команды органов:**\n\n"
                 "`/organs` — список всех органов\n"
                 "`/organs stats <имя>` — статистика органа\n"
@@ -2032,6 +2476,130 @@ async def grow_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @require_auth
+async def deps_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать ожидающие подтверждения по зависимостям."""
+    if not _PENDING_DEP_INSTALLS:
+        await update.message.reply_text("Нет ожидающих установок зависимостей.")
+        return
+
+    lines = ["Ожидающие установки зависимостей:"]
+    for organ_name, info in _PENDING_DEP_INSTALLS.items():
+        deps = ", ".join(info.get("deps", []))
+        lines.append(f"- {organ_name}: {deps}")
+    await update.message.reply_text("\n".join(lines))
+
+
+@require_auth
+async def deps_install_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Установить зависимости для органа после подтверждения."""
+    if not context.args:
+        await update.message.reply_text("Использование: /deps_install <organ_name> <dep1> <dep2>")
+        return
+
+    organ_name = context.args[0]
+    requested = context.args[1:]
+    pending = _PENDING_DEP_INSTALLS.get(organ_name)
+    user_id = update.effective_user.id
+
+    if pending and pending.get("user_id") != user_id and not is_admin(user_id):
+        await update.message.reply_text("Нет прав подтверждать установку для этого органа.")
+        return
+
+    deps = pending.get("deps", []) if pending else requested
+    if requested:
+        deps = requested
+
+    allowed, blocked = _split_deps_by_allowlist(deps)
+    if not allowed:
+        await update.message.reply_text("Нет разрешённых зависимостей для установки.")
+        return
+    if blocked:
+        await update.message.reply_text(
+            f"Пропускаю запрещённые зависимости: {', '.join(blocked)}"
+        )
+
+    status_msg = await update.message.reply_text(
+        f"Устанавливаю зависимости: {', '.join(allowed)}"
+    )
+
+    ok, output = await asyncio.to_thread(_pip_install_sync, allowed)
+
+    if ok:
+        _PENDING_DEP_INSTALLS.pop(organ_name, None)
+        await status_msg.edit_text(
+            f"✅ Зависимости установлены: {', '.join(allowed)}\n"
+            "Повтори команду запуска органа."
+        )
+        return
+
+    tail, _ = _truncate_response(output or "", ORGAN_DEP_INSTALL_OUTPUT_LIMIT)
+    await status_msg.edit_text(
+        "❌ Установка зависимостей не удалась. Запускаю пересборку органа без внешних пакетов..."
+    )
+
+    meta = None
+    try:
+        registry = await _load_cell_registry()
+        meta = next((m for m in registry if m.get("cell_name") == organ_name), None)
+    except Exception:
+        meta = None
+
+    description = None
+    if isinstance(meta, dict):
+        description = meta.get("description") or meta.get("task_pattern")
+
+    if not description:
+        description = organ_name
+
+    fallback_description = (
+        f"{description}\nВАЖНО: использовать только стандартную библиотеку, без внешних зависимостей."
+    )
+
+    engine = OrganCreationEngine()
+    result = engine.create_and_test_organ(
+        description=fallback_description,
+        author_id=user_id,
+        force_cell_name=organ_name,
+        dependency_policy="stdlib_only",
+        skip_duplicate_check=True,
+        overwrite_existing=True,
+    )
+
+    if result.get("success"):
+        cell = result.get("cell")
+        await update.message.reply_text(
+            f"✅ Орган пересобран без внешних зависимостей: {cell.cell_name}\n"
+            f"Файл: {cell.file_path}"
+        )
+        return
+
+    await update.message.reply_text(
+        "❌ Пересборка органа не удалась. "
+        f"Причина: {result.get('report') or tail}"
+    )
+
+
+@require_auth
+async def deps_cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отменить ожидающую установку зависимостей."""
+    if not context.args:
+        await update.message.reply_text("Использование: /deps_cancel <organ_name>")
+        return
+
+    organ_name = context.args[0]
+    pending = _PENDING_DEP_INSTALLS.get(organ_name)
+    user_id = update.effective_user.id
+    if not pending:
+        await update.message.reply_text("Для этого органа нет ожидающих установок.")
+        return
+    if pending.get("user_id") != user_id and not is_admin(user_id):
+        await update.message.reply_text("Нет прав отменить установку для этого органа.")
+        return
+
+    _PENDING_DEP_INSTALLS.pop(organ_name, None)
+    await update.message.reply_text(f"Ожидание установки отменено: {organ_name}")
+
+
 async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команды работы с кодом (только для администратора)."""
     user_id = update.effective_user.id
@@ -2042,7 +2610,7 @@ async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     
     if not context.args:
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "💻 *Команды кода:*\n"
             "/code list — список файлов\n"
             "/code read <файл> — прочитать файл",
@@ -2089,13 +2657,85 @@ async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("❌ Не удалось выполнить операцию с файлом")
 
 
+
+@require_auth
+async def tkp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Сформировать ТКП в формате docx по модели станка."""
+    args = context.args or []
+    flags = {arg for arg in args if arg.startswith("--")}
+    model_parts = [arg for arg in args if not arg.startswith("--")]
+    model_name = " ".join(model_parts).strip()
+    force_parse = bool({"--refresh", "--reparse"} & flags)
+    if not model_name:
+        await safe_reply_text(
+            update.message,
+            "?? *ТКП генератор*\n\n"
+            "Использование: `/tkp <модель>`\n"
+            "Пример: `/tkp DVF 6500T`\n"
+            "Обновить парсинг: `/tkp DVF 6500T --refresh`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    status_msg = await update.message.reply_text("?? Формирую ТКП...")
+
+    try:
+        result = generate_tkp_document(model_name, force_parse=force_parse)
+    except TkpGenerationError as exc:
+        await status_msg.edit_text(f"?? {exc}")
+        return
+    except (OSError, ValueError, RuntimeError) as exc:
+        logging.exception("Ошибка генерации ТКП: %s", exc)
+        await status_msg.edit_text("? Не удалось сформировать ТКП.")
+        return
+
+    try:
+        with result.output_path.open("rb") as file_obj:
+            await update.message.reply_document(
+                document=file_obj,
+                filename=result.output_path.name,
+                caption=_format_tkp_caption(result, model_name),
+            )
+    except (BadRequest, NetworkError, TimedOut, OSError) as exc:
+        logging.exception("Ошибка отправки ТКП: %s", exc)
+        await status_msg.edit_text("? ТКП сформирован, но не удалось отправить документ.")
+        return
+
+    try:
+        await status_msg.delete()
+    except (BadRequest, NetworkError) as exc:
+        logging.debug("Не удалось удалить статус ТКП: %s", exc)
+    warnings_text = _format_tkp_warnings(result)
+    if warnings_text:
+        await update.message.reply_text(warnings_text)
+
+
+def _format_tkp_caption(result, model_name: str) -> str:
+    """Короткая подпись к docx."""
+    return (
+        f"ТКП для модели: {model_name}\n"
+        f"Шаблон: {result.template_id} | Каталог: {result.catalog_path.name}"
+    )
+
+
+def _format_tkp_warnings(result) -> str:
+    """Сводка предупреждений по ТКП."""
+    parts = []
+    if result.warnings:
+        parts.extend(result.warnings)
+    if result.missing_values:
+        parts.append(f"Пропусков: {result.missing_values} (Требуется уточнение).")
+    if not parts:
+        return ""
+    return "\n".join(f"?? {part}" for part in parts)
+
 # === Команды работы с изображениями ===
 @require_auth
 async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Генерация изображения по описанию."""
     prompt = " ".join(context.args).strip() if context.args else ""
     if not prompt:
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "🎨 *Генерация изображений*\n\n"
             "Использование: `/imagine <описание>`\n\n"
             "Примеры:\n"
@@ -2134,8 +2774,7 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await status_msg.delete()
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
-                caption=f"🎨 *{prompt[:100]}*",
-                parse_mode=ParseMode.MARKDOWN
+                caption=f"🎨 {prompt[:100]}",
             )
         else:
             await status_msg.edit_text("❌ Не удалось сгенерировать изображение.")
@@ -2194,6 +2833,143 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await status_msg.edit_text(f"❌ Ошибка: {e}")
 
 
+
+
+def _get_stt_model() -> Any:
+    """Ленивая загрузка модели распознавания речи."""
+    if _STT_ENGINE in ("off", "disabled", "none"):
+        raise RuntimeError("stt_disabled")
+    if _STT_ENGINE not in ("faster_whisper", "faster-whisper"):
+        raise ValueError(f"unsupported_stt_engine: {_STT_ENGINE}")
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as exc:
+        raise ImportError("missing_faster_whisper") from exc
+
+    global _STT_MODEL_INSTANCE
+    with _STT_MODEL_LOCK:
+        if _STT_MODEL_INSTANCE is None:
+            _STT_MODEL_INSTANCE = WhisperModel(
+                _STT_MODEL_NAME or "small",
+                device=_STT_DEVICE or "cpu",
+                compute_type=_STT_COMPUTE_TYPE or "int8",
+            )
+    return _STT_MODEL_INSTANCE
+
+
+def _transcribe_voice_sync(audio_path: str) -> str:
+    """Распознать речь (синхронно, для asyncio.to_thread)."""
+    model = _get_stt_model()
+    language = _STT_LANGUAGE if _STT_LANGUAGE else None
+    segments, _info = model.transcribe(audio_path, language=language)
+    parts: List[str] = []
+    for segment in segments:
+        text = getattr(segment, "text", "")
+        if text:
+            parts.append(text.strip())
+    return " ".join(parts).strip()
+
+
+@require_auth
+async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка голосовых сообщений: STT -> орган/LLM."""
+    if not update.message or not update.message.voice:
+        return
+
+    if _STT_ENGINE in ("off", "disabled", "none"):
+        await update.message.reply_text(
+            "Распознавание голоса отключено. Установи NEIRA_STT_ENGINE=faster_whisper."
+        )
+        return
+
+    voice = update.message.voice
+    if voice.duration and voice.duration > _STT_MAX_DURATION_SEC:
+        await update.message.reply_text(
+            f"Голосовое слишком длинное (>{_STT_MAX_DURATION_SEC} сек)."
+        )
+        return
+
+    status_msg = await update.message.reply_text("Распознаю голосовое сообщение...")
+    tmp_path: Optional[str] = None
+
+    try:
+        file = await context.bot.get_file(voice.file_id)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp:
+            tmp_path = tmp.name
+        await file.download_to_drive(custom_path=tmp_path)
+        transcript = await asyncio.to_thread(_transcribe_voice_sync, tmp_path)
+    except ImportError:
+        await status_msg.edit_text(
+            "Модуль распознавания речи не установлен. "
+            "Установи `pip install faster-whisper` и поставь ffmpeg."
+        )
+        return
+    except (TimedOut, NetworkError, BadRequest) as exc:
+        logging.warning("Не удалось скачать голосовое сообщение: %s", exc)
+        await status_msg.edit_text("Не удалось скачать голосовое сообщение.")
+        return
+    except (RuntimeError, ValueError, OSError) as exc:
+        logging.exception("Ошибка распознавания голоса: %s", exc)
+        await status_msg.edit_text(f"Ошибка распознавания голоса: {exc}")
+        return
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                logging.debug("Не удалось удалить временный файл: %s", tmp_path)
+
+    if not transcript:
+        await status_msg.edit_text("Не удалось распознать голосовое сообщение.")
+        return
+
+    if _STT_ECHO_TRANSCRIPT:
+        await status_msg.edit_text(f"Текст: {transcript}")
+    else:
+        await status_msg.delete()
+
+    try:
+        registry = await _load_cell_registry()
+        voice_candidates = []
+        for meta in registry:
+            if not meta.get("active", False):
+                continue
+            platforms = [str(p).lower() for p in meta.get("target_platforms", []) if p]
+            modalities = [str(m).lower() for m in meta.get("input_modalities", []) if m]
+            entrypoints = meta.get("entrypoints") or {}
+            telegram_entry = entrypoints.get("telegram") if isinstance(entrypoints, dict) else None
+            if not modalities and isinstance(telegram_entry, dict):
+                modalities = [
+                    str(m).lower()
+                    for m in (telegram_entry.get("message_types") or [])
+                    if m
+                ]
+            supports_voice = "voice" in modalities
+            supports_telegram = "telegram" in platforms or isinstance(telegram_entry, dict)
+            if supports_voice and supports_telegram:
+                voice_candidates.append(meta)
+
+        if voice_candidates:
+            selected = voice_candidates[-1]
+            cell_name = selected.get("cell_name")
+            if cell_name:
+                try:
+                    update.message.text = f"/run_{cell_name} {transcript}"
+                except AttributeError:
+                    logging.warning("Не удалось подменить текст сообщения для voice->organ")
+                else:
+                    await run_generated_cell_command(update, context)
+                    return
+    except (RuntimeError, ValueError, OSError) as exc:
+        logging.warning("Не удалось выбрать голосовой орган: %s", exc)
+
+    try:
+        update.message.text = transcript
+    except AttributeError:
+        logging.warning("Не удалось подменить текст сообщения для voice->chat")
+        return
+    await chat_handler(update, context)
+
 async def vision_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Статус систем работы с изображениями."""
     await show_typing(update, context)
@@ -2215,7 +2991,7 @@ async def vision_status_command(update: Update, context: ContextTypes.DEFAULT_TY
     if not sd_ok:
         lines.append("\n💡 Запусти SD WebUI с `--api` флагом")
     
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
 # === Админ-команды ===
@@ -2239,7 +3015,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"👑 *Админ-панель*\n\n"
             f"Режим доступа: `{ACCESS_MODE}`\n"
             f"Авторизовано: {len(auth_system.authorized_users)} пользователей\n"
@@ -2275,7 +3051,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif action == "channels":
         if ALLOWED_CHANNELS:
             channels_list = "\n".join(f"  • `{cid}`" for cid in ALLOWED_CHANNELS)
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"📢 *Разрешённые каналы/группы:*\n{channels_list}",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -2293,7 +3069,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             channel_id = int(context.args[1])
             ALLOWED_CHANNELS.add(channel_id)
             _persist_tg_settings()
-            await update.message.reply_text(f"✅ Канал/группа `{channel_id}` добавлен.", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"✅ Канал/группа `{channel_id}` добавлен.", parse_mode=ParseMode.MARKDOWN)
         except ValueError:
             await update.message.reply_text("❌ ID должен быть числом (с минусом для групп).")
     
@@ -2307,7 +3083,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             channel_id = int(context.args[1])
             ALLOWED_CHANNELS.discard(channel_id)
             _persist_tg_settings()
-            await update.message.reply_text(f"🗑️ Канал/группа `{channel_id}` удалён.", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"🗑️ Канал/группа `{channel_id}` удалён.", parse_mode=ParseMode.MARKDOWN)
         except ValueError:
             await update.message.reply_text("❌ ID должен быть числом.")
     
@@ -2317,7 +3093,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if chat_type in ("group", "supergroup", "channel"):
             ALLOWED_CHANNELS.add(chat_id)
             _persist_tg_settings()
-            await update.message.reply_text(
+            await safe_reply_text(update.message,
                 f"✅ Этот чат добавлен в разрешённые!\n"
                 f"ID: `{chat_id}`",
                 parse_mode=ParseMode.MARKDOWN
@@ -2330,7 +3106,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if new_mode in ("open", "whitelist", "admin_only"):
             ACCESS_MODE = new_mode
             _persist_tg_settings()
-            await update.message.reply_text(f"✅ Режим доступа: `{ACCESS_MODE}`", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"✅ Режим доступа: `{ACCESS_MODE}`", parse_mode=ParseMode.MARKDOWN)
         else:
             await update.message.reply_text("❌ Режим: open, whitelist или admin_only")
     
@@ -2353,10 +3129,10 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     f"{ctx_info['message_count']} сообщений"
                 )
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     else:
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "❓ *Команды:*\n"
             "/admin users — список пользователей\n"
             "/admin channels — список каналов\n"
@@ -2407,13 +3183,13 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text = f"📢 *Разрешённые каналы/группы:*\n{channels_list}"
         else:
             text = "📭 Нет разрешённых каналов."
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+        await safe_edit_message_text(query, text, parse_mode=ParseMode.MARKDOWN)
     
     elif data.startswith("admin_mode_"):
         new_mode = data.replace("admin_mode_", "")
         ACCESS_MODE = new_mode
         _persist_tg_settings()
-        await query.edit_message_text(
+        await safe_edit_message_text(query,
             f"✅ Режим доступа изменён: `{ACCESS_MODE}`",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -2434,14 +3210,66 @@ async def create_organ_background(update: Update, organ_description: str) -> Non
 
         if result.get("success"):
             cell = result.get("cell")
-            await update.message.reply_text(
-                f"✅ **Орган создан и протестирован!**\n\n"
-                f"📝 Название: {cell.cell_name}\n"
-                f"📄 Файл: {cell.file_path}\n"
-                f"🎯 Статус: активен и готов к использованию",
-                parse_mode=ParseMode.MARKDOWN
-            )
+            if not cell:
+                await update.message.reply_text("✅ Орган создан, но метаданные не найдены.")
+                return
+
+            entrypoints = result.get("entrypoints") or getattr(cell, "entrypoints", {})
+            target_platforms = result.get("target_platforms") or getattr(cell, "target_platforms", [])
+            input_modalities = result.get("input_modalities") or getattr(cell, "input_modalities", [])
+            commands = result.get("commands") or getattr(cell, "command_triggers", [])
+            dependencies = result.get("dependencies") or getattr(cell, "dependencies", [])
+
+            lines = [
+                "✅ **Орган создан и протестирован!**",
+                "",
+                f"Название: {cell.cell_name}",
+                f"Файл: {cell.file_path}",
+                "Статус: активен и готов к использованию",
+            ]
+
+            if target_platforms:
+                lines.append(f"Платформы: {', '.join(target_platforms)}")
+            if input_modalities:
+                lines.append(f"Модальности: {', '.join(input_modalities)}")
+            if dependencies:
+                lines.append(f"Зависимости: {', '.join(dependencies)}")
+
+            telegram_entry = entrypoints.get("telegram") if isinstance(entrypoints, dict) else None
+            telegram_commands = []
+            if isinstance(telegram_entry, dict):
+                telegram_commands = list(telegram_entry.get("commands") or [])
+            if not telegram_commands:
+                telegram_commands = list(commands or [])
+            if telegram_commands:
+                formatted = ", ".join(f"`{cmd}`" for cmd in telegram_commands)
+                lines.append(f"Команды Telegram: {formatted}")
+
+            desktop_entry = entrypoints.get("desktop") if isinstance(entrypoints, dict) else None
+            if isinstance(desktop_entry, dict):
+                hint = desktop_entry.get("hint")
+                if hint:
+                    lines.append(f"Desktop: {hint}")
+                desktop_commands = list(desktop_entry.get("commands") or [])
+                if desktop_commands:
+                    formatted = ", ".join(f"`{cmd}`" for cmd in desktop_commands)
+                    lines.append(f"Desktop команды: {formatted}")
+                build_cmd = desktop_entry.get("build")
+                if build_cmd:
+                    lines.append(f"Desktop build: {build_cmd}")
+                run_cmd = desktop_entry.get("run")
+                if run_cmd:
+                    lines.append(f"Desktop run: {run_cmd}")
+
+            await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
             return
+        if result.get("missing_deps"):
+            cell = result.get("cell")
+            organ_name = cell.cell_name if cell else "unknown"
+            deps = result.get("missing_deps") or result.get("dependencies") or []
+            await _prompt_dependency_install(update.message, organ_name, deps, source="create")
+            return
+
 
         if result.get("quarantined"):
             await update.message.reply_text(
@@ -2579,7 +3407,7 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     global autonomous_learning_system
     
     if not context.args:
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "🎓 *Автономное обучение Neira v1.0*\n\n"
             "*Команды:*\n"
             "  `/learn_auto start` - Запустить фоновое обучение\n"
@@ -2624,7 +3452,7 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
         
         await autonomous_learning_system.start_autonomous_learning()
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "🎓 *Автономное обучение запущено!*\n\n"
             "Буду учиться в фоновом режиме когда не занята диалогами.\n"
             "Все новые знания проходят проверку и карантин.\n\n"
@@ -2640,7 +3468,7 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await autonomous_learning_system.stop_autonomous_learning()
         stats = autonomous_learning_system.get_learning_stats()
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"🛑 *Автономное обучение остановлено*\n\n"
             f"📊 Итоги:\n"
             f"  • Сессий: {stats['learning_sessions']}\n"
@@ -2657,7 +3485,7 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         status_emoji = "🏃" if stats['running'] else "⏸️"
         idle_status = "💤 В режиме ожидания" if stats['is_idle'] else f"💬 Активна ({stats['idle_minutes']:.1f} мин до idle)"
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"📊 *Статистика автономного обучения*\n\n"
             f"{status_emoji} Статус: {'Работает' if stats['running'] else 'Остановлено'}\n"
             f"{idle_status}\n\n"
@@ -2703,37 +3531,37 @@ async def learn_auto_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"\n💡 Используй `/learn_auto approve <id>` для одобрения"
         )
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "approve":
         if len(context.args) < 2:
-            await update.message.reply_text("⚠️ Укажи ID записи: `/learn_auto approve <id>`", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, "⚠️ Укажи ID записи: `/learn_auto approve <id>`", parse_mode=ParseMode.MARKDOWN)
             return
         
         entry_id = context.args[1]
         success = autonomous_learning_system.manual_approve(entry_id)
         
         if success:
-            await update.message.reply_text(f"✅ Факт `{entry_id}` одобрен и добавлен в память", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"✅ Факт `{entry_id}` одобрен и добавлен в память", parse_mode=ParseMode.MARKDOWN)
         else:
-            await update.message.reply_text(f"❌ Запись с ID `{entry_id}` не найдена", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"❌ Запись с ID `{entry_id}` не найдена", parse_mode=ParseMode.MARKDOWN)
     
     elif action == "reject":
         if len(context.args) < 2:
-            await update.message.reply_text("⚠️ Укажи ID записи: `/learn_auto reject <id>`", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, "⚠️ Укажи ID записи: `/learn_auto reject <id>`", parse_mode=ParseMode.MARKDOWN)
             return
         
         entry_id = context.args[1]
         success = autonomous_learning_system.manual_reject(entry_id)
         
         if success:
-            await update.message.reply_text(f"❌ Факт `{entry_id}` отклонён", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"❌ Факт `{entry_id}` отклонён", parse_mode=ParseMode.MARKDOWN)
         else:
-            await update.message.reply_text(f"❌ Запись с ID `{entry_id}` не найдена", parse_mode=ParseMode.MARKDOWN)
+            await safe_reply_text(update.message, f"❌ Запись с ID `{entry_id}` не найдена", parse_mode=ParseMode.MARKDOWN)
     
     else:
         # Улучшенный ответ для неизвестных команд
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"❓ Неизвестная команда: `{action}`\n\n"
             "ℹ️ Используй `/learn_auto` (без аргументов) для просмотра всех команд.\n\n"
             "*Доступные команды:*\n"
@@ -2751,15 +3579,28 @@ async def chat_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Общий диалог с Neira с отображением стадий."""
-    if not update.message or not update.message.text:
+    message = update.effective_message
+    if not message or not message.text:
         return
 
-    user_text = update.message.text.strip()
-    user_name = update.effective_user.first_name or "Пользователь"
-    user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     chat_type = update.effective_chat.type
     bot_username = context.bot.username
+
+    user = update.effective_user
+    if user is not None:
+        user_id = user.id
+        user_name = user.first_name or "Пользователь"
+        username = user.username
+        first_name = user.first_name
+    else:
+        # channel_post и сообщения от sender_chat (анонимные админы) приходят без user
+        user_id = chat_id
+        user_name = getattr(update.effective_chat, "title", None) or "канал"
+        username = None
+        first_name = None
+
+    user_text = message.text.strip()
     
     # 🎓 Отмечаем активность для автономного обучения
     global autonomous_learning_system
@@ -2769,9 +3610,9 @@ async def chat_handler(
     # В группах/каналах: отвечаем только на упоминания или реплаи
     if chat_type in ("group", "supergroup", "channel"):
         is_reply_to_bot = (
-            update.message.reply_to_message and 
-            update.message.reply_to_message.from_user and
-            update.message.reply_to_message.from_user.id == context.bot.id
+            message.reply_to_message and
+            message.reply_to_message.from_user and
+            message.reply_to_message.from_user.id == context.bot.id
         )
         is_mention = f"@{bot_username}" in user_text if bot_username else False
         
@@ -2790,11 +3631,35 @@ async def chat_handler(
         allowed, reason = check_rate_limit(str(user_id))
         if not allowed:
             await safe_reply_text(
-                update.message,
+                message,
                 f"⏳ {reason}\nПопробуйте через минуту."
             )
             return
         record_request(str(user_id))
+
+    if _looks_like_capabilities_query(user_text):
+        await message.chat.send_action(action=ChatAction.TYPING)
+        response_text = await _build_capabilities_response(is_admin(user_id))
+
+        parallel_mind.get_or_create_context(
+            chat_id=chat_id,
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+        )
+        parallel_mind.add_message(chat_id, "user", user_text)
+        parallel_mind.add_message(chat_id, "assistant", response_text)
+
+        last_messages[user_id] = {
+            "query": user_text,
+            "response": response_text,
+            "context": {"capabilities": True},
+        }
+
+        for chunk in split_message(response_text):
+            await message.reply_text(chunk)
+        return
+
     
     # ═══════════════════════════════════════════════════════════════════
     # 🧬 СОЗДАНИЕ ОРГАНОВ — проверяем хештеги ДО всех остальных систем
@@ -2822,7 +3687,7 @@ async def chat_handler(
         asyncio.create_task(create_organ_background(update, clean_text))
         
         await safe_reply_text(
-            update.message,
+            message,
             "🧬 Обнаружен запрос на создание нового органа!\n"
             "Начинаю процесс выращивания... Это займёт несколько секунд."
         )
@@ -2833,15 +3698,88 @@ async def chat_handler(
     chat_context = parallel_mind.get_or_create_context(
         chat_id=chat_id,
         user_id=user_id,
-        username=update.effective_user.username,
-        first_name=update.effective_user.first_name
+        username=username,
+        first_name=first_name,
     )
     
     # Обновляем информацию пользователя в auth_system если авторизован
-    if auth_system.is_authorized(user_id, update.effective_user.username):
-        auth_system.update_user_info(user_id, update.effective_user.first_name)
+    if auth_system.is_authorized(user_id, username):
+        auth_system.update_user_info(user_id, first_name)
     
     # Сохраняем сообщение пользователя в контекст
+    # ?? Дизамбигуация аббревиатур (пример из реальной переписки: "КП")
+    _PENDING_ABBREV_KEY = "_neira_pending_abbrev"
+    _PENDING_ABBREV_TTL_SECONDS = 10 * 60
+
+    pending_abbrev: dict[str, Any] | None = None
+    if context.chat_data is not None:
+        raw_pending = context.chat_data.get(_PENDING_ABBREV_KEY)
+        if isinstance(raw_pending, dict):
+            pending_abbrev = raw_pending
+
+    if pending_abbrev is not None:
+        try:
+            pending_user_id = int(pending_abbrev.get("user_id", 0) or 0)
+        except (TypeError, ValueError):
+            pending_user_id = 0
+
+        # В группах/каналах pending относится к конкретному пользователю
+        if pending_user_id and pending_user_id != user_id:
+            pending_abbrev = None
+
+    if pending_abbrev is not None:
+        try:
+            created_ts = float(pending_abbrev.get("created_ts", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            created_ts = 0.0
+
+        if created_ts and (time.time() - created_ts) > _PENDING_ABBREV_TTL_SECONDS:
+            if context.chat_data is not None:
+                context.chat_data.pop(_PENDING_ABBREV_KEY, None)
+            pending_abbrev = None
+
+    if pending_abbrev is not None:
+        abbreviation = str(pending_abbrev.get("abbreviation") or "").strip()
+        original_text = str(pending_abbrev.get("original_text") or "").strip()
+        raw_options = pending_abbrev.get("options") or []
+        options: tuple[str, ...] = tuple(str(x) for x in raw_options if x)
+
+        if abbreviation and original_text and options:
+            chosen = _parse_abbreviation_choice(user_text, options)
+            if chosen:
+                user_text = _apply_abbreviation_expansion(original_text, abbreviation, chosen)
+                parallel_mind.set_abbreviation_expansion(chat_id, abbreviation, chosen)
+                if context.chat_data is not None:
+                    context.chat_data.pop(_PENDING_ABBREV_KEY, None)
+            else:
+                question = _build_abbreviation_clarification_question(abbreviation, options)
+                await safe_reply_text(message, f"Не поняла выбор.\n\n{question}", parse_mode=None)
+                return
+        else:
+            if context.chat_data is not None:
+                context.chat_data.pop(_PENDING_ABBREV_KEY, None)
+            pending_abbrev = None
+
+    if pending_abbrev is None:
+        ambiguous = _find_ambiguous_abbreviation(user_text)
+        if ambiguous:
+            abbreviation, options = ambiguous
+            saved = parallel_mind.get_abbreviation_expansion(chat_id, abbreviation)
+            if saved:
+                user_text = _apply_abbreviation_expansion(user_text, abbreviation, saved)
+            else:
+                question = _build_abbreviation_clarification_question(abbreviation, options)
+                if context.chat_data is not None:
+                    context.chat_data[_PENDING_ABBREV_KEY] = {
+                        "abbreviation": abbreviation,
+                        "options": list(options),
+                        "original_text": user_text,
+                        "user_id": user_id,
+                        "created_ts": time.time(),
+                    }
+                await safe_reply_text(message, question, parse_mode=None)
+                return
+
     parallel_mind.add_message(chat_id, "user", user_text)
     
     # ═══════════════════════════════════════════════════════════════════
@@ -2870,7 +3808,7 @@ async def chat_handler(
                     neira_analysis=ethical_ctx.reasoning,
                     proposed_action="Требуется решение создателя",
                     risk_assessment=f"{ethical_ctx.risk_level.name}",
-                    user_context={'user_id': user_id, 'username': update.effective_user.username}
+                    user_context={"user_id": user_id, "username": username}
                 )
                 ethical_override = (
                     "Твой вопрос важен, и я хочу ответить правильно. "
@@ -2912,10 +3850,10 @@ async def chat_handler(
     
     # Если есть ethical override — отвечаем им
     if ethical_override:
-        await update.message.chat.send_action(action=ChatAction.TYPING)
+        await message.chat.send_action(action=ChatAction.TYPING)
         parallel_mind.add_message(chat_id, "assistant", ethical_override)
         for chunk in split_message(ethical_override):
-            await update.message.reply_text(chunk)
+            await message.reply_text(chunk)
         return
     # ═══════════════════════════════════════════════════════════════════
     
@@ -2975,7 +3913,7 @@ async def chat_handler(
             if best_organ and confidence >= 0.6:
                 logging.info(f"🧬 ExecutableOrgan: {best_organ.name} (confidence={confidence:.2f})")
                 
-                await update.message.chat.send_action(action=ChatAction.TYPING)
+                await message.chat.send_action(action=ChatAction.TYPING)
                 
                 # Выполняем через орган
                 result, organ_id, record_id = organ_registry.process_command(user_text)
@@ -2997,7 +3935,7 @@ async def chat_handler(
                 
                 # Отправляем ответ
                 for chunk in split_message(result):
-                    await update.message.reply_text(chunk)
+                    await message.reply_text(chunk)
                 
                 logging.info(f"🧬 Орган {organ_id} обработал запрос (confidence={confidence:.2f})")
                 return  # Ответили через орган, LLM не нужен
@@ -3010,7 +3948,7 @@ async def chat_handler(
     autonomous_response = try_autonomous_response(user_text, user_id)
     if autonomous_response:
         # Быстрый ответ без LLM!
-        await update.message.chat.send_action(action=ChatAction.TYPING)
+        await message.chat.send_action(action=ChatAction.TYPING)
         
         # Сохраняем для feedback системы
         last_messages[user_id] = {
@@ -3024,7 +3962,7 @@ async def chat_handler(
         
         # Отправляем ответ
         for chunk in split_message(autonomous_response):
-            await update.message.reply_text(chunk)
+            await message.reply_text(chunk)
         
         return  # Ответили автономно, LLM не нужен
     
@@ -3078,7 +4016,11 @@ async def chat_handler(
             )
 
             should_fallback_to_legacy = (
-                (CORTEX_MODE == "auto" and not result.llm_used and is_cortex_placeholder_response(full_response))
+                (
+                    CORTEX_MODE == "auto"
+                    and not result.llm_used
+                    and is_cortex_placeholder_response(full_response, user_text=user_text)
+                )
                 or templates_disabled
             )
             
@@ -3118,7 +4060,7 @@ async def chat_handler(
                 # Если резонанс низкий и рекомендован ритуал — добавляем фрагмент Софии
                 if rhythm_check.get("ritual_needed"):
                     ritual_text = rhythm_check["ritual_text"]
-                    await safe_reply_text(update.message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
+                    await safe_reply_text(message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
                     logging.info(f"🌸 Ритуал восстановления: резонанс={rhythm_check['resonance']:.2f}")
                 
                 # Логируем переключение режима
@@ -3143,13 +4085,13 @@ async def chat_handler(
                     parts = split_message(response_to_send)
                     for part in parts:
                         if part.strip():
-                            await safe_reply_text(update.message, part)
+                            await safe_reply_text(message, part)
                     
                     # Сохраняем в контекст
                     parallel_mind.add_message(chat_id, "assistant", response_to_send)
                     
                     # === Phase 1: Сохраняем ответ для обучения ===
-                    if result.llm_used:
+                    if result.llm_used and _should_store_llm_response(user_text, result.intent.value):
                         store_llm_response_for_learning(user_text, response_to_send, success=True)
                     
                     # 📝 Сохраняем для emoji feedback
@@ -3205,13 +4147,13 @@ async def chat_handler(
                             f"{result.latency_ms:.0f}ms{llm_marker}"
                         )
                         await safe_reply_text(
-                            update.message,
+                            message,
                             f"__{meta_info}__",
                             parse_mode=ParseMode.MARKDOWN,
                         )
                 else:
                     await safe_reply_text(
-                        update.message,
+                        message,
                         "🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос.",
                     )
                 
@@ -3227,13 +4169,13 @@ async def chat_handler(
     # === LEGACY ПУТЬ: Через NeiraWrapper ===
     # (Проверка #создай_орган теперь в начале chat_handler)
     
-    status_msg: Message | None = await safe_reply_text(update.message, "🔄 Начинаю обработку...")
+    status_msg: Message | None = await safe_reply_text(message, "🔄 Начинаю обработку...")
 
     async with processing_lock:
         try:
             last_stage = ""
             full_response = ""
-            async for chunk in neira_wrapper.process_stream(user_text):
+            async for chunk in _iterate_stream_with_timeouts(neira_wrapper.process_stream(user_text)):
                 if chunk.type == "stage":
                     stage_name = format_stage(chunk.stage)
                     if stage_name != last_stage:
@@ -3256,7 +4198,7 @@ async def chat_handler(
                     # Защита от пустого ответа
                     if not chunk.content or not chunk.content.strip():
                         await safe_reply_text(
-                            update.message,
+                            message,
                             "🤔 Извини, не смогла сформулировать ответ. Попробуй переформулировать вопрос.",
                         )
                         return
@@ -3279,7 +4221,7 @@ async def chat_handler(
                     # Если резонанс низкий и рекомендован ритуал
                     if rhythm_check.get("ritual_needed"):
                         ritual_text = rhythm_check["ritual_text"]
-                        await safe_reply_text(update.message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
+                        await safe_reply_text(message, f"_{ritual_text}_", parse_mode=ParseMode.MARKDOWN)
                         logging.info(f"🌸 Ритуал восстановления (legacy): резонанс={rhythm_check['resonance']:.2f}")
                     
                     # Логируем переключение режима
@@ -3302,7 +4244,7 @@ async def chat_handler(
                     parts = split_message(response_to_send)
                     for part in parts:
                         if part.strip():  # Отправляем только непустые части
-                            await safe_reply_text(update.message, part)
+                            await safe_reply_text(message, part)
                 elif chunk.type == "error":
                     if status_msg:
                         try:
@@ -3310,7 +4252,7 @@ async def chat_handler(
                             return
                         except (TimedOut, NetworkError):
                             pass
-                    await safe_reply_text(update.message, f"❌ Ошибка: {chunk.content}")
+                    await safe_reply_text(message, f"❌ Ошибка: {chunk.content}")
                     return
             
             # Сохраняем ответ Neira в контекст
@@ -3318,7 +4260,8 @@ async def chat_handler(
                 parallel_mind.add_message(chat_id, "assistant", full_response)
                 
                 # === Phase 1: Сохраняем для обучения ===
-                store_llm_response_for_learning(user_text, full_response, success=True)
+                if _should_store_llm_response(user_text):
+                    store_llm_response_for_learning(user_text, full_response, success=True)
                 
                 # 📝 Сохраняем для emoji feedback
                 last_messages[user_id] = {
@@ -3331,6 +4274,26 @@ async def chat_handler(
                 # Если LLM описывает создание органа — создаём его реально
                 # await _detect_and_create_organ_from_response(update, full_response)
 
+        except asyncio.TimeoutError:
+            logging.warning(
+                "Timeout в streaming-ответе (chunk=%ss total=%ss)",
+                _STREAM_CHUNK_TIMEOUT_SEC,
+                _STREAM_TOTAL_TIMEOUT_SEC,
+            )
+            if status_msg:
+                try:
+                    await status_msg.edit_text(
+                        "⏳ Я подвисла на генерации. Попробуй ещё раз или короче запрос."
+                    )
+                    return
+                except (TimedOut, NetworkError):
+                    pass
+            await safe_reply_text(
+                message,
+                "⏳ Я подвисла на генерации. Попробуй ещё раз или короче запрос.",
+            )
+            store_llm_response_for_learning(user_text, "", success=False)
+            return
         except Exception as exc:
             logging.exception("Сбой при обработке сообщения")
             if status_msg:
@@ -3339,7 +4302,7 @@ async def chat_handler(
                     return
                 except (TimedOut, NetworkError):
                     pass
-            await safe_reply_text(update.message, f"❌ Ошибка: {exc}")
+            await safe_reply_text(message, f"❌ Ошибка: {exc}")
 
 
 @require_auth
@@ -3360,8 +4323,8 @@ async def organ_mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "manual": "👤 Ручной: создание только по запросу администратора"
             }
             
-            await update.message.reply_text(
-                f"🎛️ **Текущий режим создания органов:**\n\n"
+            await safe_reply_text(update.message,
+                f"🎛️ *Текущий режим создания органов:*\n\n"
                 f"{mode_descriptions.get(current_mode, current_mode)}\n\n"
                 "Изменить режим:\n"
                 "`/organ_mode auto` — автоматический\n"
@@ -3408,7 +4371,7 @@ async def show_context_command(update: Update, context: ContextTypes.DEFAULT_TYP
         content_preview = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
         lines.append(f"{role_emoji} {content_preview}")
     
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
 @require_auth
@@ -3465,7 +4428,7 @@ async def rhythm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         lines.append("_Переключений ещё не было_")
     
-    await update.message.reply_text(
+    await safe_reply_text(update.message,
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -3504,7 +4467,7 @@ async def autonomy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if organ_system:
             lines.append(f"\n*Органы:* {len(organ_system.organs)}")
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3565,7 +4528,7 @@ async def mirror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"💬 _{reflection['self_narrative']}_"
         ]
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3628,6 +4591,10 @@ async def run_generated_cell_command(update: Update, context: ContextTypes.DEFAU
             instance = loader.get_cell_instance(cell_name)
 
         if not instance:
+            missing_deps = list(getattr(loader, "last_missing_deps", []) or [])
+            if missing_deps:
+                await _prompt_dependency_install(update.message, cell_name, missing_deps, source="run")
+                return
             await update.message.reply_text(f"❌ Не удалось загрузить клетку: {cell_name}")
             return
 
@@ -3660,6 +4627,10 @@ async def run_generated_cell_command(update: Update, context: ContextTypes.DEFAU
             else:
                 result = await loop.run_in_executor(None, lambda: instance.process(arg_text))
         except Exception as e:
+            missing_module = _extract_missing_module_name(e)
+            if missing_module:
+                await _prompt_dependency_install(update.message, cell_name, [missing_module], source="run")
+                return
             await update.message.reply_text(f"❌ Ошибка выполнения: {e}")
             # Log failure metric
             try:
@@ -3811,7 +4782,7 @@ async def journal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         for tip in tips:
             lines.append(f"  💡 {tip}")
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3842,19 +4813,19 @@ async def creative_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             
             if form == "haiku":
                 work = engine.create_haiku()
-                await update.message.reply_text(f"🎋 *Хайку*\n\n{work.content}", parse_mode=ParseMode.MARKDOWN)
+                await safe_reply_text(update.message, f"🎋 *Хайку*\n\n{work.content}", parse_mode=ParseMode.MARKDOWN)
             elif form in ["thought", "мысль"]:
                 work = engine.create_aphorism()
                 await update.message.reply_text(f"💭 {work.content}")
             elif form in ["story", "история"]:
                 work = engine.create_micro_story()
-                await update.message.reply_text(f"📖 *{work.title}*\n\n{work.content}", parse_mode=ParseMode.MARKDOWN)
+                await safe_reply_text(update.message, f"📖 *{work.title}*\n\n{work.content}", parse_mode=ParseMode.MARKDOWN)
             elif form in ["dream", "сон"]:
                 work = engine.create_dream()
                 await update.message.reply_text(f"🌙 {work.content}")
             elif form in ["riddle", "загадка"]:
                 work, answer = engine.create_riddle()
-                await update.message.reply_text(f"{work.content}\n\n||Ответ: {answer}||", parse_mode=ParseMode.MARKDOWN_V2)
+                await safe_reply_text(update.message, f"{work.content}\n\n||Ответ: {answer}||", parse_mode=ParseMode.MARKDOWN_V2)
             else:
                 await update.message.reply_text(
                     "Доступные формы:\n"
@@ -3881,7 +4852,7 @@ async def creative_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         lines.append("\n_Используй /creative haiku или /creative thought_")
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -4053,7 +5024,7 @@ async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             for rec in patterns["recommendations"]:
                 text += f"• {rec['suggestion']}\n"
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await safe_reply_text(update.message, text, parse_mode=ParseMode.MARKDOWN)
 
 
 @require_auth
@@ -4088,7 +5059,7 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 percentage = (count / stats['total_requests'] * 100) if stats['total_requests'] > 0 else 0
                 lines.append(f"  • {strategy}: {count} ({percentage:.0f}%)")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         return
     
     action = context.args[0].lower()
@@ -4110,7 +5081,7 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         for tier, coverage in stats['pathways']['coverage'].items():
             lines.append(f"  • {tier}: {coverage}")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "pathways":
         # Список pathways
@@ -4134,7 +5105,7 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(neira_cortex.pathways.pathways) > 20:
             lines.append(f"\n_...и ещё {len(neira_cortex.pathways.pathways) - 20}_")
         
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await safe_reply_text(update.message, "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     
     elif action == "test" and len(context.args) > 1:
         # Тестирование
@@ -4154,7 +5125,7 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         tier_info = f" [{result.pathway_tier.value}]" if result.pathway_tier else ""
         
-        await update.message.reply_text(
+        await safe_reply_text(update.message,
             f"🧪 *Тест:* {test_input}\n\n"
             f"🤖 *Ответ:* {result.response}\n\n"
             f"📊 *Метаданные:*\n"
@@ -4177,6 +5148,58 @@ async def cortex_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # === Bootstrap ===
+_BOT_COMMAND_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+
+
+def _sanitize_bot_command(raw: str) -> str | None:
+    """
+    Вход: произвольный триггер команды без ведущего '/'.
+    Выход: безопасная команда для Telegram (1..32, латиница/цифры/_, начинается с буквы).
+    Edge cases: кириллица → транслит; пустая/сломанная строка → None.
+    Почему: python-telegram-bot валидирует команды и падает на кириллице (ValueError).
+    """
+    if not isinstance(raw, str):
+        return None
+    token = raw.strip().split()[0] if raw.strip() else ""
+    if not token:
+        return None
+
+    # Частые русские префиксы: делаем читаемые алиасы.
+    if token.startswith("улучшение_"):
+        token = "improve_" + token[len("улучшение_"):]
+
+    # Простой транслит RU→EN для команд (без внешних зависимостей).
+    ru_map = {
+        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh",
+        "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+        "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts",
+        "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu",
+        "я": "ya",
+    }
+    normalized: list[str] = []
+    for ch in token:
+        lower = ch.lower()
+        if lower in ru_map:
+            repl = ru_map[lower]
+            normalized.append(repl.upper() if ch.isupper() else repl)
+            continue
+        if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ("0" <= ch <= "9") or ch == "_":
+            normalized.append(ch)
+        else:
+            normalized.append("_")
+
+    safe = "".join(normalized)
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    if not safe:
+        return None
+    if not safe[0].isalpha():
+        safe = f"cmd_{safe}"
+    safe = safe[:32]
+    if _BOT_COMMAND_RE.match(safe):
+        return safe
+    return None
+
+
 def build_application(network: TelegramNetworkConfig | None = None) -> Application:
     """Настраивает Telegram-приложение."""
     if not BOT_TOKEN:
@@ -4191,6 +5214,15 @@ def build_application(network: TelegramNetworkConfig | None = None) -> Applicati
         builder = builder.base_url(network.base_url)
     if network.proxy_url:
         builder = builder.proxy_url(network.proxy_url).get_updates_proxy_url(network.proxy_url)
+
+    # Увеличиваем пул соединений, чтобы избежать httpx.PoolTimeout при параллельных отправках.
+    max_connections_raw = os.getenv("NEIRA_TG_MAX_CONNECTIONS", "").strip()
+    try:
+        max_connections = int(max_connections_raw) if max_connections_raw else 40
+    except ValueError:
+        max_connections = 40
+    max_connections = max(1, min(max_connections, 1000))
+    builder = builder.connection_pool_size(max_connections).get_updates_connection_pool_size(max_connections)
 
     builder = (
         builder
@@ -4217,15 +5249,24 @@ def build_application(network: TelegramNetworkConfig | None = None) -> Applicati
                 cmds = meta.get("command_triggers") or []
                 for cmd in cmds:
                     if isinstance(cmd, str) and cmd.startswith("/"):
-                        cmd_name = cmd[1:].split()[0]
+                        raw_cmd_name = cmd[1:].split()[0]
+                        cmd_name = _sanitize_bot_command(raw_cmd_name)
+                        if not cmd_name:
+                            logging.warning("Пропускаю невалидную Telegram-команду: %s", raw_cmd_name)
+                            continue
                         try:
                             loop = asyncio.get_event_loop()
                             # Добавляем обработчик в loop thread-safe
-                            loop.call_soon_threadsafe(lambda cn=cmd_name: app.add_handler(CommandHandler(cn, run_generated_cell_command)))
-                            logging.info("Hot-registered command for organ: %s", cmd_name)
-                        except Exception:
+                            loop.call_soon_threadsafe(
+                                lambda cn=cmd_name: app.add_handler(CommandHandler(cn, run_generated_cell_command))
+                            )
+                            if cmd_name != raw_cmd_name:
+                                logging.info("Hot-registered command alias: %s -> %s", raw_cmd_name, cmd_name)
+                            else:
+                                logging.info("Hot-registered command for organ: %s", cmd_name)
+                        except (RuntimeError, ValueError):
                             logging.exception("Не удалось hot-register команду: %s", cmd)
-            except Exception:
+            except (AttributeError, TypeError):
                 logging.exception("Ошибка в обработчике события organ_created")
 
         event_bus.subscribe("organ_created", _register_meta)
@@ -4263,12 +5304,17 @@ def build_application(network: TelegramNetworkConfig | None = None) -> Applicati
     app.add_handler(CommandHandler("organs", organs_command))
     app.add_handler(CommandHandler("grow", grow_command))
     app.add_handler(CommandHandler("organ_mode", organ_mode_command))
+    app.add_handler(CommandHandler("deps", deps_command))
+    app.add_handler(CommandHandler("deps_install", deps_install_command))
+    app.add_handler(CommandHandler("deps_cancel", deps_cancel_command))
     app.add_handler(CommandHandler("code", code_command))
+    app.add_handler(CommandHandler("tkp", tkp_command))
     
     # Изображения (v0.6)
     app.add_handler(CommandHandler("imagine", imagine_command))
     app.add_handler(CommandHandler("vision", vision_status_command))
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    app.add_handler(MessageHandler(filters.VOICE, voice_handler))
     
     # Админ-команды
     app.add_handler(CommandHandler("admin", admin_command))
@@ -4282,20 +5328,25 @@ def build_application(network: TelegramNetworkConfig | None = None) -> Applicati
 
     # Регистрация обработчиков для сгенерированных клеток (по /run_<name> и #name)
     try:
-        import os, json
+        import json
         from cell_factory import CELL_REGISTRY_FILE
 
-        if os.path.exists(CELL_REGISTRY_FILE):
-            with open(CELL_REGISTRY_FILE, "r", encoding="utf-8") as f:
+        registry_path = Path(CELL_REGISTRY_FILE)
+        if registry_path.exists():
+            with registry_path.open("r", encoding="utf-8") as f:
                 _reg = json.load(f)
             for meta in _reg:
                 for cmd in meta.get("command_triggers", []) or []:
                     if isinstance(cmd, str) and cmd.startswith("/"):
-                        cmd_name = cmd[1:].split()[0]
+                        raw_cmd_name = cmd[1:].split()[0]
+                        cmd_name = _sanitize_bot_command(raw_cmd_name)
+                        if not cmd_name:
+                            logging.debug("Пропускаю невалидную Telegram-команду из реестра: %s", raw_cmd_name)
+                            continue
                         try:
                             app.add_handler(CommandHandler(cmd_name, run_generated_cell_command))
-                        except Exception:
-                            logging.debug(f"Не удалось зарегистрировать команду: {cmd}")
+                        except (RuntimeError, ValueError):
+                            logging.debug("Не удалось зарегистрировать команду: %s", cmd)
 
         # Общий hashtag handler (#name)
         app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^#\\w+"), hashtag_handler))
@@ -4456,3 +5507,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+

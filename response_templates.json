@@ -40,6 +40,18 @@
       "description": "Представление кода с объяснением",
       "allow_random_order": false,
       "require_all_fragments": true
+    },
+    "capabilities_full": {
+      "id": "capabilities_full",
+      "name": "Описание возможностей",
+      "structure": [
+        "capabilities_overview"
+      ],
+      "mode": "template",
+      "category": "capabilities",
+      "description": "Короткое описание функционала и отсылка к /help",
+      "allow_random_order": false,
+      "require_all_fragments": true
     }
   }
 }

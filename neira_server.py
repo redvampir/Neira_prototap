@@ -20,6 +20,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, TYPE_CHECKING
 
+# Загружаем .env как можно раньше, чтобы настройки применялись ко всем модулям.
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -236,7 +245,7 @@ DEFAULT_EVOLUTION_MIN_REQUESTS = 30
 DEFAULT_EVOLUTION_AUTONOMY_THRESHOLD = 70
 DEFAULT_EVOLUTION_MIN_INTERVAL_SEC = 1800
 DEFAULT_LLM_TIMEOUT_SEC = 600
-DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY = "ollama"
+DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY = "mistralrs,lmstudio,ollama"
 DEFAULT_OFFLINE_OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_OFFLINE_OLLAMA_NUM_CTX = 2048
 DEFAULT_OFFLINE_OLLAMA_NUM_GPU = 0
@@ -406,12 +415,15 @@ class NeiraServer:
             os.environ.setdefault("NEIRA_WEB_SEARCH_ENABLED", "0")
             os.environ.setdefault("NEIRA_WEB_SEARCH_HTML_FALLBACK", "0")
             os.environ.setdefault("NEIRA_ENABLE_WEB", "0")
-            os.environ["LLM_PROVIDER_PRIORITY"] = DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY
+            os.environ.setdefault("LLM_PROVIDER_PRIORITY", DEFAULT_OFFLINE_LLM_PROVIDER_PRIORITY)
             os.environ["NEIRA_OLLAMA_MODEL"] = DEFAULT_OFFLINE_OLLAMA_MODEL
             os.environ["NEIRA_MAX_RESPONSE_TOKENS"] = str(DEFAULT_MAX_RESPONSE_TOKENS)
             os.environ.setdefault("NEIRA_OLLAMA_NUM_CTX", str(DEFAULT_OFFLINE_OLLAMA_NUM_CTX))
             os.environ.setdefault("NEIRA_OLLAMA_NUM_GPU", str(DEFAULT_OFFLINE_OLLAMA_NUM_GPU))
-            os.environ["NEIRA_DISABLE_OLLAMA"] = "0" if self._offline_allow_local_llm else "1"
+            os.environ.setdefault(
+                "NEIRA_DISABLE_OLLAMA",
+                "0" if self._offline_allow_local_llm else "1",
+            )
         self._cortex_use_llm = (not self._offline_mode) or self._offline_allow_local_llm
         self._llm_timeout_sec = _env_int("NEIRA_LLM_TIMEOUT_SEC", DEFAULT_LLM_TIMEOUT_SEC, min_value=0)
         self._offline_learning_enabled = _env_flag("NEIRA_OFFLINE_LEARNING_ENABLED", True)

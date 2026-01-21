@@ -14,6 +14,7 @@ import os
 import sys
 import importlib
 import importlib.util
+import re
 from typing import List, Dict, Optional, Any, Type
 from dataclasses import dataclass
 import json
@@ -41,6 +42,8 @@ class DynamicCellLoader:
         self.memory = memory
         self.loaded_cells: Dict[str, LoadedCell] = {}
         self.registry: List[GeneratedCell] = []
+        self.last_error: Optional[str] = None
+        self.last_missing_deps: List[str] = []
 
         # Загружаем реестр
         self.load_registry()
@@ -76,6 +79,8 @@ class DynamicCellLoader:
 
     def import_cell_from_file(self, filepath: str) -> Optional[LoadedCell]:
         """Импортировать клетку из файла"""
+        self.last_error = None
+        self.last_missing_deps = []
         try:
             # Получаем имя модуля из пути
             module_name = os.path.splitext(os.path.basename(filepath))[0]
@@ -121,9 +126,35 @@ class DynamicCellLoader:
             print(f"✅ Загружена клетка: {loaded.cell_name} ({loaded.class_name})")
             return loaded
 
-        except Exception as e:
-            print(f"❌ Ошибка импорта {filepath}: {e}")
+        except ModuleNotFoundError as e:
+            missing = self._extract_missing_module_name(e)
+            if missing:
+                self.last_missing_deps = [missing]
+            self.last_error = str(e)
+            print(f"? Ошибка импорта {filepath}: {e}")
             return None
+        except ImportError as e:
+            missing = self._extract_missing_module_name(e)
+            if missing:
+                self.last_missing_deps = [missing]
+            self.last_error = str(e)
+            print(f"? Ошибка импорта {filepath}: {e}")
+            return None
+        except Exception as e:
+            self.last_error = str(e)
+            print(f"? Ошибка импорта {filepath}: {e}")
+            return None
+
+    @staticmethod
+    def _extract_missing_module_name(error: BaseException) -> Optional[str]:
+        """Извлечь имя отсутствующего модуля из ImportError."""
+        name = getattr(error, "name", None)
+        if isinstance(name, str) and name:
+            return name.split(".")[0]
+        match = re.search(r"No module named ['\\\"]([^'\\\"]+)['\\\"]", str(error))
+        if match:
+            return match.group(1).split(".")[0]
+        return None
 
     def load_all_active_cells(self):
         """Загрузить все активные клетки из реестра"""

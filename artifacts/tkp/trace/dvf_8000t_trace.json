@@ -1,0 +1,51 @@
+[
+  {
+    "parameter": "Размер рабочего стола",
+    "value": "ø650 x 600",
+    "unit": "a",
+    "source_page": 30,
+    "source_text": "Table | Table size | mm (inch) | ø650 x 600 | ø650 x 500 | ø800 x 680 | ø800 | ø800 x 680 | ø800"
+  },
+  {
+    "parameter": "Скорость",
+    "value": "12000 r/min {18000 r/min}",
+    "unit": "a",
+    "source_page": 5,
+    "source_text": "FANUC | Max. spindle speed | 12000 r/min {18000 r/min} | 18000 r/min | 10000 r/min"
+  },
+  {
+    "parameter": "Мощность",
+    "value": "22/18.5 (29.5/24.8)",
+    "unit": "a",
+    "source_page": 30,
+    "source_text": "Max. spindle power | kW (Hp) | 22/18.5 (29.5/24.8) | 35/25 (46.9/33.5)"
+  },
+  {
+    "parameter": "Крутящий момент",
+    "value": "155 N·m {226Nm, Heidenhain only for skiving} (114.4 ft-lbs {166.8 ft-lbs})",
+    "unit": "a",
+    "source_page": 5,
+    "source_text": "Max. spindle torque | 155 N·m {155 N·m} (114.4 ft-lbs {114.4 ft-lbs}) | 155 N·m {226Nm, Heidenhain only for skiving} (114.4 ft-lbs {166.8 ft-lbs}) | 426 N·m (314.4 ft-lbs)"
+  },
+  {
+    "parameter": "Быстрый ход по оси X",
+    "value": "(114.4 {166.8}) (114.4 {166.8}) 45 (1771.7)",
+    "unit": "a",
+    "source_page": 30,
+    "source_text": "Feedrate | Rapid traverse | Xaxis | (ft-lbs) m/min | (114.4 {166.8}) (114.4 {166.8}) 45 (1771.7) | 36 (1417.3)"
+  },
+  {
+    "parameter": "Быстрый ход по оси Y",
+    "value": "(114.4 {166.8}) (114.4 {166.8}) 45 (1771.7)",
+    "unit": "a",
+    "source_page": 30,
+    "source_text": "Feedrate | Rapid traverse | Xaxis | (ft-lbs) m/min | (114.4 {166.8}) (114.4 {166.8}) 45 (1771.7) | 36 (1417.3)"
+  },
+  {
+    "parameter": "Быстрый ход по оси Z",
+    "value": "(114.4 {166.8}) (114.4 {166.8}) 45 (1771.7)",
+    "unit": "a",
+    "source_page": 30,
+    "source_text": "Feedrate | Rapid traverse | Xaxis | (ft-lbs) m/min | (114.4 {166.8}) (114.4 {166.8}) 45 (1771.7) | 36 (1417.3)"
+  }
+]

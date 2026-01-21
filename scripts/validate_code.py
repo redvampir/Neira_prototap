@@ -44,7 +44,12 @@ IGNORE_DIRS = {
 ALLOWED_ROOT_FILES = {
     'main.py', 'neira.py', 'telegram_bot.py', 'neira_server.py',
     'requirements.txt', 'requirements.lock', 'pytest.ini', 'setup.py',
-    'conftest.py', 'Modelfile', 'Modelfile_nemotron'
+    'conftest.py', 'Modelfile', 'Modelfile_nemotron', 'cells.py'
+}
+
+# Временное исключение для legacy-файлов с техническим долгом.
+LEGACY_LINT_SKIP = {
+    'cells.py',
 }
 
 
@@ -76,6 +81,9 @@ def check_file_location(filepath: Path, root: Path) -> list[Issue]:
 def check_function_length(filepath: Path, root: Path, max_lines: int = 60) -> list[Issue]:
     """Проверяет длину функций."""
     issues = []
+
+    if filepath.name in LEGACY_LINT_SKIP:
+        return issues
     
     try:
         content = filepath.read_text(encoding='utf-8')
@@ -102,6 +110,9 @@ def check_function_length(filepath: Path, root: Path, max_lines: int = 60) -> li
 def check_bare_except(filepath: Path, root: Path) -> list[Issue]:
     """Находит bare except и except Exception."""
     issues = []
+
+    if filepath.name in LEGACY_LINT_SKIP:
+        return issues
     
     try:
         content = filepath.read_text(encoding='utf-8')

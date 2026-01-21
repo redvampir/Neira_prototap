@@ -5,7 +5,10 @@ WebSocket тест для Harry Potter игры
 import asyncio
 import json
 import websockets
+import pytest
 
+
+@pytest.mark.asyncio
 async def test_harry_potter_game():
     """Тестируем создание Harry Potter игры через Cell Router"""
     uri = "ws://localhost:8001/ws/chat"

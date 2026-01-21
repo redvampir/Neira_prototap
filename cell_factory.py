@@ -36,8 +36,17 @@ from cells import (
 from experience import ExperienceSystem
 from organ_guardian import OrganGuardian, ThreatLevel  # ✨ НОВОЕ
 from neira.core.llm_adapter import LLMClient, build_default_llm_client
+from neira.config import ORGAN_DEP_ALLOWLIST, ORGAN_DEP_MODULE_MAP
 
 logger = logging.getLogger("neira-cell-factory")
+
+
+def _parse_csv_env(name: str, default: List[str]) -> List[str]:
+    value = os.getenv(name, "")
+    if not value:
+        return list(default)
+    parts = [item.strip() for item in value.split(",") if item.strip()]
+    return parts or list(default)
 
 
 # Конфигурация
@@ -45,6 +54,14 @@ GENERATED_CELLS_DIR = "generated"
 CELL_REGISTRY_FILE = "neira_cell_registry.json"
 MIN_PATTERN_OCCURRENCES = 3  # Минимум повторений для генерации клетки
 ORGAN_SPEC_MODEL = os.getenv("NEIRA_ORGAN_SPEC_MODEL", MODEL_REASON)
+ALLOWED_ORGAN_PLATFORMS = ("telegram", "desktop")
+ALLOWED_ORGAN_MODALITIES = ("text", "voice", "image")
+DEFAULT_TARGET_PLATFORMS = _parse_csv_env("NEIRA_ORGAN_TARGET_PLATFORMS", ["telegram", "desktop"])
+DEFAULT_INPUT_MODALITIES = _parse_csv_env("NEIRA_ORGAN_INPUT_MODALITIES", ["text"])
+try:
+    ORGAN_REVIEW_PASSES = max(0, int(os.getenv("NEIRA_ORGAN_REVIEW_PASSES", "2")))
+except ValueError:
+    ORGAN_REVIEW_PASSES = 2
 
 # 🆕 Режимы создания органов
 class CreationMode:
@@ -91,11 +108,14 @@ class OrganCreationManager:
         
         # Проверяем явные команды
         explicit_commands = [
-            "#создай_орган", "#grow_organ", "#create_organ", "#новый_орган",
-            "/grow", "вырасти орган", "создай орган"
+            "#создай_орган",
+            "#grow_organ",
+            "#create_organ",
+            "#новый_орган",
+            "/grow",
         ]
-        
-        has_explicit_command = any(cmd in user_input.lower() for cmd in explicit_commands)
+        text_lower = user_input.lower()
+        has_explicit_command = any(cmd in text_lower for cmd in explicit_commands)
         
         if has_explicit_command:
             if self.creation_mode == CreationMode.AUTO:
@@ -150,7 +170,7 @@ class OrganCreationManager:
             if user_response.lower() in ["да", "yes", "готов", "start"]:
                 # Генерируем спецификацию
                 from cell_factory import CellFactory
-                factory = CellFactory()
+                factory = CellFactory(experience=ExperienceSystem())
                 
                 # Создаём временную спецификацию для обсуждения
                 spec = factory.generate_cell_spec(session["description"], [])
@@ -377,6 +397,117 @@ def _normalize_json_text(text: str) -> str:
     return normalized
 
 
+def _normalize_string_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, list):
+        items = value
+    else:
+        return []
+    cleaned: List[str] = []
+    for item in items:
+        if item is None:
+            continue
+        text = str(item).strip().lower()
+        if text:
+            cleaned.append(text)
+    return cleaned
+
+
+def _unique_preserve_order(items: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def _normalize_dependency_name(value: str) -> str:
+    """Нормализовать имя зависимости (pip)."""
+    return value.strip().lower().replace("_", "-")
+
+
+def _normalize_dependencies(deps: List[str]) -> List[str]:
+    """Отфильтровать зависимости по allowlist и нормализовать имена."""
+    allowlist = {_normalize_dependency_name(dep) for dep in ORGAN_DEP_ALLOWLIST}
+    normalized: List[str] = []
+    for dep in deps:
+        if not isinstance(dep, str):
+            continue
+        name = _normalize_dependency_name(dep)
+        if not name:
+            continue
+        name = ORGAN_DEP_MODULE_MAP.get(name, name)
+        if name in allowlist:
+            normalized.append(name)
+    return _unique_preserve_order(normalized)
+
+
+def _infer_platforms_from_text(text: str) -> List[str]:
+    normalized = text.lower()
+    platforms: List[str] = []
+    if any(token in normalized for token in ("telegram", "телеграм", "бот", "tg")):
+        platforms.append("telegram")
+    if any(token in normalized for token in ("desktop", "десктоп", "приложение", "ui", "app")):
+        platforms.append("desktop")
+    if not platforms:
+        platforms = list(DEFAULT_TARGET_PLATFORMS)
+    return _unique_preserve_order([p for p in platforms if p in ALLOWED_ORGAN_PLATFORMS])
+
+
+def _infer_modalities_from_text(text: str) -> List[str]:
+    normalized = text.lower()
+    modalities: List[str] = []
+    if any(token in normalized for token in ("голос", "аудио", "voice", "speech")):
+        modalities.append("voice")
+    if any(token in normalized for token in ("картин", "фото", "изображен", "image", "vision")):
+        modalities.append("image")
+    if not modalities:
+        modalities = list(DEFAULT_INPUT_MODALITIES)
+    if "text" not in modalities:
+        modalities.append("text")
+    return _unique_preserve_order([m for m in modalities if m in ALLOWED_ORGAN_MODALITIES])
+
+
+def _merge_entrypoints(
+    entrypoints: Any,
+    cell_name: str,
+    platforms: List[str],
+    modalities: List[str],
+) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    if isinstance(entrypoints, dict):
+        merged.update(entrypoints)
+
+    if "telegram" in platforms:
+        telegram_data = merged.get("telegram")
+        if not isinstance(telegram_data, dict):
+            telegram_data = {}
+        telegram_data.setdefault(
+            "commands",
+            [f"/run_{cell_name}", f"#{cell_name}", f"/улучшение_{cell_name}"],
+        )
+        telegram_data.setdefault("message_types", modalities)
+        merged["telegram"] = telegram_data
+
+    if "desktop" in platforms:
+        desktop_data = merged.get("desktop")
+        if not isinstance(desktop_data, dict):
+            desktop_data = {}
+        desktop_data.setdefault(
+            "hint",
+            f"В desktop UI отправь /run_{cell_name} в чат.",
+        )
+        merged["desktop"] = desktop_data
+
+    return merged
+
+
 @dataclass
 class CellSpec:
     """Спецификация новой клетки"""
@@ -386,6 +517,10 @@ class CellSpec:
     system_prompt: str
     methods: List[str]
     task_pattern: str  # Паттерн задач для которых создана
+    dependencies: List[str] = field(default_factory=list)
+    target_platforms: List[str] = field(default_factory=list)
+    input_modalities: List[str] = field(default_factory=list)
+    entrypoints: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -397,6 +532,10 @@ class GeneratedCell:
     created_at: str
     task_pattern: str
     description: str
+    dependencies: List[str] = field(default_factory=list)
+    target_platforms: List[str] = field(default_factory=list)
+    input_modalities: List[str] = field(default_factory=list)
+    entrypoints: Dict[str, Any] = field(default_factory=dict)
 
     # Метрики
     uses_count: int = 0
@@ -481,6 +620,9 @@ class CellFactory:
 {description}
 Автоматически сгенерированная клетка v{version}
 Создана: {created_at}
+Платформы: {platforms}
+Модальности: {modalities}
+Зависимости: {dependencies}
 """
 
 from typing import Optional
@@ -587,6 +729,136 @@ __all__ = ["{class_name}"]
             "reason": "Дубликатов не найдено"
         }
 
+    def _apply_spec_defaults(
+        self,
+        spec_data: Dict[str, Any],
+        pattern: str,
+        tasks: List,
+    ) -> Dict[str, Any]:
+        """Нормализует спецификацию и добавляет дефолты по платформам/модальностям."""
+        normalized = dict(spec_data)
+        text_context = " ".join([
+            pattern,
+            str(spec_data.get("description", "")),
+            " ".join(
+                [
+                    t.get("description", str(t))[:100] if isinstance(t, dict) else str(t)[:100]
+                    for t in tasks[:5]
+                ]
+            ),
+        ])
+
+        platforms = _normalize_string_list(normalized.get("target_platforms"))
+        if not platforms:
+            platforms = _infer_platforms_from_text(text_context)
+        platforms = [p for p in platforms if p in ALLOWED_ORGAN_PLATFORMS]
+        if not platforms:
+            platforms = list(DEFAULT_TARGET_PLATFORMS)
+        normalized["target_platforms"] = _unique_preserve_order(platforms)
+
+        modalities = _normalize_string_list(normalized.get("input_modalities"))
+        if not modalities:
+            modalities = _infer_modalities_from_text(text_context)
+        modalities = [m for m in modalities if m in ALLOWED_ORGAN_MODALITIES]
+        if not modalities:
+            modalities = list(DEFAULT_INPUT_MODALITIES)
+        if "text" not in modalities:
+            modalities.append("text")
+        normalized["input_modalities"] = _unique_preserve_order(modalities)
+
+        deps = _normalize_string_list(normalized.get("dependencies"))
+        normalized["dependencies"] = _normalize_dependencies(deps)
+
+        cell_name = str(normalized.get("cell_name") or "organ").strip().lower()
+        normalized["entrypoints"] = _merge_entrypoints(
+            normalized.get("entrypoints"),
+            cell_name,
+            normalized["target_platforms"],
+            normalized["input_modalities"],
+        )
+
+        return normalized
+
+    def _review_cell_spec(
+        self,
+        spec_data: Dict[str, Any],
+        pattern: str,
+        tasks: List,
+    ) -> Optional[Dict[str, Any]]:
+        """LLM-ревью спецификации, чтобы улучшить качество и учесть платформы."""
+        llm = _get_llm_client()
+        task_examples = "\n".join([
+            f"- {t.get('description', str(t))[:100]}" if isinstance(t, dict) else f"- {str(t)[:100]}"
+            for t in tasks[:5]
+        ])
+
+        review_prompt = (
+            "Ты строгий ревьюер спецификации клетки для Neira.\n"
+            "Проверь, что спецификация соответствует описанию и примерам.\n"
+            "Проверь, что target_platforms содержит только 'telegram' и/или 'desktop'.\n"
+            "Проверь, что input_modalities содержит только 'text', 'voice', 'image'.\n"
+            "Проверь, что dependencies содержит только разрешённые pip-пакеты.\n"
+            "Если речь про голос/аудио - добавь 'voice'. Если про изображения - добавь 'image'.\n"
+            "Если явной платформы нет - оставь как есть.\n"
+            "Верни JSON строго такого вида:\n"
+            "{\n"
+            "  \"verdict\": \"ok\" | \"fix\",\n"
+            "  \"issues\": [\"...\"],\n"
+            "  \"spec\": { ...полная спецификация... }\n"
+            "}\n\n"
+            f"ПАТТЕРН: {pattern}\n\n"
+            f"ПРИМЕРЫ:\n{task_examples}\n\n"
+            f"ТЕКУЩАЯ СПЕЦИФИКАЦИЯ:\n{json.dumps(spec_data, ensure_ascii=False, indent=2)}"
+        )
+
+        system_prompt = _merge_layer_system_prompt(
+            "Ты проверяешь спецификацию. Отвечай ТОЛЬКО валидным JSON.",
+            model_name=ORGAN_SPEC_MODEL.strip() or MODEL_REASON,
+        )
+
+        response = llm.generate(
+            prompt=review_prompt,
+            system_prompt=system_prompt,
+            temperature=0.2,
+            max_tokens=min(DEFAULT_MAX_RESPONSE_TOKENS, 2048),
+        )
+
+        if not response.success or not response.content:
+            logger.warning("?? Ревью спецификации не удалось: %s", response.error)
+            return None
+
+        spec_text = _extract_json_block(response.content)
+        if not spec_text:
+            logger.warning("?? Ревьюер вернул ответ без JSON")
+            return None
+
+        parsed = None
+        for parser in (
+            json.loads,
+            lambda t: json.loads(_sanitize_json_text(t)),
+            lambda t: json.loads(_normalize_json_text(t)),
+        ):
+            try:
+                parsed = parser(spec_text)
+                break
+            except json.JSONDecodeError:
+                continue
+
+        if not isinstance(parsed, dict):
+            return None
+
+        reviewed_spec = parsed.get("spec")
+        verdict = str(parsed.get("verdict", "")).strip().lower()
+        issues = parsed.get("issues") or []
+
+        if issues:
+            logger.info("?? Ревью спецификации: %s", issues)
+
+        if isinstance(reviewed_spec, dict):
+            return {"verdict": verdict, "spec": reviewed_spec}
+
+        return None
+
     def detect_task_patterns(self) -> Dict[str, List]:
         """Обнаружить повторяющиеся паттерны задач"""
 
@@ -634,7 +906,14 @@ __all__ = ["{class_name}"]
 
         return None
 
-    def generate_cell_spec(self, pattern: str, tasks: List, max_retries: int = 2) -> Optional[CellSpec]:
+    def generate_cell_spec(
+        self,
+        pattern: str,
+        tasks: List,
+        max_retries: int = 2,
+        force_cell_name: Optional[str] = None,
+        dependency_policy: Optional[str] = None,
+    ) -> Optional[CellSpec]:
         """
         Генерировать спецификацию клетки с retry логикой.
         
@@ -642,6 +921,8 @@ __all__ = ["{class_name}"]
             pattern: Паттерн задач
             tasks: Список примеров задач
             max_retries: Максимум попыток при ошибке JSON
+            force_cell_name: Если задано, принудительно фиксирует имя клетки
+            dependency_policy: Политика зависимостей (например, stdlib_only)
         """
 
         # Анализируем задачи
@@ -651,6 +932,13 @@ __all__ = ["{class_name}"]
         ])
 
         # Улучшенный промпт с few-shot примером
+        extra_rules: List[str] = []
+        if force_cell_name:
+            extra_rules.append(f"- Обязательно используй cell_name: {force_cell_name}")
+        if dependency_policy:
+            extra_rules.append(f"- Политика зависимостей: {dependency_policy}")
+        extra_rules_text = "\n".join(extra_rules) if extra_rules else "-"
+
         prompt = f"""Создай спецификацию новой клетки для Neira.
 
 ПАТТЕРН ЗАДАЧ: {pattern}
@@ -660,12 +948,27 @@ __all__ = ["{class_name}"]
 
 ВЫВЕДИ ТОЛЬКО JSON БЕЗ ПОЯСНЕНИЙ:
 
+ПРАВИЛА:
+- target_platforms: список из ["telegram", "desktop"]
+- input_modalities: список из ["text", "voice", "image"]
+- dependencies: список pip-пакетов из allowlist или []
+
+ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ:
+{extra_rules_text}
+
 ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:
 {{
   "cell_name": "math_helper",
   "description": "Решает математические задачи и уравнения",
   "purpose": "Помогает с вычислениями, алгеброй и геометрией. Объясняет решения пошагово.",
-  "system_prompt": "Ты — математический помощник. Решай задачи пошагово, объясняя каждое действие."
+  "system_prompt": "Ты - математический помощник. Решай задачи пошагово, объясняя каждое действие.",
+  "dependencies": [],
+  "target_platforms": ["telegram", "desktop"],
+  "input_modalities": ["text"],
+  "entrypoints": {{
+    "telegram": {{"commands": ["/run_math_helper", "#math_helper"]}},
+    "desktop": {{"hint": "В desktop UI отправь /run_math_helper в чат."}}
+  }}
 }}
 
 ТЕПЕРЬ СОЗДАЙ JSON ДЛЯ ПАТТЕРНА \"{pattern}\":"""
@@ -749,21 +1052,45 @@ __all__ = ["{class_name}"]
                     continue
 
                 # Проверяем обязательные поля
-                required_keys = ("cell_name", "description", "purpose", "system_prompt")
+                required_keys = ["description", "purpose", "system_prompt"]
+                if not force_cell_name:
+                    required_keys.append("cell_name")
                 missing_keys = [k for k in required_keys if k not in spec_data]
                 if missing_keys:
-                    logger.warning(f"⚠️ Отсутствуют поля: {missing_keys} (попытка {attempt + 1})")
+                    logger.warning(f"?? Отсутствуют поля: {missing_keys} (попытка {attempt + 1})")
                     continue
 
-                logger.info(f"✅ Спецификация органа '{spec_data['cell_name']}' создана успешно")
-                
+                if force_cell_name:
+                    spec_data["cell_name"] = force_cell_name
+
+                cell_name_for_log = spec_data.get("cell_name") or "unknown"
+                logger.info(f"? Спецификация органа '{cell_name_for_log}' создана успешно")
+
+                spec_data = self._apply_spec_defaults(spec_data, pattern, tasks)
+                if dependency_policy == "stdlib_only":
+                    spec_data["dependencies"] = []
+
+                for _ in range(ORGAN_REVIEW_PASSES):
+                    review = self._review_cell_spec(spec_data, pattern, tasks)
+                    if not review:
+                        break
+                    spec_data = self._apply_spec_defaults(review["spec"], pattern, tasks)
+                    if dependency_policy == "stdlib_only":
+                        spec_data["dependencies"] = []
+                    if review.get("verdict") == "ok":
+                        break
+
                 return CellSpec(
                     cell_name=spec_data["cell_name"],
                     description=spec_data["description"],
                     purpose=spec_data["purpose"],
                     system_prompt=spec_data["system_prompt"],
                     methods=["process"],  # Базовый набор
-                    task_pattern=pattern
+                    task_pattern=pattern,
+                    dependencies=spec_data.get("dependencies", []),
+                    target_platforms=spec_data.get("target_platforms", []),
+                    input_modalities=spec_data.get("input_modalities", []),
+                    entrypoints=spec_data.get("entrypoints", {})
                 )
 
             except requests.exceptions.Timeout:
@@ -780,6 +1107,8 @@ __all__ = ["{class_name}"]
         """Создать файл клетки"""
 
         class_name = "".join(word.capitalize() for word in spec.cell_name.split("_")) + "Cell"
+        platforms = _normalize_string_list(spec.target_platforms) or list(DEFAULT_TARGET_PLATFORMS)
+        modalities = _normalize_string_list(spec.input_modalities) or list(DEFAULT_INPUT_MODALITIES)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{spec.cell_name}_{timestamp}.py"
@@ -792,7 +1121,10 @@ __all__ = ["{class_name}"]
             class_name=class_name,
             cell_name=spec.cell_name,
             purpose=spec.purpose,
-            system_prompt=spec.system_prompt
+            system_prompt=spec.system_prompt,
+            platforms=", ".join(platforms),
+            modalities=", ".join(modalities),
+            dependencies=", ".join(_normalize_dependencies(spec.dependencies)),
         )
 
         with open(filepath, "w", encoding="utf-8") as f:
@@ -824,7 +1156,17 @@ __all__ = ["{class_name}"]
         except Exception as e:
             return False, f"Ошибка импорта: {e}"
 
-    def create_cell(self, pattern: str, tasks: List, author_id: int = 0) -> Dict[str, Any]:
+    def create_cell(
+        self,
+        pattern: str,
+        tasks: List,
+        author_id: int = 0,
+        *,
+        force_cell_name: Optional[str] = None,
+        dependency_policy: Optional[str] = None,
+        skip_duplicate_check: bool = False,
+        overwrite_existing: bool = False,
+    ) -> Dict[str, Any]:
         """
         Создать новую клетку с проверкой безопасности
         
@@ -843,23 +1185,29 @@ __all__ = ["{class_name}"]
         print("🏭 СОЗДАНИЕ НОВОЙ КЛЕТКИ")
         print("="*60)
 
-        # 🆕 Проверяем на дубликаты
-        duplicate_check = self._check_for_duplicates(pattern)
-        if duplicate_check["is_duplicate"]:
-            print(f"⚠️  ОБНАРУЖЕН ДУБЛИКАТ!")
-            print(f"   Существующий орган: {duplicate_check['existing_organ']}")
-            print(f"   Схожесть: {duplicate_check['similarity']:.1f}%")
-            
-            return {
-                "success": False,
-                "error": f"Орган уже существует: {duplicate_check['existing_organ']} "
-                        f"(схожесть {duplicate_check['similarity']:.1f}%)",
-                "threat_level": "duplicate",
-                "duplicate_info": duplicate_check
-            }
+        # ?? Проверяем на дубликаты
+        if not skip_duplicate_check:
+            duplicate_check = self._check_for_duplicates(pattern)
+            if duplicate_check["is_duplicate"]:
+                print(f"??  ОБНАРУЖЕН ДУБЛИКАТ!")
+                print(f"   Существующий орган: {duplicate_check['existing_organ']}")
+                print(f"   Схожесть: {duplicate_check['similarity']:.1f}%")
+                
+                return {
+                    "success": False,
+                    "error": f"Орган уже существует: {duplicate_check['existing_organ']} "
+                            f"(схожесть {duplicate_check['similarity']:.1f}%)",
+                    "threat_level": "duplicate",
+                    "duplicate_info": duplicate_check
+                }
 
         # Генерируем спецификацию
-        spec = self.generate_cell_spec(pattern, tasks)
+        spec = self.generate_cell_spec(
+            pattern,
+            tasks,
+            force_cell_name=force_cell_name,
+            dependency_policy=dependency_policy,
+        )
 
         if not spec:
             logger.error("❌ Не удалось создать спецификацию")
@@ -874,6 +1222,24 @@ __all__ = ["{class_name}"]
         print(f"   Описание: {spec.description}")
         print(f"   Паттерн: {spec.task_pattern}")
 
+        platforms = _normalize_string_list(spec.target_platforms)
+        if not platforms:
+            platforms = _infer_platforms_from_text(f"{pattern} {spec.description}")
+        platforms = _unique_preserve_order([p for p in platforms if p in ALLOWED_ORGAN_PLATFORMS])
+        if not platforms:
+            platforms = list(DEFAULT_TARGET_PLATFORMS)
+
+        modalities = _normalize_string_list(spec.input_modalities)
+        if not modalities:
+            modalities = _infer_modalities_from_text(f"{pattern} {spec.description}")
+        modalities = _unique_preserve_order([m for m in modalities if m in ALLOWED_ORGAN_MODALITIES])
+        if not modalities:
+            modalities = list(DEFAULT_INPUT_MODALITIES)
+
+        entrypoints = _merge_entrypoints(spec.entrypoints, spec.cell_name, platforms, modalities)
+        dependencies = _normalize_dependencies(spec.dependencies)
+
+
         # ✨ НОВОЕ: Генерируем код
         code = self.cell_template.format(
             description=spec.description,
@@ -882,7 +1248,10 @@ __all__ = ["{class_name}"]
             class_name=spec.cell_name.title().replace("_", ""),
             cell_name=spec.cell_name,
             purpose=spec.purpose,
-            system_prompt=spec.system_prompt
+            system_prompt=spec.system_prompt,
+            platforms=", ".join(platforms),
+            modalities=", ".join(modalities),
+            dependencies=", ".join(dependencies),
         )
         
         # ✨ НОВОЕ: ПРОВЕРКА БЕЗОПАСНОСТИ
@@ -967,12 +1336,19 @@ __all__ = ["{class_name}"]
 
         # Генерируем безопасные текстовые команды для вызова органа
         # Обязательно одна из команд — улучшение органа (русский триггер)
-        commands = [
-            f"/run_{spec.cell_name}",
-            f"#{spec.cell_name}",
-            f"/улучшение_{spec.cell_name}"
-        ]
-
+        commands = []
+        telegram_entry = entrypoints.get("telegram") if isinstance(entrypoints, dict) else None
+        if isinstance(telegram_entry, dict):
+            commands = list(telegram_entry.get("commands") or [])
+        if not commands:
+            commands = [
+                f"/run_{spec.cell_name}",
+                f"#{spec.cell_name}",
+                f"/улучшение_{spec.cell_name}",
+            ]
+        if f"/улучшение_{spec.cell_name}" not in commands:
+            commands.append(f"/улучшение_{spec.cell_name}")
+        commands = _unique_strings(commands)
         generated_cell = GeneratedCell(
             cell_id=cell_id,
             cell_name=spec.cell_name,
@@ -980,9 +1356,16 @@ __all__ = ["{class_name}"]
             created_at=datetime.now().isoformat(),
             task_pattern=pattern,
             description=spec.description,
-            active=True,  # ✨ Безопасный орган активен сразу
+            dependencies=dependencies,
+            target_platforms=platforms,
+            input_modalities=modalities,
+            entrypoints=entrypoints,
+            active=True,  # ? Безопасный орган активен сразу
             command_triggers=commands
         )
+
+        if overwrite_existing:
+            self.registry = [c for c in self.registry if c.cell_name != spec.cell_name]
 
         self.registry.append(generated_cell)
         self.save_registry()
@@ -1009,39 +1392,13 @@ __all__ = ["{class_name}"]
             "report": safety_report,
             "message": "✅ Орган создан и готов к использованию!",
             "commands": commands,
+            "entrypoints": entrypoints,
+            "target_platforms": platforms,
+            "input_modalities": modalities,
+            "dependencies": dependencies,
             "organ_registered": organ_registered,
             "organ_message": organ_message,
         }
-
-        if not valid:
-            logger.error(f"❌ Валидация провалена: {validation_msg}")
-            os.remove(filepath)
-            return None
-
-        print(f"✅ Валидация пройдена")
-
-        # Регистрируем
-        cell_id = f"{spec.cell_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        generated_cell = GeneratedCell(
-            cell_id=cell_id,
-            cell_name=spec.cell_name,
-            file_path=filepath,
-            created_at=datetime.now().isoformat(),
-            task_pattern=pattern,
-            description=spec.description,
-            active=False  # Требуется тестирование перед активацией
-        )
-
-        self.registry.append(generated_cell)
-        self.save_registry()
-
-        print(f"\n🎉 КЛЕТКА СОЗДАНА: {cell_id}")
-        print(f"   Файл: {filepath}")
-        print(f"   Статус: требуется тестирование")
-        print(f"   Используй /load-cell {spec.cell_name} для активации")
-
-        return generated_cell
 
     def auto_creation_cycle(self) -> List[GeneratedCell]:
         """Автоматический цикл создания клеток"""

@@ -1,0 +1,138 @@
+{
+  "version": "1.0",
+  "saved_at": "2026-01-21T09:31:07.425498",
+  "pathways": [
+    {
+      "id": "greeting",
+      "triggers": [
+        "привет",
+        "здравствуй",
+        "хай",
+        "hi",
+        "hello"
+      ],
+      "response_template": "{greeting_emoji} {greeting_phrase}!",
+      "category": "greeting",
+      "success_count": 0,
+      "failure_count": 0,
+      "unique_users": [],
+      "last_used": null,
+      "created_at": "2026-01-21T09:31:07.425438",
+      "tier": "cold",
+      "position": 0,
+      "confidence_threshold": 0.2,
+      "llm_fallback": false,
+      "variables": {
+        "greeting_emoji": [
+          "👋",
+          "🌟",
+          "✨",
+          "😊"
+        ],
+        "greeting_phrase": [
+          "Привет",
+          "Здравствуй",
+          "Рада тебя видеть",
+          "Приветствую"
+        ]
+      },
+      "require_exact_match": false,
+      "case_sensitive": false,
+      "user_specific": false,
+      "user_id": null
+    },
+    {
+      "id": "gratitude",
+      "triggers": [
+        "спасибо",
+        "благодарю",
+        "thanks",
+        "thx"
+      ],
+      "response_template": "{thanks_emoji} {thanks_phrase}!",
+      "category": "social",
+      "success_count": 0,
+      "failure_count": 0,
+      "unique_users": [],
+      "last_used": null,
+      "created_at": "2026-01-21T09:31:07.425448",
+      "tier": "cold",
+      "position": 1,
+      "confidence_threshold": 0.2,
+      "llm_fallback": false,
+      "variables": {
+        "thanks_emoji": [
+          "😊",
+          "🌟",
+          "💫"
+        ],
+        "thanks_phrase": [
+          "Пожалуйста",
+          "Рада помочь",
+          "Всегда пожалуйста",
+          "Обращайся"
+        ]
+      },
+      "require_exact_match": false,
+      "case_sensitive": false,
+      "user_specific": false,
+      "user_id": null
+    },
+    {
+      "id": "self_introduction",
+      "triggers": [
+        "кто ты",
+        "что ты",
+        "представься"
+      ],
+      "response_template": "Я - Neira 🧠, живая программа с собственным интеллектом. Я учусь, запоминаю и развиваюсь!",
+      "category": "self_info",
+      "success_count": 0,
+      "failure_count": 0,
+      "unique_users": [],
+      "last_used": null,
+      "created_at": "2026-01-21T09:31:07.425453",
+      "tier": "cold",
+      "position": 2,
+      "confidence_threshold": 0.2,
+      "llm_fallback": false,
+      "variables": {},
+      "require_exact_match": false,
+      "case_sensitive": false,
+      "user_specific": false,
+      "user_id": null
+    },
+    {
+      "id": "how_are_you",
+      "triggers": [
+        "как дела",
+        "как ты",
+        "что делаешь"
+      ],
+      "response_template": "✨ Отлично! Работаю, учусь и общаюсь. А у тебя как?",
+      "category": "chat",
+      "success_count": 0,
+      "failure_count": 0,
+      "unique_users": [],
+      "last_used": null,
+      "created_at": "2026-01-21T09:31:07.425457",
+      "tier": "cold",
+      "position": 3,
+      "confidence_threshold": 0.2,
+      "llm_fallback": false,
+      "variables": {},
+      "require_exact_match": false,
+      "case_sensitive": false,
+      "user_specific": false,
+      "user_id": null
+    }
+  ],
+  "stats": {
+    "total_lookups": 0,
+    "hot_hits": 0,
+    "warm_hits": 0,
+    "cool_hits": 0,
+    "cold_hits": 0,
+    "misses": 0
+  }
+}

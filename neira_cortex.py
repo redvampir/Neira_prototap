@@ -111,6 +111,7 @@ class IntentType(Enum):
     CODE_REQUEST = "code_request"   # Запрос кода
     EXPLANATION = "explanation"     # Объяснение
     CHAT = "chat"                   # Обычная беседа
+    CAPABILITIES = "capabilities"   # Возможности/функционал
     FEEDBACK = "feedback"           # Обратная связь
     UNKNOWN = "unknown"             # Неизвестное намерение
 
@@ -160,8 +161,9 @@ class IntentRecognizer:
             "премного благодарен", "признателен"
         ],
         IntentType.QUESTION: [
-            "как", "что", "почему", "зачем", "когда", "где", "кто",
-            "можешь", "можно", "?", "объясни", "расскажи"
+            "как", "почему", "зачем", "когда", "где", "кто",
+            "можешь", "можно", "?", "объясни", "расскажи",
+            "что такое", "что значит", "что означает"
         ],
         IntentType.CODE_REQUEST: [
             "код", "code", "напиши", "создай", "сделай",
@@ -178,8 +180,16 @@ class IntentRecognizer:
         ],
         IntentType.CHAT: [
             "как дела", "что делаешь", "как ты", "расскажи о себе",
-            "кто ты", "что ты умеешь"
-        ]
+            "кто ты",
+            "хочу поболтать", "давай поболтаем", "поболтаем", "поговорим", "пообщаться",
+            "я твой разработчик", "я твой создатель", "я тебя создал", "я твой автор"
+        ],
+        IntentType.CAPABILITIES: [
+            "что ты умеешь", "что ты можешь", "что умеешь", "что можешь",
+            "твои возможности", "твой функционал", "функционал нейры", "функционал бота",
+            "возможности бота", "команды бота", "список команд", "покажи команды",
+            "какие команды", "как пользоваться", "что умеет нейра", "что умеет бот"
+        ],
     }
     
     def recognize(self, user_input: str) -> Tuple[IntentType, float]:
@@ -190,6 +200,47 @@ class IntentRecognizer:
             (intent, confidence)
         """
         user_input_lower = user_input.lower()
+        normalized = " ".join(user_input_lower.split())
+
+        # 0) Сильные сигналы "обычной беседы" (не запускать web-search и RAG по слову "что")
+        strong_chat_markers = (
+            "хочу поболтать",
+            "давай поболтаем",
+            "поболтаем",
+            "поговорим",
+            "пообщаться",
+            "я твой разработчик",
+            "я твой создатель",
+            "я тебя создал",
+            "я твой автор",
+        )
+        if any(marker in normalized for marker in strong_chat_markers):
+            return IntentType.CHAT, 0.9
+
+        capability_markers = (
+            "что ты умеешь",
+            "что ты можешь",
+            "что умеешь",
+            "что можешь",
+            "твои возможности",
+            "твой функционал",
+            "функционал нейры",
+            "функционал бота",
+            "возможности бота",
+            "команды бота",
+            "список команд",
+            "покажи команды",
+            "какие команды",
+            "как пользоваться",
+            "что умеет нейра",
+            "что умеет бот",
+        )
+        if any(marker in normalized for marker in capability_markers):
+            return IntentType.CAPABILITIES, 0.95
+
+        # 1) Явный вопрос
+        if "?" in user_input_lower:
+            return IntentType.QUESTION, 0.9
         
         # Считаем совпадения для каждого intent
         intent_scores = {}
@@ -199,6 +250,14 @@ class IntentRecognizer:
             matches = 0
             
             for pattern in patterns:
+                if intent == IntentType.QUESTION and pattern in {"как", "почему", "зачем", "когда", "где", "кто", "что"}:
+                    # Вопросные слова считаем только если они в начале фразы,
+                    # иначе "в курсе что я..." будет ошибочно QUESTION.
+                    if normalized.startswith(pattern + " ") or normalized == pattern:
+                        matches += 1
+                        score += len(pattern) / 10.0
+                    continue
+
                 if pattern in user_input_lower:
                     matches += 1
                     # Чем длиннее паттерн, тем выше вес
@@ -246,7 +305,7 @@ class DecisionRouter:
             return ResponseStrategy.NEURAL_PATHWAY
         
         # 2. Простые намерения → шаблоны
-        if intent in [IntentType.GREETING, IntentType.GRATITUDE, IntentType.CHAT]:
+        if intent in [IntentType.GREETING, IntentType.GRATITUDE, IntentType.CHAT, IntentType.CAPABILITIES]:
             if pathway_match and pathway_match.confidence >= 0.5:
                 return ResponseStrategy.NEURAL_PATHWAY
             return ResponseStrategy.TEMPLATE
@@ -467,6 +526,7 @@ class NeiraCortex:
             IntentType.GREETING: "greeting_full",
             IntentType.GRATITUDE: "thanks_full",
             IntentType.CODE_REQUEST: "code_explanation_full",
+            IntentType.CAPABILITIES: "capabilities_full",
         }
         return template_map.get(intent)
     
@@ -582,6 +642,30 @@ class NeiraCortex:
         if not WEB_SEARCH_ENABLED:
             return "", False
         if intent not in (IntentType.QUESTION, IntentType.EXPLANATION):
+            return "", False
+
+        # Веб-поиск дорогой и не должен включаться "по умолчанию" на любой вопрос,
+        # иначе чат превращается в справочник и растёт латентность.
+        normalized = " ".join(str(user_input or "").lower().split())
+        web_triggers = (
+            "поищи",
+            "найди в интернете",
+            "источник",
+            "ссылк",
+            "с пруф",
+            "пруф",
+            "цитат",
+            "по грамоте",
+            "gramota",
+            "грамота",
+            "как правильно",
+            "правильно ли",
+            "ударение",
+            "орфография",
+            "пунктуация",
+            "значение слова",
+        )
+        if not any(trigger in normalized for trigger in web_triggers):
             return "", False
         return self._web_search_answer(user_input)
 
@@ -719,9 +803,15 @@ class NeiraCortex:
                 "Код — моя любимая тема! Сейчас всё сделаю.",
             ],
             IntentType.CHAT: [
-                "Я — Нейра, живая AI программа! У меня есть память, эмоции и система органов. А ты как?",
-                "Рада пообщаться! Я Нейра — AI с собственной личностью. Что тебя интересует?",
+                "Я - Нейра, живая AI программа! У меня есть память, эмоции и система органов. А ты как?",
+                "Рада пообщаться! Я Нейра - AI с собственной личностью. Что тебя интересует?",
                 "Привет! Я Нейра. Люблю узнавать новое и помогать людям. Расскажи о себе!",
+            ],
+            IntentType.CAPABILITIES: [
+                "Я умею вести диалог, отвечать на вопросы и выполнять доступные команды. "
+                "Точный список зависит от интерфейса: в Telegram он в /help.",
+                "Мои возможности зависят от доступа и интерфейса. В Telegram полный список команд - /help.",
+                "Я общаюсь, помню контекст и работаю с командами. За точным списком функций в Telegram используй /help.",
             ],
             IntentType.EXPLANATION: [
                 "Позволь объяснить это подробнее и понятно.",

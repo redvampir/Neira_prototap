@@ -10,8 +10,8 @@
         "feelings",
         "game_dev"
       ],
-      "last_activated": "2026-01-04T07:45:23.595302",
-      "activation_count": 8
+      "last_activated": "2026-01-21T09:45:45.155943",
+      "activation_count": 10
     },
     "feelings": {
       "topic_id": "feelings",
@@ -22,8 +22,8 @@
       "inhibited_by": [
         "game_dev"
       ],
-      "last_activated": "2026-01-04T07:45:23.596067",
-      "activation_count": 8
+      "last_activated": "2026-01-21T09:45:45.156802",
+      "activation_count": 10
     },
     "game_dev": {
       "topic_id": "game_dev",
@@ -32,8 +32,8 @@
       "activation": 0.44999999999999996,
       "base_activation": 0.3,
       "inhibited_by": [],
-      "last_activated": "2026-01-04T07:45:23.596833",
-      "activation_count": 8
+      "last_activated": "2026-01-21T09:45:45.157397",
+      "activation_count": 10
     }
   }
 }

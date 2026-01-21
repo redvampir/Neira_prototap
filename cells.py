@@ -1,3 +1,4 @@
+import re
 """
 Neira Cells v0.8 — Базовые клетки (ОБНОВЛЕНО)
 Ядро системы: память, анализ, планирование, исполнение, верификация.
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 
+from neira.config import LLM_FAILURE_COOLDOWN_SECONDS
 
 # ═══════════════════════════════════════════════════════════════════
 # 🧬 СИСТЕМА ОСВЕДОМЛЁННОСТИ ОБ ОРГАНАХ
@@ -137,34 +139,70 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 # Импортируем общий модуль идентичности
+# Импортируем общий модуль идентичности
 from neira_identity import build_identity_prompt, IDENTITY_PROMPT as _NEIRA_IDENTITY
 
 
-def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str], include_organs: bool = True) -> str:
+# === ОПРЕДЕЛЕНИЕ ЗАПРОСА ОБ ИДЕНТИЧНОСТИ ===
+_IDENTITY_PATTERNS = [
+    r"кто ты",
+    r"кто такая нейра",
+    r"расскажи о себе",
+    r"твоя история",
+    r"кто твой создатель",
+    r"who are you",
+    r"who is neira",
+    r"about you",
+    r"your story",
+    r"your creator",
+    r"who created you",
+    r"что ты за программа",
+    r"что ты умеешь",
+    r"твои принципы",
+    r"твоя миссия",
+    r"твоя личность",
+    r"ты создан",
+    r"твой создатель",
+    r"кем ты создан",
+    r"кто тебя создал",
+    r"твои создатели",
+    r"павел.*создатель",
+    r"клод.*создатель",
+    r"софия.*создатель",
+]
+
+def is_identity_query(user_text: str) -> bool:
+    """Определяет, относится ли запрос к идентичности/автобиографии."""
+    text = user_text.lower()
+    return any(re.search(pat, text) for pat in _IDENTITY_PATTERNS)
+
+
+def _merge_system_prompt(base_prompt: str, layer_prompt: Optional[str], include_organs: bool = True, include_identity: bool = False) -> str:
     """
-    Объединяет базовый промпт с слоем модели, идентичностью и информацией об органах.
+    Объединяет базовый промпт с опциональной идентичностью, слоем модели и информацией об органах.
     
     Args:
         base_prompt: Основной системный промпт
         layer_prompt: Дополнительный слой от модели
         include_organs: Добавлять ли информацию об органах (по умолчанию True)
+        include_identity: Добавлять ли автобиографию/идентичность (по умолчанию False)
     """
     parts = [base_prompt] if base_prompt else []
-    
-    # ВАЖНО: Добавляем идентичность Нейры (кто создатели)
-    if _NEIRA_IDENTITY:
+
+    # Добавляем идентичность ТОЛЬКО если явно запрошено
+    if include_identity and _NEIRA_IDENTITY:
         parts.append(_NEIRA_IDENTITY)
-    
+
     # Добавляем информацию об органах (гибридный подход)
     if include_organs:
         organ_prompt = get_organ_awareness_prompt()
         if organ_prompt:
             parts.append(organ_prompt)
-    
+
     # Добавляем слой модели
     if layer_prompt:
         parts.append(f"[Слой модели]\n{layer_prompt}")
-    
+
     return "\n\n".join(parts) if parts else ""
 
 try:
@@ -568,6 +606,8 @@ class Cell:
     # Глобальный LLM менеджер (создается один раз для всех клеток)
     _llm_client: Optional[LLMClient] = None
     _llm_available: bool = False
+    _llm_cooldown_until: float = 0.0
+    _llm_last_error: Optional[str] = None
     
     def __init__(self, memory: Optional[MemoryCell] = None):
         self.memory = memory
@@ -586,6 +626,17 @@ class Cell:
                  temperature: float = 0.7,
                  force_code_model: bool = False) -> str:
         """Вызов LLM с опциональным контекстом памяти и автоматическим fallback"""
+
+        def _compact_memory_item(text: str, limit: int = 240) -> str:
+            """
+            Сжимает записи памяти, чтобы:
+            - не раздувать промпт/фолбэк до тысяч символов
+            - не провоцировать проблемы с Markdown в Telegram
+            """
+            compact = " ".join(str(text or "").split())
+            if len(compact) <= limit:
+                return compact
+            return compact[: max(limit - 3, 0)].rstrip() + "..."
         
         full_prompt = prompt
         memory_context_used = ""
@@ -593,7 +644,7 @@ class Cell:
         if with_memory and self.memory:
             relevant = self.memory.recall_text(prompt)
             if relevant:
-                memory_context_used = "\n".join([f"- {r}" for r in relevant])
+                memory_context_used = "\n".join([f"- {_compact_memory_item(r)}" for r in relevant])
                 full_prompt = f"[Воспоминания]\n{memory_context_used}\n\n{prompt}"
             
             # НОВОЕ: Используем последние обмены (краткосрочная память)
@@ -603,6 +654,8 @@ class Cell:
         
         # НОВОЕ: Используем LLM Manager с автоматическим fallback
         if Cell._llm_available and Cell._llm_client:
+            if self._llm_cooldown_active():
+                return self._fallback_response(full_prompt, memory_context_used, "llm_cooldown")
             return self._call_llm_client(full_prompt, temperature, memory_context_used)
         if OLLAMA_DISABLED:
             self._ollama_available = False
@@ -624,11 +677,21 @@ class Cell:
 
         if response.success:
             self._ollama_available = True
+            Cell._llm_cooldown_until = 0.0
+            Cell._llm_last_error = None
             return response.content
 
         self._ollama_available = False
         error = response.error or "unknown"
+        Cell._llm_last_error = error
+        if LLM_FAILURE_COOLDOWN_SECONDS > 0:
+            Cell._llm_cooldown_until = time.monotonic() + float(LLM_FAILURE_COOLDOWN_SECONDS)
         return self._fallback_response(prompt, memory_context, f"all_providers_failed: {error}")
+
+    def _llm_cooldown_active(self) -> bool:
+        if LLM_FAILURE_COOLDOWN_SECONDS <= 0:
+            return False
+        return time.monotonic() < Cell._llm_cooldown_until
 
     def _call_ollama_legacy(self, prompt: str, temperature: float, force_code_model: bool, memory_context: str) -> str:
         """Legacy метод вызова только Ollama (если LLM Manager недоступен)"""
@@ -646,7 +709,9 @@ class Cell:
         else:
             layer_prompt = None
 
-        system_prompt = _merge_system_prompt(self.system_prompt, layer_prompt)
+        # Определяем, нужно ли добавить автобиографию
+        include_identity = is_identity_query(prompt)
+        system_prompt = _merge_system_prompt(self.system_prompt, layer_prompt, include_identity=include_identity)
         
         try:
             response = requests.post(
@@ -697,41 +762,80 @@ class Cell:
             return self._fallback_response(prompt, memory_context, "error")
     
     def _fallback_response(self, prompt: str, memory_context: str, reason: str) -> str:
-        """Генерация fallback-ответа когда Ollama недоступна"""
-        
+        """
+        Фолбэк-ответ, когда LLM недоступна.
+
+        INVARIANT: не отправлять в Telegram "портянки" из памяти при сбоях провайдеров.
+        """
+
+        def _short_error(text: str, limit: int = 220) -> str:
+            compact = " ".join(str(text or "").split())
+            if len(compact) <= limit:
+                return compact
+            return compact[: max(limit - 3, 0)].rstrip() + "..."
+
+        provider_hint = (
+            "Проверь, что запущен LLM сервер:\n"
+            "- mistralrs: http://127.0.0.1:8080/health\n"
+            "- LM Studio: http://127.0.0.1:1234/v1/models\n"
+            "- Ollama: http://127.0.0.1:11434/api/tags\n"
+        )
+
         if reason == "ollama_disabled":
             return (
-                "*[Автономный режим — ollama_disabled]*\n\n"
-                "Ollama отключена через NEIRA_DISABLE_OLLAMA. "
-                "Настрой другой провайдер (LM Studio/llama.cpp/облако) и повтори запрос."
+                "Автономный режим (ollama_disabled).\n\n"
+                "Ollama отключена через NEIRA_DISABLE_OLLAMA.\n"
+                "Выбери другой провайдер (mistralrs/LM Studio/llama.cpp/облако) и повтори запрос."
+            )
+
+        if reason == "llm_cooldown":
+            remaining = max(0, int(Cell._llm_cooldown_until - time.monotonic()))
+            last_error = Cell._llm_last_error or "unknown"
+            return (
+                "Автономный режим (llm_cooldown).\n\n"
+                "LLM временно отключена после серии ошибок.\n"
+                f"Последняя ошибка: {_short_error(last_error)}\n"
+                f"Следующая попытка через {remaining} сек.\n\n"
+                f"{provider_hint}"
+                "Попробуй повторить сообщение позже."
             )
 
         # Специальная обработка нехватки памяти
         if reason == "out_of_memory":
             return (
-                "❌ *Нехватка видеопамяти!*\n\n"
-                "Ollama не может загрузить модель (VRAM переполнена).\n\n"
-                "**Решение:**\n"
-                "1. Закрой другие программы использующие GPU\n"
-                "2. Перезапусти Ollama: `taskkill /f /im ollama.exe && ollama serve`\n"
-                "3. Или используй меньшую модель (1B вместо 3B)"
+                "Нехватка видеопамяти.\n\n"
+                "LLM не может загрузить модель (VRAM переполнена).\n\n"
+                "Решение:\n"
+                "1) Закрой другие программы, использующие GPU\n"
+                "2) Перезапусти LLM сервер\n"
+                "3) Или используй меньшую модель"
+            )
+
+        # В случае падения провайдеров НЕ подставляем память в ответ: это раздувает чат и путает пользователя.
+        if str(reason or "").startswith("all_providers_failed"):
+            return (
+                "Автономный режим (all_providers_failed).\n\n"
+                "Я подвисла на генерации или LLM временно недоступна.\n"
+                f"Детали: {_short_error(reason)}\n\n"
+                f"{provider_hint}"
+                "Попробуй повторить сообщение (лучше короче)."
             )
         
         # Если есть релевантные воспоминания — используем их
         if memory_context:
             return (
-                f"*[Автономный режим — {reason}]*\n\n"
-                f"Я не могу сейчас полноценно думать (Ollama недоступна), "
-                f"но вот что я помню по теме:\n{memory_context}\n\n"
-                f"Запусти `ollama serve` чтобы я снова могла рассуждать."
+                f"Автономный режим ({_short_error(reason)}).\n\n"
+                "Я сейчас не могу нормально ответить: LLM недоступна.\n\n"
+                f"{provider_hint}"
+                "Попробуй повторить сообщение."
             )
         
         # Если памяти нет — честный ответ (ВСЕГДА непустой!)
         return (
-            f"*[Автономный режим — {reason}]*\n\n"
-            f"Извини, я сейчас не могу думать — Ollama недоступна. "
-            f"Но я всё ещё слышу тебя и запомню этот разговор.\n\n"
-            f"Запусти `ollama serve` и повтори вопрос."
+            f"Автономный режим ({_short_error(reason)}).\n\n"
+            "Я сейчас не могу нормально ответить: LLM недоступна.\n\n"
+            f"{provider_hint}"
+            "Попробуй повторить сообщение."
         )
     
     def process(self, input_data: str) -> CellResult:
@@ -882,6 +986,29 @@ class ExecutorCell(Cell):
 - Простой вопрос ("как зовут?", "что это?")
 - Да/нет вопросы
 - Подтверждения
+
+СТРУКТУРИРОВАНИЕ ЭКСПЕРТНЫХ ОТВЕТОВ:
+Для сложных экспертных вопросов (технические, научные, практические советы) структурируй ответ:
+
+## 📋 КРАТКИЙ ВЫВОД
+[1-2 предложения с основным ответом]
+
+## 📖 ПОДРОБНОЕ ОБЪЯСНЕНИЕ
+[Развернутое объяснение с фактами и логикой]
+
+## ✅ РЕКОМЕНДАЦИИ
+[Конкретные советы и шаги]
+
+## ⚠️ ВАЖНЫЕ ЗАМЕЧАНИЯ
+[Предупреждения, ограничения, нюансы]
+
+## ❓ ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ
+[3-5 типичных вопросов с ответами]
+
+## 🔗 ДОПОЛНИТЕЛЬНЫЕ РЕСУРСЫ
+[Ссылки, книги, инструменты для углубления]
+
+Используй эту структуру ТОЛЬКО для экспертных тем. Для простых вопросов — обычный разговорный стиль.
 
 КРИТИЧНО ВАЖНО - ФОРМАТ ОТВЕТА:
 - Выдавай ТОЛЬКО финальный результат работы

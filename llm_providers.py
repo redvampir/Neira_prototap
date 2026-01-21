@@ -4,6 +4,7 @@ LLM Providers v1.0 — Универсальный интерфейс для ра
 """
 
 import os
+import time
 import requests
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
@@ -77,6 +78,7 @@ class ProviderType(Enum):
     CLAUDE = "claude"
     GROQ = "groq"
     GEMINI = "gemini"
+    MISTRALRS = "mistralrs"  # mistral.rs OpenAI-compatible server
     LLAMACPP = "llamacpp"  # llama.cpp server
     LMSTUDIO = "lmstudio"  # LM Studio
 
@@ -91,13 +93,15 @@ _PROVIDER_NAME_MAP = {
     "claude": ProviderType.CLAUDE,
     "groq": ProviderType.GROQ,
     "gemini": ProviderType.GEMINI,
+    "mistralrs": ProviderType.MISTRALRS,
     "llamacpp": ProviderType.LLAMACPP,
     "lmstudio": ProviderType.LMSTUDIO,
 }
 
 _DEFAULT_PROVIDER_PRIORITY = [
-    ProviderType.OLLAMA,
+    ProviderType.MISTRALRS,
     ProviderType.LMSTUDIO,
+    ProviderType.OLLAMA,
     ProviderType.LLAMACPP,
     ProviderType.GROQ,
     ProviderType.OPENAI,
@@ -854,6 +858,150 @@ class LlamaCppProvider(LLMProvider):
         return ProviderType.LLAMACPP
 
 
+class MistralRsProvider(LLMProvider):
+    """
+    Провайдер для mistral.rs (OpenAI-совместимый HTTP server).
+
+    Примечание:
+    - mistral.rs валидирует поле `model` и может отклонять запросы при несовпадении.
+      Безопасное значение по умолчанию: `model="default"` (обходит валидацию).
+    - Эндпоинты: /health, /v1/models, /v1/chat/completions.
+    """
+
+    def __init__(
+        self,
+        model: str = "default",
+        url: str = "http://localhost:8080/v1/chat/completions",
+        api_key: str = "EMPTY",
+        timeout: int = 300,
+    ):
+        self.url = url
+        self.base_url = url.replace("/v1/chat/completions", "")
+        self.api_key = api_key
+        self.cooldown_seconds = _env_int("NEIRA_MISTRALRS_COOLDOWN_SEC", 10, min_value=0, max_value=300)
+        self._cooldown_until = 0.0
+        self._session = _create_local_session()
+        super().__init__(model, timeout)
+
+    def _check_availability(self) -> bool:
+        """Проверяем доступность mistral.rs сервера."""
+        try:
+            health_url = f"{self.base_url}/health"
+            response = self._session.get(health_url, timeout=5)
+            if response.status_code == 200:
+                self.available = True
+                return True
+
+            models_url = f"{self.base_url}/v1/models"
+            response = self._session.get(models_url, timeout=5)
+            self.available = response.status_code == 200
+            return self.available
+        except requests.exceptions.RequestException:
+            self.available = False
+            return False
+
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = DEFAULT_MAX_RESPONSE_TOKENS,
+    ) -> LLMResponse:
+        """Генерация через mistral.rs server."""
+        if not self.available:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.MISTRALRS,
+                model=self.model,
+                success=False,
+                error="mistral.rs server not available",
+            )
+
+        if self.cooldown_seconds > 0:
+            now = time.monotonic()
+            if now < self._cooldown_until:
+                return LLMResponse(
+                    content="",
+                    provider=ProviderType.MISTRALRS,
+                    model=self.model,
+                    success=False,
+                    error="mistral.rs cooldown active",
+                )
+
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            model_name = self.model.strip() if isinstance(self.model, str) else ""
+            if not model_name:
+                model_name = "default"
+
+            response = self._session.post(
+                self.url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": False,
+                    "truncate_sequence": True,
+                },
+                timeout=(5, self.timeout),
+            )
+
+            if response.status_code != 200:
+                if self.cooldown_seconds > 0 and response.status_code in {429, 503}:
+                    self._cooldown_until = time.monotonic() + float(self.cooldown_seconds)
+                return LLMResponse(
+                    content="",
+                    provider=ProviderType.MISTRALRS,
+                    model=model_name,
+                    success=False,
+                    error=f"HTTP {response.status_code}: {response.text}",
+                )
+
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            tokens = data.get("usage", {}).get("total_tokens", 0)
+
+            return LLMResponse(
+                content=content,
+                provider=ProviderType.MISTRALRS,
+                model=model_name,
+                success=True,
+                tokens_used=tokens,
+                cost=0.0,
+            )
+
+        except requests.exceptions.RequestException as exc:
+            if self.cooldown_seconds > 0:
+                self._cooldown_until = time.monotonic() + float(self.cooldown_seconds)
+            return LLMResponse(
+                content="",
+                provider=ProviderType.MISTRALRS,
+                model=self.model,
+                success=False,
+                error=str(exc),
+            )
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            return LLMResponse(
+                content="",
+                provider=ProviderType.MISTRALRS,
+                model=self.model,
+                success=False,
+                error=str(exc),
+            )
+
+    def get_provider_type(self) -> ProviderType:
+        return ProviderType.MISTRALRS
+
+
 class LMStudioProvider(LLMProvider):
     """
     Провайдер для LM Studio (OpenAI-совместимый локальный сервер)
@@ -979,6 +1127,12 @@ def _build_default_providers() -> List[LLMProvider]:
                 continue
             model = os.getenv("NEIRA_OLLAMA_MODEL", "nemotron-mini")
             providers.append(OllamaProvider(model=model))
+        elif provider_type == ProviderType.MISTRALRS:
+            url = os.getenv("NEIRA_MISTRALRS_URL", "http://localhost:8080/v1/chat/completions")
+            model = os.getenv("NEIRA_MISTRALRS_MODEL", "default")
+            api_key = os.getenv("NEIRA_MISTRALRS_API_KEY", "EMPTY")
+            timeout = _env_int("NEIRA_MISTRALRS_TIMEOUT", 30, min_value=5, max_value=600)
+            providers.append(MistralRsProvider(model=model, url=url, api_key=api_key, timeout=timeout))
         elif provider_type == ProviderType.LMSTUDIO:
             url = os.getenv("NEIRA_LMSTUDIO_URL", "http://localhost:1234/v1/chat/completions")
             model = os.getenv("NEIRA_LMSTUDIO_MODEL", "local-model")
@@ -1086,6 +1240,8 @@ class LLMManager:
         last_error = None
         
         for provider in providers_to_try:
+            if not provider.available:
+                continue
             logger.info(f"Trying {provider.get_provider_type().value} ({provider.model})...")
             layer_prompt = _MODEL_LAYERS.get_active_prompt(provider.model) if _MODEL_LAYERS else None
             effective_system_prompt = _merge_system_prompt(system_prompt, layer_prompt)

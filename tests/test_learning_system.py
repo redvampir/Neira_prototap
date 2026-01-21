@@ -6,11 +6,15 @@
 
 import asyncio
 import sys
+import pytest
+import logging
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent))
 
 
+@pytest.mark.asyncio
 async def test_file_extraction():
     """Тест извлечения из файла"""
     print("\n" + "=" * 60)
@@ -32,9 +36,11 @@ async def test_file_extraction():
         
         return True, f"Файл OK ({content.word_count} слов)"
     except Exception as e:
+        logger.exception("Ошибка в test_file_extraction: %s", e)
         return False, f"Файл: {e}"
 
 
+@pytest.mark.asyncio
 async def test_noise_filter():
     """Тест фильтра шума"""
     print("\n" + "=" * 60)
@@ -69,9 +75,11 @@ async def test_noise_filter():
         
         return True, "Фильтр шума работает"
     except Exception as e:
+        logger.exception("Ошибка в test_noise_filter: %s", e)
         return False, f"Фильтр: {e}"
 
 
+@pytest.mark.asyncio
 async def test_chunking():
     """Тест разбиения на чанки"""
     print("\n" + "=" * 60)
@@ -98,9 +106,11 @@ async def test_chunking():
         
         return True, f"Chunking OK ({len(chunks)} чанков)"
     except Exception as e:
+        logger.exception("Ошибка в test_chunking: %s", e)
         return False, f"Chunking: {e}"
 
 
+@pytest.mark.asyncio
 async def test_summary():
     """Тест создания summary"""
     print("\n" + "=" * 60)
@@ -132,9 +142,11 @@ async def test_summary():
         
         return True, "Summary OK"
     except Exception as e:
+        logger.exception("Ошибка в test_summary: %s", e)
         return False, f"Summary: {e}"
 
 
+@pytest.mark.asyncio
 async def test_learning_history():
     """Тест истории обучения"""
     print("\n" + "=" * 60)
@@ -156,9 +168,11 @@ async def test_learning_history():
         
         return True, f"История OK ({stats['total_sources']} источников)"
     except Exception as e:
+        logger.exception("Ошибка в test_learning_history: %s", e)
         return False, f"История: {e}"
 
 
+@pytest.mark.asyncio
 async def test_learn_from_file():
     """Тест полного цикла обучения из файла"""
     print("\n" + "=" * 60)
@@ -187,9 +201,11 @@ async def test_learn_from_file():
         
         return True, f"Обучение OK ({result.get('word_count', 0)} слов)"
     except Exception as e:
+        logger.exception("Ошибка в test_learn_from_file: %s", e)
         return False, f"Обучение: {e}"
 
 
+@pytest.mark.asyncio
 async def test_web_extraction():
     """Тест извлечения с веб-страницы (опционально)"""
     print("\n" + "=" * 60)
@@ -215,6 +231,7 @@ async def test_web_extraction():
     except ImportError as e:
         return None, f"Web: требуется beautifulsoup4"
     except Exception as e:
+        logger.exception("Ошибка в test_web_extraction: %s", e)
         return False, f"Web: {e}"
 
 
