@@ -63,6 +63,9 @@ MEMORY_DUPLICATE_TIME_WINDOW_HOURS: Final[int] = 24  # Окно проверки
 # Таймауты (секунды)
 LLM_DEFAULT_TIMEOUT: Final[int] = int(os.getenv("NEIRA_LLM_TIMEOUT", "60"))
 LLM_CODE_TIMEOUT: Final[int] = int(os.getenv("NEIRA_CODE_TIMEOUT", "120"))
+LLM_FAILURE_COOLDOWN_SECONDS: Final[int] = int(
+    os.getenv("NEIRA_LLM_FAILURE_COOLDOWN_SEC", "180")
+)
 
 # Токены
 LLM_MAX_RESPONSE_TOKENS: Final[int] = int(os.getenv("NEIRA_MAX_RESPONSE_TOKENS", "4096"))

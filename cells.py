@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 
+from neira.config import LLM_FAILURE_COOLDOWN_SECONDS
 
 # ═══════════════════════════════════════════════════════════════════
 # 🧬 СИСТЕМА ОСВЕДОМЛЁННОСТИ ОБ ОРГАНАХ
@@ -605,6 +606,8 @@ class Cell:
     # Глобальный LLM менеджер (создается один раз для всех клеток)
     _llm_client: Optional[LLMClient] = None
     _llm_available: bool = False
+    _llm_cooldown_until: float = 0.0
+    _llm_last_error: Optional[str] = None
     
     def __init__(self, memory: Optional[MemoryCell] = None):
         self.memory = memory
@@ -651,6 +654,8 @@ class Cell:
         
         # НОВОЕ: Используем LLM Manager с автоматическим fallback
         if Cell._llm_available and Cell._llm_client:
+            if self._llm_cooldown_active():
+                return self._fallback_response(full_prompt, memory_context_used, "llm_cooldown")
             return self._call_llm_client(full_prompt, temperature, memory_context_used)
         if OLLAMA_DISABLED:
             self._ollama_available = False
@@ -672,11 +677,21 @@ class Cell:
 
         if response.success:
             self._ollama_available = True
+            Cell._llm_cooldown_until = 0.0
+            Cell._llm_last_error = None
             return response.content
 
         self._ollama_available = False
         error = response.error or "unknown"
+        Cell._llm_last_error = error
+        if LLM_FAILURE_COOLDOWN_SECONDS > 0:
+            Cell._llm_cooldown_until = time.monotonic() + float(LLM_FAILURE_COOLDOWN_SECONDS)
         return self._fallback_response(prompt, memory_context, f"all_providers_failed: {error}")
+
+    def _llm_cooldown_active(self) -> bool:
+        if LLM_FAILURE_COOLDOWN_SECONDS <= 0:
+            return False
+        return time.monotonic() < Cell._llm_cooldown_until
 
     def _call_ollama_legacy(self, prompt: str, temperature: float, force_code_model: bool, memory_context: str) -> str:
         """Legacy метод вызова только Ollama (если LLM Manager недоступен)"""
@@ -765,12 +780,24 @@ class Cell:
             "- LM Studio: http://127.0.0.1:1234/v1/models\n"
             "- Ollama: http://127.0.0.1:11434/api/tags\n"
         )
-        
+
         if reason == "ollama_disabled":
             return (
                 "Автономный режим (ollama_disabled).\n\n"
                 "Ollama отключена через NEIRA_DISABLE_OLLAMA.\n"
                 "Выбери другой провайдер (mistralrs/LM Studio/llama.cpp/облако) и повтори запрос."
+            )
+
+        if reason == "llm_cooldown":
+            remaining = max(0, int(Cell._llm_cooldown_until - time.monotonic()))
+            last_error = Cell._llm_last_error or "unknown"
+            return (
+                "Автономный режим (llm_cooldown).\n\n"
+                "LLM временно отключена после серии ошибок.\n"
+                f"Последняя ошибка: {_short_error(last_error)}\n"
+                f"Следующая попытка через {remaining} сек.\n\n"
+                f"{provider_hint}"
+                "Попробуй повторить сообщение позже."
             )
 
         # Специальная обработка нехватки памяти
