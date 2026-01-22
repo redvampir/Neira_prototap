@@ -4175,7 +4175,7 @@ async def chat_handler(
         try:
             last_stage = ""
             full_response = ""
-            async for chunk in _iterate_stream_with_timeouts(neira_wrapper.process_stream(user_text)):
+            async for chunk in _iterate_stream_with_timeouts(neira_wrapper.process_stream(user_text, {"user_id": user_id})):
                 if chunk.type == "stage":
                     stage_name = format_stage(chunk.stage)
                     if stage_name != last_stage:

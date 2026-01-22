@@ -106,6 +106,7 @@ TKP_PARSED_DIR: Final[Path] = TKP_OUTPUT_DIR / "parsed"
 TKP_OCR_DIR: Final[Path] = TKP_OUTPUT_DIR / "ocr"
 TKP_DB_PATH: Final[Path] = TKP_OUTPUT_DIR / "tkp.sqlite3"
 TKP_IMAGES_DIR: Final[Path] = TKP_OUTPUT_DIR / "images"
+TKP_IMAGES_DB_DIR: Final[Path] = TKP_OUTPUT_DIR / "images_db"
 TKP_PARSED_SCHEMA_VERSION: Final[str] = os.getenv("NEIRA_TKP_PARSED_SCHEMA_VERSION", "3")
 
 TKP_MISSING_VALUE_TEXT: Final[str] = os.getenv(
@@ -179,6 +180,9 @@ TKP_IMAGE_OCR_TIMEOUT_SECONDS: Final[int] = int(
 )
 TKP_IMAGE_OCR_CROP_RATIO: Final[float] = float(
     os.getenv("NEIRA_TKP_IMAGE_OCR_CROP_RATIO", "0.45")
+)
+TKP_IMAGE_DB_MAX_PER_MODEL: Final[int] = int(
+    os.getenv("NEIRA_TKP_IMAGE_DB_MAX_PER_MODEL", "6")
 )
 
 # ============================================================================
@@ -273,3 +277,30 @@ LOG_TELEGRAM_FILE: Final[Path] = ARTIFACTS_DIR / "telegram_bot.log"
 
 VERSION: Final[str] = "0.8.5"
 VERSION_CODENAME: Final[str] = "Quality Guardian"
+
+# ============================================================================
+# SENSITIVE CONTENT / PRIVACY
+# ============================================================================
+# Чувствительные темы, которые требуют редактирования/блокировки при публикации
+# Если в ответе обнаруживаются эти слова — Нейра будет воздерживаться от раскрытия
+# личной медицинской информации для неназванных пользователей.
+SENSITIVE_TOPICS: Final[tuple[str, ...]] = (
+    "шизофрен",
+    "шизофрения",
+    "психоз",
+    "диагноз",
+    "психиатр",
+    "психическое",
+    "психиатрическ",
+)
+
+# Telegram user ids, которым разрешено обсуждать такие данные (указать через запятую в
+# переменной окружения `NEIRA_OWNER_TELEGRAM_IDS`). По умолчанию пусто.
+OWNER_TELEGRAM_IDS: Final[tuple[str, ...]] = _parse_csv_env("NEIRA_OWNER_TELEGRAM_IDS", ())
+
+# Сообщение, которое будет отправлено пользователям при блокировке обсуждения личных
+# медицинских данных.
+SENSITIVE_REDACTION_MESSAGE: Final[str] = os.getenv(
+    "NEIRA_SENSITIVE_REDACTION_MESSAGE",
+    "Извини, я не могу обсуждать личные медицинные данные пользователей."
+)

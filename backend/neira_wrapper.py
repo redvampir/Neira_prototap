@@ -101,7 +101,7 @@ class NeiraWrapper:
         
         logger.info("[NeiraWrapper.__init__] DONE")
 
-    async def process_stream(self, user_input: str) -> AsyncGenerator[StreamChunk, None]:
+    async def process_stream(self, user_input: str, user_context: Optional[Dict[str, Any]] = None) -> AsyncGenerator[StreamChunk, None]:
         """
         Обработка запроса с потоковым выводом
 
@@ -197,7 +197,8 @@ class NeiraWrapper:
             response = await loop.run_in_executor(
                 None,
                 self.neira.process,
-                user_input
+                user_input,
+                user_context,
             )
 
             # Этап 4: Верификация (уже завершена в process)
@@ -236,7 +237,7 @@ class NeiraWrapper:
         finally:
             self.is_processing = False
 
-    async def process(self, user_input: str) -> str:
+    async def process(self, user_input: str, user_context: Optional[Dict[str, Any]] = None) -> str:
         """
         Простая обработка без стриминга (для REST API)
 
@@ -247,7 +248,8 @@ class NeiraWrapper:
         return await loop.run_in_executor(
             None,
             self.neira.process,
-            user_input
+            user_input,
+            user_context,
         )
 
     def get_stats(self) -> Dict[str, Any]:

@@ -19,7 +19,8 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Set, Tuple
+from typing import Dict, Iterable, Optional, Set, Tuple, Any
+from neira.config import SENSITIVE_TOPICS, OWNER_TELEGRAM_IDS, SENSITIVE_REDACTION_MESSAGE
 
 
 def _configure_io_encoding() -> None:
@@ -462,7 +463,7 @@ class Neira:
 
         return None
 
-    def process(self, user_input: str) -> str:
+    def process(self, user_input: str, user_context: Optional[Dict[str, Any]] = None) -> str:
         """Главный метод обработки запроса"""
         
         # Добавляем в контекст сессии
@@ -772,6 +773,37 @@ class Neira:
             if not facts:
                 print("Новых фактов не найдено")
         
+        # --- Sensitive content protection ---
+        try:
+            # Определяем user id если передан
+            user_id = None
+            if isinstance(user_context, dict):
+                user_id = user_context.get("user_id")
+
+            # Компилируем простую проверку по ключевым словам
+            lowered = (result_content or "").lower()
+            sensitive_found = any(topic in lowered for topic in SENSITIVE_TOPICS)
+
+            # Если найдены чувствительные темы и пользователь не в списке владельцев — редактируем
+            owner_allowed = False
+            if user_id is not None and OWNER_TELEGRAM_IDS:
+                try:
+                    owner_ids = {int(x) for x in OWNER_TELEGRAM_IDS if str(x).strip()}
+                    owner_allowed = int(user_id) in owner_ids
+                except Exception:
+                    owner_allowed = False
+
+            if sensitive_found and not owner_allowed:
+                logger.info("🔒 Sensitive content blocked for user_id=%s", user_id)
+                # Не сохраняем детальные данные в память
+                redacted = SENSITIVE_REDACTION_MESSAGE
+                # Сохраняем редактированную версию
+                self.memory.add_to_session(f"Нейра: {redacted}")
+                return redacted
+
+        except Exception as e:
+            logger.exception("Ошибка при проверке чувствительного контента: %s", e)
+
         # Сохраняем ответ в контекст
         self.memory.add_to_session(f"Нейра: {result_content}")
         
