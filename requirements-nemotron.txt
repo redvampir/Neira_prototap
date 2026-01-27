@@ -1,6 +1,6 @@
 # Рекомендуемые зависимости для запуска Nemotron (адаптируйте версию torch под вашу CUDA)
 torch @ https://download.pytorch.org/whl/cu118/torch-2.2.0%2Bcu118-cp311-cp311-win_amd64.whl
-transformers>=4.34.0
+transformers==5.0.0
 accelerate
 bitsandbytes
 sentencepiece
