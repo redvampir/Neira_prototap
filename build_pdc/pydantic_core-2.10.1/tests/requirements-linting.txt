@@ -1,4 +1,4 @@
-black==23.9.1
+black==23.12.1
 griffe==0.36.2
 pyright==1.1.327
 ruff==0.0.291
